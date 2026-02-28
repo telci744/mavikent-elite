@@ -8,7 +8,7 @@ import StudentScreen from './components/StudentScreen';
 function App() {
   const [role, setRole] = useState(null);
   const [appData, setAppData] = useState({});
-  const [pendingRole, setPendingRole] = useState(null); // Şifre ekranını açan tetikleyici
+  const [pendingRole, setPendingRole] = useState(null);
   const [pinInput, setPinInput] = useState('');
 
   // Veritabanını Dinleme
@@ -25,7 +25,7 @@ function App() {
   if (role === 'staff') return <StaffScreen appData={appData} goBackToRoles={() => setRole(null)} />;
   if (role === 'student') return <StudentScreen appData={appData} goBackToRoles={() => setRole(null)} />;
 
-  // ŞİFRE KONTROL MERKEZİ (Boşlukları ve veri türü hatalarını engelleyen kesin çözüm)
+  // RÖNTGEN SİSTEMLİ ŞİFRE KONTROLÜ
   const handleLogin = () => {
     const adminPin = String(appData?.settings?.admin_pin || '1453').trim();
     const staffPin = String(appData?.settings?.staff_pin || '1234').trim();
@@ -37,7 +37,7 @@ function App() {
          setPendingRole(null); 
          setPinInput(''); 
       } else {
-         alert("Hatalı Yönetici Şifresi!"); 
+         alert(`❌ HATA (YÖNETİCİ)\n\nSenin Yazdığın: [ ${girilen} ]\nSistemin Beklediği: [ ${adminPin} ]`); 
       }
     } else if (pendingRole === 'staff') {
       if (girilen === staffPin) { 
@@ -45,7 +45,7 @@ function App() {
          setPendingRole(null); 
          setPinInput(''); 
       } else {
-         alert("Hatalı Personel Şifresi!"); 
+         alert(`❌ HATA (PERSONEL)\n\nSenin Yazdığın: [ ${girilen} ]\nSistemin Beklediği: [ ${staffPin} ]`); 
       }
     }
   };
@@ -81,7 +81,7 @@ function App() {
       {/* SEÇİM KARTLARI */}
       <div style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px', animation: 'fadeIn 0.6s ease-out' }}>
         
-        {/* ÖĞRENCİ - Şifresiz Direkt Giriş */}
+        {/* ÖĞRENCİ */}
         <div onClick={() => setRole('student')} className="elite-card elite-hover" style={{ borderLeft: '6px solid #3b82f6' }}>
           <div style={{ fontSize: '42px', background: '#eff6ff', width: '70px', height: '70px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '18px' }}>🎓</div>
           <div>
@@ -90,7 +90,7 @@ function App() {
           </div>
         </div>
 
-        {/* PERSONEL - Şifre Ekranı Açılır */}
+        {/* PERSONEL */}
         <div onClick={() => setPendingRole('staff')} className="elite-card elite-hover" style={{ borderLeft: '6px solid #64748b' }}>
           <div style={{ fontSize: '42px', background: '#f1f5f9', width: '70px', height: '70px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '18px' }}>👔</div>
           <div>
@@ -99,7 +99,7 @@ function App() {
           </div>
         </div>
 
-        {/* YÖNETİCİ - Şifre Ekranı Açılır */}
+        {/* YÖNETİCİ */}
         <div onClick={() => setPendingRole('admin')} className="elite-card elite-hover" style={{ borderLeft: '6px solid #f59e0b' }}>
           <div style={{ fontSize: '42px', background: '#fffbeb', width: '70px', height: '70px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '18px' }}>👑</div>
           <div>
