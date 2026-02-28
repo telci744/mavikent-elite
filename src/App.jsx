@@ -8,9 +8,10 @@ import StudentScreen from './components/StudentScreen';
 function App() {
   const [role, setRole] = useState(null);
   const [appData, setAppData] = useState({});
-  const [pendingRole, setPendingRole] = useState(null); // Şifre bekleyen rol
+  const [pendingRole, setPendingRole] = useState(null); // Şifre ekranını açan tetikleyici
   const [pinInput, setPinInput] = useState('');
 
+  // Veritabanını Dinleme
   useEffect(() => {
     const ref = db.ref('mavikent_premium');
     ref.on('value', snap => {
@@ -19,28 +20,40 @@ function App() {
     return () => ref.off();
   }, []);
 
+  // Yönlendirmeler
   if (role === 'admin') return <AdminScreen appData={appData} goBackToRoles={() => setRole(null)} />;
   if (role === 'staff') return <StaffScreen appData={appData} goBackToRoles={() => setRole(null)} />;
   if (role === 'student') return <StudentScreen appData={appData} goBackToRoles={() => setRole(null)} />;
 
+  // ŞİFRE KONTROL MERKEZİ (Boşlukları ve veri türü hatalarını engelleyen kesin çözüm)
   const handleLogin = () => {
-    // Veritabanında şifre yoksa varsayılan şifreler: Yönetici 1453, Personel 1234
-    const adminPin = appData?.settings?.admin_pin || '1453';
-    const staffPin = appData?.settings?.staff_pin || '1234';
+    const adminPin = String(appData?.settings?.admin_pin || '1453').trim();
+    const staffPin = String(appData?.settings?.staff_pin || '1234').trim();
+    const girilen = String(pinInput).trim();
 
     if (pendingRole === 'admin') {
-      if (pinInput === adminPin) { setRole('admin'); setPendingRole(null); setPinInput(''); }
-      else alert("Hatalı Yönetici Şifresi!");
+      if (girilen === adminPin) { 
+         setRole('admin'); 
+         setPendingRole(null); 
+         setPinInput(''); 
+      } else {
+         alert("Hatalı Yönetici Şifresi!"); 
+      }
     } else if (pendingRole === 'staff') {
-      if (pinInput === staffPin) { setRole('staff'); setPendingRole(null); setPinInput(''); }
-      else alert("Hatalı Personel Şifresi!");
+      if (girilen === staffPin) { 
+         setRole('staff'); 
+         setPendingRole(null); 
+         setPinInput(''); 
+      } else {
+         alert("Hatalı Personel Şifresi!"); 
+      }
     }
   };
 
   return (
     <div style={{ minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', background: '#f8fafc', fontFamily: '"Nunito", sans-serif' }}>
       
-      {/* ŞİFRE EKRANI (MODAL) */}
+      {/* ŞİFRE MODALI */}
       {pendingRole && (
          <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.8)', backdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
             <div style={{ background: 'white', padding: '40px', borderRadius: '24px', width: '100%', maxWidth: '360px', textAlign: 'center', animation: 'fadeIn 0.3s ease-out' }}>
@@ -68,6 +81,7 @@ function App() {
       {/* SEÇİM KARTLARI */}
       <div style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px', animation: 'fadeIn 0.6s ease-out' }}>
         
+        {/* ÖĞRENCİ - Şifresiz Direkt Giriş */}
         <div onClick={() => setRole('student')} className="elite-card elite-hover" style={{ borderLeft: '6px solid #3b82f6' }}>
           <div style={{ fontSize: '42px', background: '#eff6ff', width: '70px', height: '70px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '18px' }}>🎓</div>
           <div>
@@ -76,6 +90,7 @@ function App() {
           </div>
         </div>
 
+        {/* PERSONEL - Şifre Ekranı Açılır */}
         <div onClick={() => setPendingRole('staff')} className="elite-card elite-hover" style={{ borderLeft: '6px solid #64748b' }}>
           <div style={{ fontSize: '42px', background: '#f1f5f9', width: '70px', height: '70px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '18px' }}>👔</div>
           <div>
@@ -84,6 +99,7 @@ function App() {
           </div>
         </div>
 
+        {/* YÖNETİCİ - Şifre Ekranı Açılır */}
         <div onClick={() => setPendingRole('admin')} className="elite-card elite-hover" style={{ borderLeft: '6px solid #f59e0b' }}>
           <div style={{ fontSize: '42px', background: '#fffbeb', width: '70px', height: '70px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '18px' }}>👑</div>
           <div>
