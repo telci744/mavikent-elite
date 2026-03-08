@@ -13,7 +13,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   const [valuesTopic, setValuesTopic] = useState({ subject: '', topic: '' });
 
   const classList = ["5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf"];
-  const eduClassList = ["5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf", "ELİT", "STANDART"]; // Elit ve Standart sınıfları eklendi
+  const eduClassList = ["5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf", "ELİT", "STANDART"];
   const levelList = ["SEVİYE 1/A", "SEVİYE 1/B", "SEVİYE 2"];
   const examSubjects = ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din Kültürü"];
   
@@ -70,7 +70,16 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
         if (hasStreakSaver) { alert(`🛡️ ${selectedStudent} SERİ KORUMA KALKANI kullandı! Eksi aldı ama serisi bozulmadı.`); updates[`active_cards/${selectedStudent}/streak`] = null; } 
         else { updates[`streaks/${selectedStudent}`] = 0; updates[`daily_flags/${selectedStudent}/broken`] = true; }
     }
-    if (finalPts !== 0) { updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalPts; updates[`xp/${selectedStudent}`] = (Number(appData?.xp?.[selectedStudent]) || 0) + (Math.abs(basePts) * 10); }
+    if (finalPts !== 0) { 
+        updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalPts; 
+        // XP HATASI BURADA DÜZELTİLDİ: Math.abs kaldırıldı, eksi not XP'yi düşürür ama sıfırın altına inmez.
+        updates[`xp/${selectedStudent}`] = Math.max(0, (Number(appData?.xp?.[selectedStudent]) || 0) + (basePts * 10)); 
+        
+        // BANKA GEÇMİŞİNE KAYIT EKLENDİ
+        const tId = `txn_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+        let descText = type === 'kanaat' ? 'Yönetici Kanaat Notu' : (type === 'yoklama' ? 'Yoklama Puanı' : (type === 'telefon' ? 'Telefon Teslim' : 'Yatak/Dolap Düzeni'));
+        updates[`transactions/${selectedStudent}/${tId}`] = { desc: descText, amt: finalPts, date: new Date().toLocaleString('tr-TR') };
+    }
     if (type === 'yoklama') updates[`yoklama_d/${selectedStudent}/sessions/${selectedSession}`] = { st: status, pts: finalPts };
     else if (type === 'telefon') updates[`telefon_d/${selectedStudent}/sessions/gunluk`] = { st: status, pts: finalPts };
     else if (type === 'kanaat') updates[`kanaat_w/${selectedStudent}`] = (Number(appData?.kanaat_w?.[selectedStudent]) || 0) + finalPts;
@@ -90,6 +99,10 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
         updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalM;
         updates[`season_score/${selectedStudent}`] = (Number(appData?.season_score?.[selectedStudent]) || 0) + (earnedPoints + (isElite(selectedStudent) ? 2 : 0));
         updates[`xp/${selectedStudent}`] = (Number(appData?.xp?.[selectedStudent]) || 0) + (earnedPoints * 10);
+        
+        // BANKA GEÇMİŞİNE KAYIT
+        const tId = `txn_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+        updates[`transactions/${selectedStudent}/${tId}`] = { desc: 'Günlük Eğitim/Ödev Başarısı', amt: finalM, date: new Date().toLocaleString('tr-TR') };
     }
     db.ref('mavikent_premium').update(updates); setSelectedStudent(null); setModalType(null); alert("Eğitim Verileri Güncellendi!");
   };
@@ -371,7 +384,6 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
         )}
       </div>
 
-      {/* --- YÜZDE YÜZ MERKEZLENMİŞ KUSURSUZ MODALLAR --- */}
       {selectedStudent && modalType === 'isleyis' && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', animation: 'fadeIn 0.3s ease-out' }}>
           <div style={{ backgroundColor: '#ffffff', padding: '40px', borderRadius: '32px', width: '100%', maxWidth: '420px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)', maxHeight: '90vh', overflowY: 'auto', animation: 'popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}>

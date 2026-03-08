@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 
 const AdminScreen = ({ appData, goBackToRoles }) => {
@@ -19,9 +19,10 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const [newProduct, setNewProduct] = useState({ name: '', price: '', icon: '📦', type: 'normal' });
   const [editProductKey, setEditProductKey] = useState(null); 
   const [newAdminClan, setNewAdminClan] = useState({ name: '', tag: '', icon: '🛡️', leader: '' });
+  const [newGiftCode, setNewGiftCode] = useState({ code: '', type: 'mcoin', val: '', uses: '1' });
 
   const classList = ["5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf"];
-  const eduClassList = ["5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf", "ELİT", "STANDART"]; // Yeni Eğitim Sınıfları
+  const eduClassList = ["5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf", "ELİT", "STANDART"];
   const levelList = ["SEVİYE 1/A", "SEVİYE 1/B", "SEVİYE 2"];
   const examSubjects = ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din Kültürü"];
   
@@ -29,29 +30,26 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const roster = Array.isArray(rawRoster) ? rawRoster : Object.values(rawRoster || {});
   const isElite = (name) => appData?.student_tiers?.[name] === 'elite';
 
-  const mebLessons = { 
-      "5. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Bilişim", "Beden", "🚫 YOK"], 
-      "6. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Bilişim", "Beden", "🚫 YOK"], 
-      "7. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Teknoloji", "Beden", "🚫 YOK"], 
-      "8. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "İnkılap Tarihi", "İngilizce", "Din", "Teknoloji", "Beden", "🚫 YOK"],
-      "ELİT": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"],
-      "STANDART": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"]
-  };
+  const mebLessons = { "5. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Bilişim", "Beden", "🚫 YOK"], "6. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Bilişim", "Beden", "🚫 YOK"], "7. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Teknoloji", "Beden", "🚫 YOK"], "8. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "İnkılap Tarihi", "İngilizce", "Din", "Teknoloji", "Beden", "🚫 YOK"], "ELİT": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"], "STANDART": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"] };
   const valuesSubjectsList = ["K.Kerim", "İlmihal", "Siyer-i Nebi", "Adabı Muaşeret", "Tecvid"];
 
-  const getFilteredRoster = (session) => {
-      if(session === 'ELİT') return roster.filter(n => isElite(n));
-      if(session === 'STANDART') return roster.filter(n => !isElite(n));
-      return roster.filter(n => appData?.student_classes?.[n] === session);
-  };
+  // PAZARTESİ 19:00 OTOMATİK BİLET DAĞITIMI
+  useEffect(() => {
+      if (!appData || !roster.length) return;
+      const now = new Date();
+      if (now.getDay() === 1 && now.getHours() >= 19) {
+          const todayStr = now.toDateString();
+          if (appData?.settings?.last_ticket_dist !== todayStr) {
+              const updates = {};
+              roster.forEach(n => { updates[`tickets/${n}`] = (Number(appData?.tickets?.[n]) || 0) + 1; });
+              updates[`settings/last_ticket_dist`] = todayStr;
+              db.ref('mavikent_premium').update(updates);
+              alert("⏰ SİSTEM BİLDİRİMİ: Pazartesi 19:00 Çekiliş Hakları tüm öğrencilere otomatik olarak dağıtıldı!");
+          }
+      }
+  }, [appData, roster]);
 
-  let totalPages = 0; let totalQuestions = 0; let topStudent = { name: '-', rp: -1 };
-  roster.forEach(n => {
-     totalPages += Number(appData?.education_d?.[n]?.pages || 0);
-     totalQuestions += Number(appData?.education_d?.[n]?.questions || 0);
-     const rp = Number(appData?.season_score?.[n] || 0);
-     if(rp > topStudent.rp) { topStudent = { name: n, rp }; }
-  });
+  const getFilteredRoster = (session) => { if(session === 'ELİT') return roster.filter(n => isElite(n)); if(session === 'STANDART') return roster.filter(n => !isElite(n)); return roster.filter(n => appData?.student_classes?.[n] === session); };
 
   const handleBack = () => {
     if (currentModule && (modalType || selectedStudent)) { setModalType(null); setSelectedStudent(null); return; }
@@ -76,6 +74,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     return total;
   };
 
+  // XP HATASI DÜZELTİLDİ VE BANKA GEÇMİŞİ EKLENDİ
   const saveData = (type, status, basePts) => {
     if (!selectedStudent) return;
     const finalPts = getCalculatedPoints(selectedStudent, basePts, type);
@@ -86,7 +85,15 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         if (hasStreakSaver) { alert(`🛡️ ${selectedStudent} SERİ KORUMA KALKANI kullandı! Eksi aldı ama serisi bozulmadı.`); updates[`active_cards/${selectedStudent}/streak`] = null; } 
         else { updates[`streaks/${selectedStudent}`] = 0; updates[`daily_flags/${selectedStudent}/broken`] = true; }
     }
-    if (finalPts !== 0) { updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalPts; updates[`xp/${selectedStudent}`] = (Number(appData?.xp?.[selectedStudent]) || 0) + (Math.abs(basePts) * 10); }
+    if (finalPts !== 0) { 
+        updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalPts; 
+        updates[`xp/${selectedStudent}`] = Math.max(0, (Number(appData?.xp?.[selectedStudent]) || 0) + (basePts * 10)); // Math.abs kaldırıldı
+        
+        // BANKA KAYDI (M-Coin Değişimi Varsa)
+        const tId = `txn_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+        let descText = type === 'kanaat' ? 'Yönetici Kanaat Notu' : (type === 'yoklama' ? 'Yoklama Puanı' : (type === 'telefon' ? 'Telefon Teslim' : 'Yatak/Dolap Düzeni'));
+        updates[`transactions/${selectedStudent}/${tId}`] = { desc: descText, amt: finalPts, date: new Date().toLocaleString('tr-TR') };
+    }
     if (type === 'yoklama') updates[`yoklama_d/${selectedStudent}/sessions/${selectedSession}`] = { st: status, pts: finalPts };
     else if (type === 'telefon') updates[`telefon_d/${selectedStudent}/sessions/gunluk`] = { st: status, pts: finalPts };
     else if (type === 'kanaat') updates[`kanaat_w/${selectedStudent}`] = (Number(appData?.kanaat_w?.[selectedStudent]) || 0) + finalPts;
@@ -106,6 +113,10 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalM;
         updates[`season_score/${selectedStudent}`] = (Number(appData?.season_score?.[selectedStudent]) || 0) + (earnedPoints + (isElite(selectedStudent) ? 2 : 0));
         updates[`xp/${selectedStudent}`] = (Number(appData?.xp?.[selectedStudent]) || 0) + (earnedPoints * 10);
+        
+        // BANKA KAYDI
+        const tId = `txn_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+        updates[`transactions/${selectedStudent}/${tId}`] = { desc: 'Günlük Eğitim/Ödev Başarısı', amt: finalM, date: new Date().toLocaleString('tr-TR') };
     }
     db.ref('mavikent_premium').update(updates); setSelectedStudent(null); setModalType(null); alert("Eğitim Verileri Güncellendi!");
   };
@@ -130,7 +141,12 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     if(window.confirm(`${q.participants.length} öğrenciye ödülleri dağıtılacak. Onaylıyor musun?`)) {
       q.participants.forEach(p => {
         db.ref(`mavikent_premium/stats/${p}/completed_quests`).transaction(c => (Number(c)||0) + 1); 
-        if(q.type === 'M') { db.ref(`mavikent_premium/wallet/${p}`).transaction(c => (Number(c)||0) + parseInt(q.amt)); db.ref(`mavikent_premium/xp/${p}`).transaction(c => (Number(c)||0) + (parseInt(q.amt) * 10)); } 
+        if(q.type === 'M') { 
+            db.ref(`mavikent_premium/wallet/${p}`).transaction(c => (Number(c)||0) + parseInt(q.amt)); 
+            db.ref(`mavikent_premium/xp/${p}`).transaction(c => (Number(c)||0) + (parseInt(q.amt) * 10)); 
+            // BANKA KAYDI
+            db.ref(`mavikent_premium/transactions/${p}`).push({ desc: `Görev Ödülü: ${q.text}`, amt: parseInt(q.amt), date: new Date().toLocaleString('tr-TR') });
+        } 
         else { db.ref(`mavikent_premium/season_score/${p}`).transaction(c => (Number(c)||0) + parseInt(q.amt)); }
       });
       db.ref(`mavikent_premium/quests/${qId}/participants`).set(null); alert("Görev tamamlandı! Ödüller dağıtıldı.");
@@ -153,13 +169,18 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
        if (score !== undefined && d.target && parseFloat(score) >= parseFloat(d.target)) {
            let finalReward = reward;
            if(appData?.settings?.global_event === '2x_xp' || appData?.active_cards?.[n]?.multiplier?.date === new Date().toDateString()) finalReward *= 2;
-           db.ref(`mavikent_premium/wallet/${n}`).transaction(c => (Number(c)||0) + finalReward); db.ref(`mavikent_premium/season_score/${n}`).transaction(c => (Number(c)||0) + finalReward); count++; 
+           db.ref(`mavikent_premium/wallet/${n}`).transaction(c => (Number(c)||0) + finalReward); 
+           db.ref(`mavikent_premium/season_score/${n}`).transaction(c => (Number(c)||0) + finalReward); 
+           // BANKA KAYDI
+           db.ref(`mavikent_premium/transactions/${n}`).push({ desc: 'Sınav Başarısı Ödülü', amt: finalReward, date: new Date().toLocaleString('tr-TR') });
+           count++; 
        }
     });
     alert(`${count} öğrenciye ödülleri dağıtıldı!`);
   };
 
   const handleWeeklyReset = () => { if(window.confirm("Haftalık veriler sıfırlanacak. Onaylıyor musun?")) { db.ref('mavikent_premium').update({ yoklama_w: null, telefon_w: null, yatak_w: null, kanaat_w: null, yoklama_d: null, telefon_d: null, yatak_d: null }); } };
+  
   const handleSeasonEnd = () => {
     if(!window.confirm("1. SEZON bitirilecek. Emin misin?")) return;
     const updates = {};
@@ -167,14 +188,66 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         const rp = Number(appData?.season_score?.[n]) || 0;
         let mCoin = 0; let frame = null; let title = null; const exp = Date.now() + 30 * 24 * 60 * 60 * 1000; 
         if (rp >= 1000) { mCoin = 200; frame = 'S1 Fatih'; title = '👑 S1 Fatih'; } else if (rp >= 750) { mCoin = 150; frame = 'S1 Elmas'; title = '💎 S1 Elmas'; } else if (rp >= 500) { mCoin = 100; frame = 'S1 Altın'; } else if (rp >= 250) { mCoin = 50; } else { mCoin = 20; } 
-        if (mCoin > 0) updates[`wallet/${n}`] = (Number(appData?.wallet?.[n]) || 0) + mCoin;
+        if (mCoin > 0) {
+            updates[`wallet/${n}`] = (Number(appData?.wallet?.[n]) || 0) + mCoin;
+            updates[`transactions/${n}/txn_season_${Date.now()}`] = { desc: 'Sezon Sonu Ödülü', amt: mCoin, date: new Date().toLocaleString('tr-TR') };
+        }
         if (frame) updates[`active_cards/${n}/frame`] = { val: frame, exp };
         if (title) updates[`active_cards/${n}/title`] = { val: title, exp };
         updates[`season_score/${n}`] = 0; 
     });
     db.ref('mavikent_premium').update(updates);
   };
+  
   const handleGlobalXpReset = () => { const confirmText = prompt("Tüm XP'leri sıfırlamak için 'SIFIRLA' yaz."); if (confirmText === 'SIFIRLA') { const updates = {}; roster.forEach(n => { updates[`xp/${n}`] = 0; }); db.ref('mavikent_premium').update(updates); } };
+
+  const handleAdminCreateClan = () => {
+      if(!newAdminClan.name || !newAdminClan.tag || !newAdminClan.leader) return alert("Klan adı, TAG ve lider zorunludur!");
+      const cId = `clan_${Date.now()}`;
+      db.ref(`mavikent_premium/clans/${cId}`).set({ name: newAdminClan.name.toUpperCase(), tag: newAdminClan.tag.toUpperCase(), icon: newAdminClan.icon, desc: 'Yönetici tarafından kuruldu.', leader: newAdminClan.leader, members: [newAdminClan.leader] });
+      alert("Klan başarıyla oluşturuldu."); setNewAdminClan({ name: '', tag: '', icon: '🛡️', leader: '' });
+  };
+
+  const handleAdminDeleteClan = (cId) => {
+      if(!window.confirm("Bu klanı sistemden tamamen silmek istediğine emin misin?")) return;
+      const clan = appData?.clans?.[cId];
+      if(clan && clan.members) {
+          const updates = {};
+          updates[`clans/${cId}`] = null;
+          clan.members.forEach(m => { updates[`clan_war_participants/${m}`] = null; });
+          db.ref('mavikent_premium').update(updates);
+          alert("Klan ve üyelerin savaş durumları temizlendi.");
+      }
+  };
+
+  const handleEndClanWar = () => {
+      const clans = Object.keys(appData?.clans || {}).map(cId => {
+          let warScore = 0;
+          (appData.clans[cId].members || []).forEach(m => { if(appData?.clan_war_participants?.[m]) warScore += Number(appData?.season_score?.[m] || 0); });
+          return { id: cId, warScore, members: appData.clans[cId].members || [] };
+      }).sort((a,b) => b.warScore - a.warScore);
+
+      if(clans.length === 0 || clans[0].warScore === 0) return alert("Savaş puanı olan klan yok.");
+      const winner = clans[0];
+      if(window.confirm(`Haftalık savaş bitirilecek. Birinci klan üyelerine (Toplam ${winner.members.length} kişi) 60'ar M-Coin ödül verilecek. Onaylıyor musun?`)) {
+          const updates = {};
+          winner.members.forEach(m => { 
+              updates[`wallet/${m}`] = (Number(appData?.wallet?.[m]) || 0) + 60; 
+              updates[`transactions/${m}/txn_warwin_${Date.now()}`] = { desc: 'Klan Savaşı Şampiyonluğu', amt: 60, date: new Date().toLocaleString('tr-TR') };
+          });
+          roster.forEach(m => { updates[`clan_war_participants/${m}`] = null; });
+          db.ref('mavikent_premium').update(updates);
+          alert("Savaş bitti! Ödüller şampiyon klanın üyelerine dağıtıldı ve herkesin savaş durumu sıfırlandı.");
+      }
+  };
+
+  const handleAdminCreateGiftCode = () => {
+      if(!newGiftCode.code || !newGiftCode.val) return alert("Kod adı ve İndirim/Miktarı zorunludur!");
+      const codeKey = newGiftCode.code.toUpperCase().trim();
+      db.ref(`mavikent_premium/gift_codes/${codeKey}`).set({ type: newGiftCode.type, val: parseInt(newGiftCode.val), uses: parseInt(newGiftCode.uses) || 1, date: new Date().toLocaleDateString('tr-TR') });
+      alert(`✅ ${codeKey} kodu başarıyla oluşturuldu!`);
+      setNewGiftCode({ code: '', type: 'mcoin', val: '', uses: '1' });
+  };
 
   const loadHtml2Canvas = async () => {
       if (window.html2canvas) return window.html2canvas;
@@ -317,43 +390,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     </div>
   );
 
-  const handleAdminCreateClan = () => {
-      if(!newAdminClan.name || !newAdminClan.tag || !newAdminClan.leader) return alert("Ad, Tag ve Lider zorunlu!");
-      const cId = `clan_${Date.now()}`;
-      db.ref(`mavikent_premium/clans/${cId}`).set({
-          name: newAdminClan.name.toUpperCase(), tag: newAdminClan.tag.toUpperCase(), icon: newAdminClan.icon, desc: "Admin tarafından oluşturuldu.", leader: newAdminClan.leader, members: [newAdminClan.leader]
-      });
-      setNewAdminClan({ name: '', tag: '', icon: '🛡️', leader: '' }); alert("Klan başarıyla oluşturuldu!");
-  };
-
-  const handleAdminDeleteClan = (cId) => { if(window.confirm("Bu klanı tamamen silmek istediğinize emin misiniz?")) db.ref(`mavikent_premium/clans/${cId}`).remove(); };
-
-  const handleEndClanWar = () => {
-     if(!window.confirm("Klan savaşları bitirilecek ve 1. olan klan üyelerine 60'ar M-Coin ödül dağıtılacak. Onaylıyor musun?")) return;
-     const clans = appData?.clans || {};
-     const participants = appData?.clan_war_participants || {};
-     let bestClan = null; let bestScore = -1;
-
-     Object.keys(clans).forEach(cId => {
-         let score = 0; const members = clans[cId].members || [];
-         members.forEach(m => { if(participants[m]) score += Number(appData?.season_score?.[m] || 0); });
-         if(score > bestScore && score > 0) { bestScore = score; bestClan = clans[cId]; }
-     });
-
-     if(!bestClan) return alert("Savaşa katılan veya puanı olan klan bulunamadı!");
-
-     const updates = {};
-     (bestClan.members || []).forEach(m => {
-         if(participants[m]) {
-             updates[`wallet/${m}`] = (Number(appData?.wallet?.[m]) || 0) + 60;
-             updates[`badges/${m}/gizli_2`] = true; 
-         }
-     });
-     updates[`clan_war_participants`] = null; 
-     db.ref('mavikent_premium').update(updates);
-     alert(`🏆 SAVAŞ BİTTİ!\nKazanan Klan: ${bestClan.name} (${bestScore} Savaş Puanı)\nKatılan üyelere 60 M-Coin ve Gizli Şampiyonluk Rozeti gönderildi!`);
-  };
-
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', width: '100%', padding: '20px', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
@@ -404,45 +440,29 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
               <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="card-hover" style={{ background: 'white', textAlign: 'center', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}><div style={{ fontSize: '42px', marginBottom: '16px' }}>{mod.icon}</div><div style={{ fontSize: '15px', fontWeight: 800, textTransform: 'uppercase', color: '#0f172a' }}>{mod.label}</div></div>
             ))}
             
-            {dashboardView === 'yonetim' && [ { id: 'admin_students', icon: '👥', label: 'ÖĞRENCİ' }, { id: 'admin_quests', icon: '🎯', label: 'GÖREVLER' }, { id: 'admin_market', icon: '🛒', label: 'MARKET' }, { id: 'admin_teslimat', icon: '📦', label: 'TESLİMAT' }, { id: 'admin_lig', icon: '🏆', label: 'ELİT LİG' }, { id: 'admin_clans', icon: '🚩', label: 'KLANLAR' }, { id: 'admin_messages', icon: '✉️', label: 'MESAJLAR' }, { id: 'admin_settings', icon: '⚙️', label: 'AYARLAR' } ].map(mod => (
+            {dashboardView === 'yonetim' && [ 
+              { id: 'admin_students', icon: '👥', label: 'ÖĞRENCİ / BİLET' }, 
+              { id: 'admin_quests', icon: '🎯', label: 'GÖREVLER' }, 
+              { id: 'admin_market', icon: '🛒', label: 'MARKET' }, 
+              { id: 'admin_teslimat', icon: '📦', label: 'TESLİMAT' }, 
+              { id: 'admin_lig', icon: '🏆', label: 'ELİT LİG' }, 
+              { id: 'admin_clans', icon: '🚩', label: 'KLANLAR' }, 
+              { id: 'admin_codes', icon: '🎟️', label: 'KODLAR' },
+              { id: 'admin_messages', icon: '✉️', label: 'MESAJLAR' }, 
+              { id: 'admin_settings', icon: '⚙️', label: 'AYARLAR' } 
+            ].map(mod => (
               <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="card-hover" style={{ background: 'white', textAlign: 'center', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}><div style={{ fontSize: '42px', marginBottom: '16px' }}>{mod.icon}</div><div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a' }}>{mod.label}</div></div>
             ))}
           </div>
         )}
 
         {/* --- LÜKS PANO İNDİRME BUTONLARI --- */}
-        {!currentModule && dashboardView === 'egitim' && (
-          <div style={{ marginTop: '20px' }}>
-            <button id="btn-pano-egitim" onClick={() => downloadPanoAsJPG('egitim')} className="premium-btn" style={{ width: '100%', background: '#0f172a', color: '#d4af37', padding: '24px', fontSize: '16px', letterSpacing: '1px', border: '2px solid #d4af37 !important' }}>📸 EĞİTİM İSTATİSTİKLERİ VE ENLERİ PANOSU (JPG)</button>
-          </div>
-        )}
-        {!currentModule && dashboardView === 'isleyis' && (
-          <div style={{ marginTop: '20px' }}>
-            <button id="btn-pano-isleyis" onClick={() => downloadPanoAsJPG('isleyis')} className="premium-btn" style={{ width: '100%', background: '#0f172a', color: '#d4af37', padding: '24px', fontSize: '16px', letterSpacing: '1px', border: '2px solid #d4af37 !important' }}>📸 LİDERLİK VE İŞLEYİŞ ENLERİ PANOSU (JPG)</button>
-          </div>
-        )}
-        {!currentModule && dashboardView === 'degerler' && (
-          <div style={{ marginTop: '20px' }}>
-            <button id="btn-pano-degerler" onClick={() => downloadPanoAsJPG('degerler')} className="premium-btn" style={{ width: '100%', background: '#0f172a', color: '#d4af37', padding: '24px', fontSize: '16px', letterSpacing: '1px', border: '2px solid #d4af37 !important' }}>📸 DEĞERLER EĞİTİMİ ENLERİ PANOSU (JPG)</button>
-          </div>
-        )}
+        {!currentModule && dashboardView === 'egitim' && (<div style={{ marginTop: '20px' }}><button id="btn-pano-egitim" onClick={() => downloadPanoAsJPG('egitim')} className="premium-btn" style={{ width: '100%', background: '#0f172a', color: '#d4af37', padding: '24px', fontSize: '16px', letterSpacing: '1px', border: '2px solid #d4af37 !important' }}>📸 EĞİTİM İSTATİSTİKLERİ VE ENLERİ PANOSU (JPG)</button></div>)}
+        {!currentModule && dashboardView === 'isleyis' && (<div style={{ marginTop: '20px' }}><button id="btn-pano-isleyis" onClick={() => downloadPanoAsJPG('isleyis')} className="premium-btn" style={{ width: '100%', background: '#0f172a', color: '#d4af37', padding: '24px', fontSize: '16px', letterSpacing: '1px', border: '2px solid #d4af37 !important' }}>📸 LİDERLİK VE İŞLEYİŞ ENLERİ PANOSU (JPG)</button></div>)}
+        {!currentModule && dashboardView === 'degerler' && (<div style={{ marginTop: '20px' }}><button id="btn-pano-degerler" onClick={() => downloadPanoAsJPG('degerler')} className="premium-btn" style={{ width: '100%', background: '#0f172a', color: '#d4af37', padding: '24px', fontSize: '16px', letterSpacing: '1px', border: '2px solid #d4af37 !important' }}>📸 DEĞERLER EĞİTİMİ ENLERİ PANOSU (JPG)</button></div>)}
 
-        {currentModule === 'yoklama' && !selectedSession && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
-            {['Sabah', 'Öğle', 'İkindi', 'Akşam', 'Yatsı', 'İzin Dönüşü', 'Ekstra'].map(s => (
-               <div key={s} onClick={() => setSelectedSession(s)} className="card-hover" style={{ background: 'white', padding: '24px', textAlign: 'center', fontWeight: 900, fontSize: '16px', borderRadius: '20px', color: '#0f172a', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>{s}</div>
-            ))}
-          </div>
-        )}
-
-        {currentModule === 'yoklama' && selectedSession && (
-           <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', marginBottom: '25px', paddingBottom: '15px' }}>
-              {['Sabah', 'Öğle', 'İkindi', 'Akşam', 'Yatsı', 'İzin Dönüşü', 'Ekstra'].map(s => (
-                 <button key={s} onClick={() => setSelectedSession(s)} className="premium-btn" style={{ padding: '14px 24px', background: selectedSession === s ? '#0f172a' : 'white', color: selectedSession === s ? '#d4af37' : '#64748b', fontWeight: 800 }}>{s}</button>
-              ))}
-           </div>
-        )}
-
+        {currentModule === 'yoklama' && !selectedSession && ( <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>{['Sabah', 'Öğle', 'İkindi', 'Akşam', 'Yatsı', 'İzin Dönüşü', 'Ekstra'].map(s => ( <div key={s} onClick={() => setSelectedSession(s)} className="card-hover" style={{ background: 'white', padding: '24px', textAlign: 'center', fontWeight: 900, fontSize: '16px', borderRadius: '20px', color: '#0f172a', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>{s}</div> ))}</div> )}
+        {currentModule === 'yoklama' && selectedSession && ( <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', marginBottom: '25px', paddingBottom: '15px' }}>{['Sabah', 'Öğle', 'İkindi', 'Akşam', 'Yatsı', 'İzin Dönüşü', 'Ekstra'].map(s => ( <button key={s} onClick={() => setSelectedSession(s)} className="premium-btn" style={{ padding: '14px 24px', background: selectedSession === s ? '#0f172a' : 'white', color: selectedSession === s ? '#d4af37' : '#64748b', fontWeight: 800 }}>{s}</button> ))}</div> )}
         {((currentModule === 'yoklama' && selectedSession) || ['telefon', 'yatak', 'kanaat'].includes(currentModule)) && renderStudentGrid(roster, 'isleyis')}
         
         {currentModule === 'class_view' && (
@@ -471,14 +491,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         )}
         {currentModule === 'values_view' && (
           <>
-            <div style={{ background: 'white', padding: '24px', borderRadius: '24px', marginBottom: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-               <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px' }}>📖 GÜNLÜK DERS KONUSU</h4>
-               <select value={valuesTopic.subject} onChange={e => setValuesTopic({...valuesTopic, subject: e.target.value})} className="elite-input" style={{ marginBottom: '12px' }}>
-                  <option value="">Ders Seçin</option>{valuesSubjectsList.map(s => <option key={s} value={s}>{s}</option>)}
-               </select>
-               <input value={valuesTopic.topic} onChange={e => setValuesTopic({...valuesTopic, topic: e.target.value})} placeholder="İşlenen konu vb." className="elite-input" style={{ marginBottom: '16px' }} />
-               <button onClick={() => { db.ref(`mavikent_premium/values_log/${selectedSession}/${new Date().toDateString()}`).set(valuesTopic); alert("Konu Kaydedildi"); }} className="premium-btn" style={{ width: '100%', padding: '16px', background: '#0f172a', color: 'white', fontSize: '15px' }}>DERSİ YAYINLA</button>
-            </div>
+            <div style={{ background: 'white', padding: '24px', borderRadius: '24px', marginBottom: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}><h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px' }}>📖 GÜNLÜK DERS KONUSU</h4><select value={valuesTopic.subject} onChange={e => setValuesTopic({...valuesTopic, subject: e.target.value})} className="elite-input" style={{ marginBottom: '12px' }}><option value="">Ders Seçin</option>{valuesSubjectsList.map(s => <option key={s} value={s}>{s}</option>)}</select><input value={valuesTopic.topic} onChange={e => setValuesTopic({...valuesTopic, topic: e.target.value})} placeholder="İşlenen konu vb." className="elite-input" style={{ marginBottom: '16px' }} /><button onClick={() => { db.ref(`mavikent_premium/values_log/${selectedSession}/${new Date().toDateString()}`).set(valuesTopic); alert("Konu Kaydedildi"); }} className="premium-btn" style={{ width: '100%', padding: '16px', background: '#0f172a', color: 'white', fontSize: '15px' }}>DERSİ YAYINLA</button></div>
             {renderStudentGrid(roster.filter(n => appData?.student_levels?.[n] === selectedSession), 'degerler')}
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
                 <button id="btn-jpg-degerler" onClick={() => downloadReportAsJPG('degerler', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#d4af37', color: 'white', fontSize: '16px' }}>📸 HAFTALIK VELİ BİLGİLENDİRME (JPG İNDİR)</button>
@@ -486,7 +499,71 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           </>
         )}
 
-        {/* YENİ: MESAJLAR MODÜLÜ */}
+        {currentModule === 'admin_codes' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+             <div style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', padding: '30px', borderRadius: '24px', color: 'white', boxShadow: '0 10px 20px rgba(16,185,129,0.3)' }}>
+                 <h3 style={{ margin: '0 0 5px 0', fontSize: '24px', fontWeight: 900 }}>🎁 Hediye Kodu Üret</h3>
+                 <p style={{ margin: '0 0 20px 0', fontSize: '14px', fontWeight: 600, opacity: 0.9 }}>Öğrencilere M-Coin veya süreli indirim sağlayan şifreler oluşturun.</p>
+                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
+                    <input type="text" value={newGiftCode.code} onChange={e => setNewGiftCode({...newGiftCode, code: e.target.value})} placeholder="Kod Adı (Örn: BAYRAM50)" className="elite-input" style={{ textTransform: 'uppercase' }} />
+                    <select value={newGiftCode.type} onChange={e => setNewGiftCode({...newGiftCode, type: e.target.value})} className="elite-input">
+                        <option value="mcoin">🪙 M-Coin Ver</option>
+                        <option value="discount">🔥 % İndirim Ver (7 Gün)</option>
+                    </select>
+                    <input type="number" value={newGiftCode.val} onChange={e => setNewGiftCode({...newGiftCode, val: e.target.value})} placeholder={newGiftCode.type === 'mcoin' ? "Miktar (Örn: 50)" : "İndirim % (Örn: 40)"} className="elite-input" />
+                    <input type="number" value={newGiftCode.uses} onChange={e => setNewGiftCode({...newGiftCode, uses: e.target.value})} placeholder="Kaç Kez Kullanılabilir? (Örn: 1)" className="elite-input" />
+                    <button onClick={handleAdminCreateGiftCode} className="premium-btn" style={{ background: '#0f172a', color: 'white', gridColumn: '1 / -1', padding: '16px' }}>KODU YAYINLA</button>
+                 </div>
+             </div>
+
+             <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                 <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '15px' }}>⏳ Aktif 7 Günlük İndirimler (İnfaz Merkezi)</h4>
+                 <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Öğrencilerin indirim haklarını süresi bitmeden iptal edebilirsiniz.</p>
+                 {Object.keys(appData?.active_discounts || {}).length === 0 && <div style={{ color: '#94a3b8', fontWeight: 700, fontSize: '14px' }}>Şu an aktif indirim kullanan kimse yok.</div>}
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                     {Object.keys(appData?.active_discounts || {}).map(sName => {
+                         const disc = appData.active_discounts[sName];
+                         const isExpired = Date.now() > disc.expiry;
+                         const remainingDays = Math.max(0, Math.ceil((disc.expiry - Date.now()) / (1000 * 60 * 60 * 24)));
+                         return (
+                             <div key={sName} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isExpired ? '#fef2f2' : '#ecfdf5', border: `1px solid ${isExpired ? '#fca5a5' : '#a7f3d0'}`, padding: '16px 20px', borderRadius: '16px' }}>
+                                 <div>
+                                     <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>{sName}</div>
+                                     <div style={{ fontSize: '13px', color: isExpired ? '#ef4444' : '#059669', fontWeight: 800, marginTop: '4px' }}>
+                                         %{disc.value} İndirim • {isExpired ? 'SÜRESİ DOLDU' : `Kalan: ${remainingDays} Gün`}
+                                     </div>
+                                 </div>
+                                 <button onClick={() => { if(window.confirm(`${sName} adlı öğrencinin indirim hakkı elinden alınacak. Onaylıyor musun?`)) db.ref(`mavikent_premium/active_discounts/${sName}`).remove(); }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '10px 20px', fontSize: '13px' }}>YAK (SİL)</button>
+                             </div>
+                         )
+                     })}
+                 </div>
+             </div>
+
+             <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                 <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '15px' }}>📋 Üretilmiş Tüm Kodlar</h4>
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {Object.keys(appData?.gift_codes || {}).length === 0 && <div style={{ color: '#94a3b8', fontWeight: 700, fontSize: '14px' }}>Henüz kod üretilmedi.</div>}
+                    {Object.keys(appData?.gift_codes || {}).map(k => {
+                        const code = appData.gift_codes[k];
+                        const usedCount = Object.keys(code.usedBy || {}).length;
+                        return (
+                            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                                <div>
+                                   <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px', letterSpacing: '1px' }}>{k}</div>
+                                   <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>
+                                       {code.type === 'mcoin' ? `🪙 ${code.val} M-Coin` : `🔥 %${code.val} İndirim`} • Kullanım: {usedCount}/{code.uses}
+                                   </div>
+                                </div>
+                                <button onClick={() => { if(window.confirm("Bu kod tamamen silinsin mi?")) db.ref(`mavikent_premium/gift_codes/${k}`).remove(); }} className="premium-btn" style={{ background: '#f1f5f9', color: '#ef4444', padding: '10px 15px' }}>🗑️</button>
+                            </div>
+                        )
+                    })}
+                 </div>
+             </div>
+          </div>
+        )}
+
         {currentModule === 'admin_messages' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
              <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0f172a', marginBottom: '10px' }}>✉️ Öğrencilerden Gelen Mesajlar</h2>
@@ -523,6 +600,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                      <span style={{ color: '#3b82f6', marginLeft: '12px' }}>🪙 {appData?.wallet?.[name] || 0} M</span>
                      <span style={{ color: '#f59e0b', marginLeft: '12px' }}>⭐ {appData?.xp?.[name] || 0} XP</span>
                      <span style={{ color: '#10b981', marginLeft: '12px' }}>⚔️ {appData?.season_score?.[name] || 0} RP</span>
+                     <span style={{ color: '#8b5cf6', marginLeft: '12px' }}>🎟️ {appData?.tickets?.[name] || 0} BİLET</span>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', width: '100%' }}>
                     <input type="text" placeholder="Kullanıcı" value={creds.username || ''} onChange={e => db.ref(`mavikent_premium/student_credentials/${name}/username`).set(e.target.value)} className="elite-input" style={{ padding: '12px 16px', fontSize: '13px', width: '110px' }} />
@@ -530,9 +608,20 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                     <select onChange={e => db.ref(`mavikent_premium/student_classes/${name}`).set(e.target.value)} value={appData?.student_classes?.[name] || ''} className="elite-input" style={{ padding: '12px 16px', fontSize: '13px', width: '110px' }}>
                       <option value="">Sınıf Seç</option>{classList.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <button onClick={() => { const val = prompt(`${name} M:`, appData?.wallet?.[name] || 0); if(val) db.ref(`mavikent_premium/wallet/${name}`).set(parseInt(val)); }} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '10px 16px' }}>M</button>
+                    
+                    {/* BANKA GEÇMİŞİ EKLENMİŞ YÖNETİCİ CÜZDAN DÜZENLEMESİ */}
+                    <button onClick={() => { 
+                        const val = prompt(`${name} M:`, appData?.wallet?.[name] || 0); 
+                        if(val !== null) { 
+                            const diff = parseInt(val) - (appData?.wallet?.[name] || 0);
+                            db.ref(`mavikent_premium/wallet/${name}`).set(parseInt(val)); 
+                            if(diff !== 0) db.ref(`mavikent_premium/transactions/${name}`).push({ desc: 'Yönetici Bakiye Düzenlemesi', amt: diff, date: new Date().toLocaleString('tr-TR') });
+                        } 
+                    }} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '10px 16px' }}>M</button>
+                    
                     <button onClick={() => { const val = prompt(`${name} XP:`, appData?.xp?.[name] || 0); if(val) db.ref(`mavikent_premium/xp/${name}`).set(parseInt(val)); }} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '10px 16px' }}>XP</button>
                     <button onClick={() => { const val = prompt(`${name} RP:`, appData?.season_score?.[name] || 0); if(val) db.ref(`mavikent_premium/season_score/${name}`).set(parseInt(val)); }} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '10px 16px' }}>RP</button>
+                    <button onClick={() => { const val = prompt(`${name} Bilet:`, appData?.tickets?.[name] || 0); if(val) db.ref(`mavikent_premium/tickets/${name}`).set(parseInt(val)); }} className="premium-btn" style={{ background: '#8b5cf6', color: 'white', padding: '10px 16px' }}>🎟️ BİLET</button>
                     <button onClick={() => { if(window.confirm('Silinsin mi?')) db.ref('mavikent_premium/roster').set(roster.filter(n => n !== name)); }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '10px 16px' }}>SİL</button>
                   </div>
                 </div>
@@ -623,13 +712,13 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
             <div style={{ background: '#fffbeb', border: '2px solid #fde047', padding: '30px', borderRadius: '24px' }}>
                <h4 style={{ color: '#b45309', marginTop: 0, fontWeight: 900, fontSize: '18px' }}>👑 ELİT LİG (Terfi Alanlar)</h4>
                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-                 {roster.filter(isElite).map(n => <div key={n} onClick={() => db.ref(`mavikent_premium/student_tiers/${n}`).set('standard')} className="premium-hover" style={{ background: '#fef3c7', padding: '12px 16px', borderRadius: '20px', fontSize: '14px', fontWeight: 800, color:'#92400e' }}>{n} 👑</div>)}
+                 {roster.filter(isElite).map(n => <div key={n} onClick={() => db.ref(`mavikent_premium/student_tiers/${n}`).set('standard')} className="premium-hover" style={{ background: '#fef3c7', padding: '12px 16px', borderRadius: '20px', fontSize: '14px', fontWeight: 800, color:'#92400e', cursor: 'pointer' }}>{n} 👑</div>)}
                </div>
             </div>
             <div style={{ background: '#ffffff', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
                <h4 style={{ color: '#0f172a', marginTop: 0, fontWeight: 900, fontSize: '18px' }}>🎯 STANDART LİG (Adaylar)</h4>
                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-                 {roster.filter(n => !isElite(n)).map(n => <div key={n} onClick={() => db.ref(`mavikent_premium/student_tiers/${n}`).set('elite')} className="premium-hover" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '20px', fontSize: '14px', fontWeight: 800, color:'#334155' }}>{n} ⬆️</div>)}
+                 {roster.filter(n => !isElite(n)).map(n => <div key={n} onClick={() => db.ref(`mavikent_premium/student_tiers/${n}`).set('elite')} className="premium-hover" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '20px', fontSize: '14px', fontWeight: 800, color:'#334155', cursor: 'pointer' }}>{n} ⬆️</div>)}
                </div>
             </div>
           </div>
@@ -637,7 +726,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
         {currentModule === 'admin_clans' && (
            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #b45309 100%)', padding: '30px', borderRadius: '24px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 10px 20px rgba(245,158,11,0.3)', flexWrap: 'wrap', gap: '15px' }}>
+              <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #b45309 100%)', padding: '30px', borderRadius: '24px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 10px 30px rgba(245,158,11,0.3)', flexWrap: 'wrap', gap: '15px' }}>
                  <div>
                     <h3 style={{ margin: '0 0 5px 0', fontSize: '24px', fontWeight: 900 }}>🚩 KLAN YÖNETİMİ</h3>
                     <p style={{ margin: 0, fontSize: '14px', fontWeight: 600, opacity: 0.9 }}>Savaşı bitir ve şampiyon klana 60'ar M-Coin dağıt.</p>
@@ -684,10 +773,12 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
              <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', gridColumn: '1 / -1' }}>
                <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '8px' }}>⚡ FLAŞ ETKİNLİKLER (GLOBAL)</h4>
-               <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', fontWeight: 600 }}>Tüm yurtta aynı anda devreye girecek olan hafta sonu veya özel gün etkinliklerini başlatın.</p>
+               <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', fontWeight: 600 }}>Tüm yurtta aynı anda devreye girecek etkinlikler ve manuel bilet dağıtımı.</p>
                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                   <button onClick={() => { db.ref('mavikent_premium/settings/global_event').set('2x_xp'); alert("Tüm yurt için 2X XP aktif edildi!"); }} className="premium-btn" style={{ background: appData?.settings?.global_event === '2x_xp' ? '#10b981' : '#f8fafc', color: appData?.settings?.global_event === '2x_xp' ? 'white' : '#64748b', border: appData?.settings?.global_event === '2x_xp' ? 'none' : '2px solid #e2e8f0' }}>⭐ TÜM YURT 2X ÇARPAN</button>
                   <button onClick={() => { db.ref('mavikent_premium/settings/global_event').set('none'); alert("Etkinlikler durduruldu."); }} className="premium-btn" style={{ background: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? '#ef4444' : '#f8fafc', color: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? 'white' : '#64748b', border: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? 'none' : '2px solid #e2e8f0' }}>🚫 ETKİNLİKLERİ BİTİR</button>
+                  {/* BİLET DAĞITMA BUTONU */}
+                  <button onClick={() => { if(window.confirm('Tüm öğrencilere anında 1 adet Şans Çarkı Bileti hediye edilecek. Onaylıyor musun?')) { const updates = {}; roster.forEach(n => { updates[`tickets/${n}`] = (Number(appData?.tickets?.[n]) || 0) + 1; }); db.ref('mavikent_premium').update(updates); alert('🎟️ Biletler başarıyla dağıtıldı!'); } }} className="premium-btn" style={{ background: '#8b5cf6', color: 'white', border: 'none' }}>🎟️ HERKESE 1 BİLET DAĞIT</button>
                </div>
              </div>
              <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
@@ -730,6 +821,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         )}
       </div>
 
+      {/* TÜM MODALLAR BURADA (SİLİNMEDİ) */}
       {selectedStudent && modalType === 'isleyis' && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', animation: 'fadeIn 0.3s ease-out' }}>
           <div style={{ backgroundColor: '#ffffff', padding: '40px', borderRadius: '32px', width: '100%', maxWidth: '420px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)', maxHeight: '90vh', overflowY: 'auto', animation: 'popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}>
