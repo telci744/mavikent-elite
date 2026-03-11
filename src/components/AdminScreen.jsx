@@ -529,7 +529,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   };
 
   const renderStudentGrid = (students, type) => (
-    <div className="grid-mobile-2">
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
       {students.map(name => {
         let bgColor = '#ffffff'; let subText = '';
         
@@ -605,46 +605,27 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         .elite-input { outline: none !important; border: 2px solid #e2e8f0 !important; transition: all 0.2s; padding: 14px 20px; border-radius: 20px; width: 100%; font-weight: 700; color: #0f172a; background: #f8fafc; }
         .elite-input:focus { border-color: #3b82f6 !important; background: #ffffff; box-shadow: 0 0 0 4px rgba(59,130,246,0.1) !important; }
         .clean-scroll::-webkit-scrollbar { width: 6px; } .clean-scroll::-webkit-scrollbar-track { background: transparent; } .clean-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        
-        /* MOBİL UYUMLU ŞIK KUTUCUK TASARIMI */
-        .premium-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
-        .premium-card { background: white; text-align: center; border-radius: 24px; padding: 35px 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: center; align-items: center; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
-        .premium-card .icon { font-size: 48px; margin-bottom: 15px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)); }
-        .premium-card .label { font-size: 15px; font-weight: 900; color: #0f172a; line-height: 1.3; }
-        
-        .grid-mobile-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
-        
-        @media (max-width: 768px) {
-            .premium-grid { grid-template-columns: repeat(2, 1fr); gap: 15px; }
-            .premium-card { padding: 20px 10px; border-radius: 20px; aspect-ratio: 1; }
-            .premium-card .icon { font-size: 40px; margin-bottom: 10px; }
-            .premium-card .label { font-size: 13px; letter-spacing: 0; }
-            .grid-mobile-2 { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-        }
-        
         @keyframes popIn { 0% { opacity: 0; transform: scale(0.9); } 100% { opacity: 1; transform: scale(1); } }
         @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
         .fade-in { animation: fadeIn 0.4s ease-out; }
-        .popIn-anim { animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       `}</style>
 
-      <div className="popIn-anim" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '16px 24px', borderRadius: '50px', marginBottom: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '16px 24px', borderRadius: '50px', marginBottom: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
         <button onClick={handleBack} className="premium-btn" style={{ background: '#f1f5f9', color: '#0f172a', padding: '12px 20px', fontWeight: 800 }}>← {currentModule || dashboardView !== 'main' ? 'Geri Dön' : 'Çıkış Yap'}</button>
         <div style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a' }}>YÖNETİCİ PANELİ</div>
       </div>
 
       <div className="fade-in" key={dashboardView + (currentModule || '')}>
-
         {!currentModule && (
-          <div className="premium-grid">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
             {dashboardView === 'main' && [
               { id: 'egitim', icon: '📚', label: 'EĞİTİM KONTROL' }, 
               { id: 'degerler', icon: '🕌', label: 'DAHİLİ DERS & DEĞERLER' },
               { id: 'isleyis', icon: '⚙️', label: 'YURT İŞLEYİŞ' }, 
               { id: 'yonetim', icon: '👑', label: 'SİSTEM YÖNETİMİ', bg: '#f8fafc' }
             ].map(mod => (
-              <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="premium-card card-hover" style={{ background: mod.bg || 'white' }}>
-                <div className="icon">{mod.icon}</div><div className="label">{mod.label}</div>
+              <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="card-hover" style={{ background: mod.bg || 'white', textAlign: 'center', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                <div style={{ fontSize: '48px', marginBottom: '15px' }}>{mod.icon}</div><div style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a', letterSpacing: '0.5px' }}>{mod.label}</div>
               </div>
             ))}
             
@@ -653,19 +634,19 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
               { id: 'egitim_deneme', icon: '📊', label: 'DENEME SINAVLARI' }, 
               { id: 'egitim_yazili', icon: '💯', label: 'YAZILI HAZIRLIK' } 
             ].map(mod => (
-              <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
+              <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="card-hover" style={{ background: 'white', textAlign: 'center', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}><div style={{ fontSize: '42px', marginBottom: '16px' }}>{mod.icon}</div><div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{mod.label}</div></div>
             ))}
             
-            {dashboardView === 'egitim_ders' && eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('class_view'); setSelectedSession(cls); }} className="premium-card card-hover"><div className="icon">📝</div><div className="label">{cls}</div></div>))}
-            {dashboardView === 'egitim_deneme' && eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('deneme_view'); setSelectedSession(cls); }} className="premium-card card-hover"><div className="icon">📊</div><div className="label">{cls}</div></div>))}
+            {dashboardView === 'egitim_ders' && eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('class_view'); setSelectedSession(cls); }} className="card-hover" style={{ background: 'white', textAlign: 'center', fontWeight: 900, fontSize: '18px', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>📝 <br/><br/> {cls}</div>))}
+            {dashboardView === 'egitim_deneme' && eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('deneme_view'); setSelectedSession(cls); }} className="card-hover" style={{ background: 'white', textAlign: 'center', fontWeight: 900, fontSize: '18px', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>📊 <br/><br/> {cls}</div>))}
             {dashboardView === 'egitim_yazili' && (
               <>
-                {eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('yazili_view'); setSelectedSession(cls); }} className="premium-card card-hover"><div className="icon">💯</div><div className="label">{cls}</div></div>))}
+                {eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('yazili_view'); setSelectedSession(cls); }} className="card-hover" style={{ background: 'white', textAlign: 'center', fontWeight: 900, fontSize: '18px', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>💯 <br/><br/> {cls}</div>))}
                 <div style={{ gridColumn: '1 / -1', marginTop: '10px' }}><button onClick={() => { if(window.confirm('Tüm sınıfların YAZILI notları sıfırlanacak. Emin misiniz?')) { const updates = {}; roster.forEach(n => updates[`exams/${n}/yazili`] = null); db.ref('mavikent_premium').update(updates); alert('Yazılı notları sıfırlandı!'); } }} className="premium-btn" style={{ width: '100%', background: '#ef4444', color: 'white', padding: '18px', fontSize: '15px' }}>🔄 HAFTALIK YAZILI PERFORMANSLARINI SIFIRLA</button></div>
               </>
             )}
 
-            {dashboardView === 'degerler' && levelList.map(lvl => (<div key={lvl} onClick={() => { setCurrentModule('values_view'); setSelectedSession(lvl); }} className="premium-card card-hover"><div className="icon">🕌</div><div className="label">{lvl}</div></div>))}
+            {dashboardView === 'degerler' && levelList.map(lvl => (<div key={lvl} onClick={() => { setCurrentModule('values_view'); setSelectedSession(lvl); }} className="card-hover" style={{ background: 'white', textAlign: 'center', fontWeight: 900, fontSize: '18px', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>🕌 <br/><br/> {lvl}</div>))}
             
             {dashboardView === 'isleyis' && [ 
               { id: 'yoklama', icon: '📋', label: 'Yoklama' }, 
@@ -673,7 +654,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
               { id: 'yatak', icon: '🛏️', label: 'Yatak / Dolap' }, 
               { id: 'kanaat', icon: '✍️', label: 'Kanaat Notu' } 
             ].map(mod => (
-              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
+              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="card-hover" style={{ background: 'white', textAlign: 'center', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}><div style={{ fontSize: '42px', marginBottom: '16px' }}>{mod.icon}</div><div style={{ fontSize: '15px', fontWeight: 800, textTransform: 'uppercase', color: '#0f172a' }}>{mod.label}</div></div>
             ))}
             
             {dashboardView === 'yonetim' && [ 
@@ -687,7 +668,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
               { id: 'admin_messages', icon: '✉️', label: 'MESAJLAR' }, 
               { id: 'admin_settings', icon: '⚙️', label: 'AYARLAR' } 
             ].map(mod => (
-              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
+              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="card-hover" style={{ background: 'white', textAlign: 'center', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}><div style={{ fontSize: '42px', marginBottom: '16px' }}>{mod.icon}</div><div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a' }}>{mod.label}</div></div>
             ))}
           </div>
         )}
@@ -699,9 +680,9 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
         {/* İŞLEYİŞ EKRANLARI */}
         {currentModule === 'yoklama' && !selectedSession && ( 
-            <div className="grid-mobile-2">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
                 {['Sabah', 'Öğle', 'İkindi', 'Akşam', 'Yatsı', 'İzin Dönüşü', 'Ekstra'].map(s => ( 
-                    <div key={s} onClick={() => setSelectedSession(s)} className="premium-card card-hover"><div className="icon">⏰</div><div className="label">{s}</div></div> 
+                    <div key={s} onClick={() => setSelectedSession(s)} className="card-hover" style={{ background: 'white', padding: '24px', textAlign: 'center', fontWeight: 900, fontSize: '16px', borderRadius: '20px', color: '#0f172a', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>{s}</div> 
                 ))}
             </div> 
         )}
@@ -774,7 +755,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                         <option value="discount">🔥 % İndirim Ver (7 Gün)</option>
                     </select>
                     <input type="number" value={newGiftCode.val} onChange={e => setNewGiftCode({...newGiftCode, val: e.target.value})} placeholder="Miktar / Yüzde" className="elite-input" />
-                    <input type="number" value={newGiftCode.uses} onChange={e => setNewGiftCode({...newGiftCode, uses: e.target.value})} placeholder="Kaç Kez Kullanılabilir? (Örn: 50)" className="elite-input" />
+                    <input type="number" value={newGiftCode.uses} onChange={e => setNewGiftCode({...newGiftCode, uses: e.target.value})} placeholder="Kaç Kez Kullanılabilir?" className="elite-input" />
                     <button onClick={handleAdminCreateGiftCode} className="premium-btn" style={{ background: '#0f172a', color: 'white', gridColumn: '1 / -1', padding: '16px' }}>KODU YAYINLA</button>
                  </div>
              </div>
@@ -880,6 +861,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                       <option value="">Sınıf Seç</option>{classList.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     
+                    {/* BANKA GEÇMİŞLİ YÖNETİCİ M-COIN DÜZENLEMESİ */}
                     <button onClick={() => { 
                         const val = prompt(`${name} M:`, appData?.wallet?.[name] || 0); 
                         if(val !== null) { 
@@ -891,7 +873,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                     
                     <button onClick={() => { const val = prompt(`${name} XP:`, appData?.xp?.[name] || 0); if(val) db.ref(`mavikent_premium/xp/${name}`).set(parseInt(val)); }} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '10px 16px' }}>XP</button>
                     <button onClick={() => { const val = prompt(`${name} RP:`, appData?.season_score?.[name] || 0); if(val) db.ref(`mavikent_premium/season_score/${name}`).set(parseInt(val)); }} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '10px 16px' }}>RP</button>
-                    <button onClick={() => { const val = prompt(`${name} Bilet (Şu an ${appData?.tickets?.[name] || 0}):`, appData?.tickets?.[name] || 0); if(val !== null) db.ref(`mavikent_premium/tickets/${name}`).set(parseInt(val)); }} className="premium-btn" style={{ background: '#8b5cf6', color: 'white', padding: '10px 16px' }}>🎟️ BİLET</button>
+                    <button onClick={() => { const val = prompt(`${name} Bilet:`, appData?.tickets?.[name] || 0); if(val !== null) db.ref(`mavikent_premium/tickets/${name}`).set(parseInt(val)); }} className="premium-btn" style={{ background: '#8b5cf6', color: 'white', padding: '10px 16px' }}>🎟️ BİLET</button>
                     <button onClick={() => { if(window.confirm('Silinsin mi?')) db.ref('mavikent_premium/roster').set(roster.filter(n => n !== name)); }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '10px 16px' }}>SİL</button>
                   </div>
                 </div>
@@ -934,7 +916,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           </div>
         )}
 
-        {/* TESLİMAT YÖNETİMİ (ETİKETLİ) */}
+        {/* TESLİMAT ETİKETLERİ EKLENDİ */}
         {currentModule === 'admin_teslimat' && (
           <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
              <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
@@ -957,9 +939,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                            <span style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>{item.s}</span>
                            <span style={{ background: badgeColor, color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900 }}>{badgeText}</span>
                         </div>
-                        <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>
-                           📦 {(item.n || item.i || '').replace('(Çekiliş)','').replace('(Kazı Kazan)','').replace('(Kutudan Çıktı)','')}
-                        </div>
+                        <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>📦 {(item.n || item.i || '').replace('(Çekiliş)','').replace('(Kazı Kazan)','').replace('(Kutudan Çıktı)','')}</div>
                      </div>
                      <button onClick={() => db.ref(`mavikent_premium/deliveries/${k}/st`).set(deliveryTab === 'wait' ? 'done' : 'wait')} className="premium-btn" style={{ background: deliveryTab === 'wait' ? '#10b981' : '#64748b', color: 'white', padding: '12px 20px' }}>{deliveryTab === 'wait' ? 'TESLİM ET' : 'GERİ AL'}</button>
                    </div>
@@ -1111,6 +1091,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
              </div>
           </div>
       )}
+      </div>
 
       {/* --- AÇILIR PENCERELER (MODALLAR) --- */}
       {selectedStudent && modalType === 'isleyis' && (
