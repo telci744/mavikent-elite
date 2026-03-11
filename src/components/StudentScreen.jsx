@@ -32,6 +32,11 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
   const [activeTab, setActiveTab] = useState('home');
   
   const [lotteryState, setLotteryState] = useState({ active: false, result: null, spinning: false, currentDisplay: '❓', speed: 100 });
+  const [scratchState, setScratchState] = useState({ active: false, result: null, isRevealed: false });
+  
+  // YENİ: KUTU AÇMA VE BAŞARI EKRANLARI İÇİN UNIFIED MODAL
+  const [actionModal, setActionModal] = useState({ active: false, type: '', data: null });
+
   const [fullListView, setFullListView] = useState(null); 
   const [showPublicQuests, setShowPublicQuests] = useState(false);
   const [showPublicMarket, setShowPublicMarket] = useState(false);
@@ -49,7 +54,6 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
   const [messageText, setMessageText] = useState('');
   const [showGiftModal, setShowGiftModal] = useState(false);
   const [giftCodeInput, setGiftCodeInput] = useState('');
-  
   const [showTxnModal, setShowTxnModal] = useState(false);
 
   const rawRoster = appData?.roster || [];
@@ -123,11 +127,11 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
       if(codeData.type === 'mcoin') {
           updates[`wallet/${safeName}`] = mCoin + Number(codeData.val);
           const tId = `txn_${Date.now()}_${Math.floor(Math.random()*1000)}`;
-          updates[`transactions/${safeName}/${tId}`] = { desc: `Hediye Kodu Kullanımı (${codeKey})`, amt: Number(codeData.val), date: new Date().toLocaleString('tr-TR') };
-          alert(`🎉 BİNGÖ! Kod başarıyla onaylandı ve ${codeData.val} M-Coin hesabına yattı!`);
+          updates[`transactions/${safeName}/${tId}`] = { desc: `Hediye Kodu (${codeKey})`, amt: Number(codeData.val), date: new Date().toLocaleString('tr-TR') };
+          setActionModal({ active: true, type: 'success', data: { msg: `Kodu başarıyla onaylandı ve ${codeData.val} M-Coin hesabına yattı!`, icon: '🎉', name: 'M-Coin Kazandın' } });
       } else if(codeData.type === 'discount') {
           updates[`active_discounts/${safeName}`] = { value: Number(codeData.val), expiry: Date.now() + (7 * 24 * 60 * 60 * 1000) };
-          alert(`🔥 HARİKA! %${codeData.val} Bayram İndirimi hesabına tanımlandı. Kullanmak için tam 7 günün var, süreyi kaçırma!`);
+          setActionModal({ active: true, type: 'success', data: { msg: `%${codeData.val} Bayram İndirimi hesabına tanımlandı. Tam 7 gün boyunca markette geçerli!`, icon: '🔥', name: 'İndirim Kazandın' } });
       }
       db.ref('mavikent_premium').update(updates);
       setShowGiftModal(false); setGiftCodeInput('');
@@ -151,13 +155,14 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
         <style>{`
           @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
           * { font-family: 'Outfit', sans-serif; outline: none !important; }
-          
-          /* EKSİK OLAN ANIMASYONLAR EKLENDİ */
           @keyframes tickerScroll { 0% { transform: translateX(100vw); } 100% { transform: translateX(-100%); } }
-          @keyframes popIn { 0% { opacity: 0; transform: scale(0.9); } 100% { opacity: 1; transform: scale(1); } }
+          @keyframes popIn { 0% { opacity: 0; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
           @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+          @keyframes boxShake { 0% { transform: rotate(0deg); } 25% { transform: rotate(15deg); } 50% { transform: rotate(-15deg); } 75% { transform: rotate(10deg); } 100% { transform: rotate(0deg); } }
           
           .fade-in { animation: fadeIn 0.4s ease-out; }
+          .popIn-anim { animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+          .shake-anim { animation: boxShake 1.5s infinite; }
           .ticker-content { display: inline-block; white-space: nowrap; animation: tickerScroll 25s linear infinite; font-size: 15px; font-weight: 700; letter-spacing: 0.5px; }
           .elite-card { background: #ffffff; border-radius: 28px; padding: 30px 15px; box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.05); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid #f1f5f9; cursor: pointer; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; text-align: center !important; min-height: 180px; position: relative; z-index: 10; }
           .elite-card:hover { transform: translateY(-8px); box-shadow: 0 20px 40px -5px rgba(15, 23, 42, 0.1); border-color: #e2e8f0; }
@@ -196,10 +201,9 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
             </div>
         </div>
 
-        {/* TÜM MODALLAR (BURASI AYNEN KORUNDU) */}
         {fullListView && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', backdropFilter: 'blur(5px)' }}>
-             <div style={{ width: '100%', maxWidth: '500px', background: '#ffffff', borderRadius: '32px', padding: '35px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.3)', animation: 'popIn 0.3s forwards' }}>
+             <div className="popIn-anim" style={{ width: '100%', maxWidth: '500px', background: '#ffffff', borderRadius: '32px', padding: '35px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.3)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}><h2 style={{ margin: 0, fontSize: '22px', fontWeight: 900, color: '#0f172a' }}>{fullListView === 'rp' ? '🏆 RP Liderleri' : fullListView === 'wealth' ? '💳 M-Coin Zenginleri' : '🚩 Klan Savaşları'}</h2><button onClick={() => setFullListView(null)} className="btn-nav">Kapat</button></div>
                 {fullListView === 'clans' ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -224,7 +228,7 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
 
         {selectedClan && (
             <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999999, padding: '20px', backdropFilter: 'blur(10px)' }}>
-              <div style={{ background: '#ffffff', borderRadius: '32px', width: '100%', maxWidth: '400px', padding: '40px 30px', boxShadow: '0 25px 60px rgba(0,0,0,0.4)', animation: 'popIn 0.3s forwards', position: 'relative', textAlign: 'center' }}>
+              <div className="popIn-anim" style={{ background: '#ffffff', borderRadius: '32px', width: '100%', maxWidth: '400px', padding: '40px 30px', boxShadow: '0 25px 60px rgba(0,0,0,0.4)', position: 'relative', textAlign: 'center' }}>
                  <button onClick={() => setSelectedClan(null)} style={{ position: 'absolute', top: '20px', right: '20px', background: '#f1f5f9', border: 'none', borderRadius: '50px', width: '40px', height: '40px', fontSize: '16px', fontWeight: 900, color: '#64748b', cursor: 'pointer' }}>✕</button>
                  <div style={{ fontSize: '60px', marginBottom: '10px' }}>{selectedClan.icon}</div>
                  <h2 style={{ margin: '0 0 5px 0', fontSize: '28px', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.5px' }}>{selectedClan.name} <span style={{ fontSize: '14px', background: '#f1f5f9', padding: '4px 8px', borderRadius: '8px', verticalAlign: 'middle', color: '#64748b' }}>{selectedClan.tag}</span></h2>
@@ -246,7 +250,7 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
 
         {showPublicQuests && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', backdropFilter: 'blur(5px)' }}>
-             <div style={{ width: '100%', maxWidth: '500px', background: '#ffffff', borderRadius: '32px', padding: '35px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.3)', animation: 'popIn 0.3s forwards' }}>
+             <div className="popIn-anim" style={{ width: '100%', maxWidth: '500px', background: '#ffffff', borderRadius: '32px', padding: '35px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.3)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}><h2 style={{ margin: 0, fontSize: '22px', fontWeight: 900, color: '#0f172a' }}>🎯 Aktif Görevler</h2><button onClick={() => setShowPublicQuests(false)} className="btn-nav">Kapat</button></div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                    {['q1', 'q2', 'q3'].map(qId => {
@@ -260,7 +264,7 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
 
         {showPublicMarket && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', backdropFilter: 'blur(5px)' }}>
-             <div style={{ width: '100%', maxWidth: '600px', background: '#ffffff', borderRadius: '32px', padding: '35px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.3)', animation: 'popIn 0.3s forwards' }}>
+             <div className="popIn-anim" style={{ width: '100%', maxWidth: '600px', background: '#ffffff', borderRadius: '32px', padding: '35px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.3)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}><h2 style={{ margin: 0, fontSize: '22px', fontWeight: 900, color: '#0f172a' }}>🛍️ Market Vitrini</h2><button onClick={() => setShowPublicMarket(false)} className="btn-nav">Kapat</button></div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '16px' }}>
                    <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', padding: '24px', borderRadius: '24px', textAlign: 'center', color: 'white', boxShadow: '0 10px 20px rgba(15,23,42,0.2)' }}><div style={{ fontSize: '42px', marginBottom: '12px' }}>🎟️</div><div style={{ fontSize: '14px', fontWeight: 800, marginBottom: '16px' }}>Çekiliş Bileti</div><div style={{ background: '#d4af37', color: 'white', padding: '6px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: 900, display: 'inline-block' }}>20 M</div></div>
@@ -272,7 +276,7 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
 
         {showLoginModal && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999999, padding: '20px', backdropFilter: 'blur(8px)' }}>
-            <div style={{ background: '#ffffff', borderRadius: '32px', width: '100%', maxWidth: '380px', textAlign: 'center', padding: '40px 30px', boxShadow: '0 25px 50px rgba(0,0,0,0.4)', animation: 'popIn 0.3s forwards' }}>
+            <div className="popIn-anim" style={{ background: '#ffffff', borderRadius: '32px', width: '100%', maxWidth: '380px', textAlign: 'center', padding: '40px 30px', boxShadow: '0 25px 50px rgba(0,0,0,0.4)' }}>
               <div style={{ fontSize: '50px', marginBottom: '16px' }}>🎓</div><h2 style={{ fontWeight: 900, margin: '0 0 8px 0', fontSize: '26px', color: '#0f172a', letterSpacing: '-0.5px' }}>Öğrenci Girişi</h2><p style={{ color: '#64748b', fontSize: '14px', marginBottom: '30px', fontWeight: 500 }}>Sisteme erişmek için bilgilerinizi girin.</p>
               <input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} placeholder="Kullanıcı Adı" style={{ width: '100%', padding: '16px 20px', borderRadius: '20px', border: '2px solid #e2e8f0', background: '#f8fafc', marginBottom: '12px', fontSize: '15px', fontWeight: '700', outline: 'none', color: '#0f172a', transition: '0.3s' }} onFocus={e => {e.target.style.borderColor='#3b82f6'; e.target.style.background='#fff'}} onBlur={e => {e.target.style.borderColor='#e2e8f0'; e.target.style.background='#f8fafc'}} />
               <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleStudentLogin(); }} placeholder="Şifre" style={{ width: '100%', padding: '16px 20px', borderRadius: '20px', border: '2px solid #e2e8f0', background: '#f8fafc', marginBottom: '30px', fontSize: '15px', fontWeight: '700', outline: 'none', color: '#0f172a', transition: '0.3s' }} onFocus={e => {e.target.style.borderColor='#3b82f6'; e.target.style.background='#fff'}} onBlur={e => {e.target.style.borderColor='#e2e8f0'; e.target.style.background='#f8fafc'}} />
@@ -339,7 +343,6 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
   const myEarnedBadges = appData?.badges?.[safeName] || {};
   const myPinnedBadges = appData?.pinned_badges?.[safeName] || [];
   
-  // BANKA (İŞLEM) GEÇMİŞİ VERİLERİ
   const myTransactions = appData?.transactions?.[safeName] || {};
   const sortedTxns = Object.keys(myTransactions).map(k => ({ id: k, ...myTransactions[k] })).sort((a,b) => b.id.localeCompare(a.id));
 
@@ -361,7 +364,9 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
 
   const isGlobal2X = appData?.settings?.global_event === '2x_xp';
   const is2XActive = (myCosmetics?.multiplier?.date === new Date().toDateString()) || isGlobal2X;
-  const hasStreak = myCosmetics?.streak?.date === new Date().toDateString();
+  
+  // HAFTALIK SERİ KARTI İÇİN KONTROL
+  const hasStreak = myCosmetics?.streak && (myCosmetics.streak.date === new Date().toDateString() || (myCosmetics.streak.expires && myCosmetics.streak.expires > Date.now()));
 
   const products = Object.keys(appData?.market_products || {}).map(k => ({...appData.market_products[k], key: k})).sort((a,b) => Number(b.p || 0) - Number(a.p || 0));
 
@@ -397,6 +402,7 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
       const excluded = ['KULAKLIK', 'SAAT', 'FORMA', 'KRAMPON', 'ÇİKOLATA', 'EVİM', 'AKILLI'];
       let drawItems = products.filter(p => p.n !== "Çekiliş Bileti" && (p.type === 'normal' || !p.type) && !excluded.some(kw => String(p.n).toUpperCase().includes(kw)));
       
+      if (appData?.limits?.shoe_won) { drawItems = drawItems.filter(p => !String(p.n).toUpperCase().includes('AYAKKABI')); }
       if (drawItems.length === 0) return alert("Şu an çark havuzunda uygun ürün bulunmuyor.");
 
       const rankMultiplier = 1 + ((roster.length || 1) - (myRpRank !== '-' ? myRpRank : 1)) / (roster.length || 1); 
@@ -412,7 +418,11 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
       let selectedPrize = weightedArray[0];
       for (let item of weightedArray) { if (randomNum < item.weight) { selectedPrize = item; break; } randomNum -= item.weight; }
       
-      db.ref(`mavikent_premium/tickets/${safeName}`).transaction(c => Math.max(0, (Number(c)||0) - 1));
+      const updates = {};
+      updates[`tickets/${safeName}`] = Math.max(0, myTickets - 1);
+      if (String(selectedPrize.n).toUpperCase().includes('AYAKKABI')) { updates[`limits/shoe_won`] = true; }
+      db.ref('mavikent_premium').update(updates);
+
       setLotteryState({ active: true, result: selectedPrize, spinning: true, currentDisplay: '❓', speed: 100 });
       let spins = 0; let currentSpeed = 100;
       const spinLoop = () => { 
@@ -428,15 +438,76 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
       setTimeout(spinLoop, currentSpeed);
   };
 
+  const playScratchcard = () => {
+      if (mCoin < 15) return alert("❌ Yetersiz bakiye! Kazı Kazan oynamak için 15 M gerekli.");
+
+      const excluded = ['KULAKLIK', 'SAAT', 'FORMA', 'KRAMPON', 'ÇİKOLATA', 'EVİM', 'AKILLI'];
+      let drawItems = products.filter(p => p.n !== "Çekiliş Bileti" && (p.type === 'normal' || !p.type) && !excluded.some(kw => String(p.n).toUpperCase().includes(kw)));
+      
+      if (appData?.limits?.shoe_won) { drawItems = drawItems.filter(p => !String(p.n).toUpperCase().includes('AYAKKABI')); }
+      if (drawItems.length === 0) return alert("Şu an havuzda uygun ürün bulunmuyor.");
+
+      let weightedArray = [];
+      drawItems.forEach(item => { weightedArray.push({ ...item, weight: 1000 / (Number(item.p) || 10) }); });
+
+      let totalWeight = weightedArray.reduce((acc, curr) => acc + curr.weight, 0);
+      let randomNum = Math.random() * totalWeight;
+      let selectedPrize = weightedArray[0];
+      for (let item of weightedArray) { if (randomNum < item.weight) { selectedPrize = item; break; } randomNum -= item.weight; }
+
+      const updates = {};
+      updates[`wallet/${safeName}`] = mCoin - 15;
+      updates[`transactions/${safeName}/txn_scratch_${Date.now()}`] = { desc: 'Kazı Kazan Oynama Bedeli', amt: -15, date: new Date().toLocaleString('tr-TR') };
+      if (String(selectedPrize.n).toUpperCase().includes('AYAKKABI')) { updates[`limits/shoe_won`] = true; }
+      db.ref('mavikent_premium').update(updates);
+
+      setScratchState({ active: true, result: selectedPrize, isRevealed: false });
+  };
+
+  const revealScratch = () => {
+      if(scratchState.isRevealed) return;
+      setScratchState(prev => ({...prev, isRevealed: true}));
+      db.ref('mavikent_premium/deliveries').push({ s: safeName, i: scratchState.result.n + " (Kazı Kazan)", st: 'wait', type: scratchState.result.type || 'normal', val: scratchState.result.val || scratchState.result.i, date: new Date().toLocaleDateString('tr-TR') });
+  };
+
+  // YENİ VE HATASIZ ACTIVATE ITEM KODU (UYARI YERİNE ŞIK EKRAN VE GİZEMLİ KUTU AÇILIŞI)
   const activateItem = (delKey, item) => {
-      const today = new Date().toDateString(); const exp = Date.now() + 14 * 24 * 60 * 60 * 1000; const updates = {};
-      const iType = String(item.type || '').toLowerCase(); const iName = String(item.n || '').toUpperCase(); const iIcon = String(item.i || '').toUpperCase();
-      if (iType === 'multiplier' || iName.includes("2X") || iName.includes("2 X") || iName.includes("ÇARPAN") || iIcon.includes("2X")) { updates[`active_cards/${safeName}/multiplier`] = { date: today, val: "2X" }; alert("⚡ 2X Puan Kartı bugün için aktif edildi! Bugün alacağın tüm puanlar 2 ile çarpılacak."); } 
-      else if (iType === 'streak' || iName.includes("KORUMA") || iName.includes("SERİ") || iName.includes("KALKAN") || iIcon.includes("🛡️")) { updates[`active_cards/${safeName}/streak`] = { date: today, val: "aktif" }; alert("🛡️ Seri Koruma Kalkanı aktif! Bugün alacağın ilk eksi notta serin bozulmayacak."); }
-      else if (iType === 'avatar' || iType === 'title' || iType === 'frame') { updates[`active_cards/${safeName}/${iType}`] = { val: item.val || item.i, exp: exp }; alert("✨ Kozmetik özellik başarıyla profiline eklendi."); } 
-      else if (iName.includes("KUTU") || iIcon.includes("🎁") || iName.includes("SÜRPRİZ")) { const prize = products[Math.floor(Math.random()*products.length)]; updates[`deliveries/${db.ref().push().key}`] = { s: safeName, i: (prize?.n || 'Sürpriz') + " (Kutudan)", st: 'wait', type: prize?.type || 'normal', val: prize?.val || prize?.i, date: new Date().toLocaleDateString('tr-TR') }; alert(`🎁 Kutuyu açtın ve içinden ${prize?.n || 'Ödül'} çıktı! Onay için envanterine eklendi.`); } 
-      else { alert(`✅ ${item.i || '📦'} ${item.n} eşyası teslim alındı.`); }
-      updates[`deliveries/${delKey}`] = null; db.ref('mavikent_premium').update(updates);
+      const iType = String(item.type || '').toLowerCase(); 
+      const itemName = String(item.n || item.i || '').toUpperCase(); 
+      const itemIcon = String(item.i || '').toUpperCase();
+      
+      if (itemName.includes("KUTU") || itemIcon.includes("🎁") || itemName.includes("SÜRPRİZ") || itemName.includes("GİZEMLİ")) {
+          const excluded = ['KULAKLIK', 'SAAT', 'FORMA', 'KRAMPON', 'ÇİKOLATA', 'EVİM', 'AKILLI'];
+          let drawItems = products.filter(p => p.n !== "Çekiliş Bileti" && (p.type === 'normal' || !p.type) && !excluded.some(kw => String(p.n).toUpperCase().includes(kw)));
+          if (appData?.limits?.shoe_won) { drawItems = drawItems.filter(p => !String(p.n).toUpperCase().includes('AYAKKABI')); }
+          
+          let prize = drawItems[Math.floor(Math.random() * drawItems.length)] || { n: 'Sürpriz Ödül', i: '🎁', type: 'normal' };
+          setActionModal({ active: true, type: 'unboxing', data: { boxKey: delKey, prize: prize, step: 'closed' } });
+      } else {
+          const today = new Date().toDateString(); 
+          const updates = {};
+          updates[`deliveries/${delKey}`] = null; 
+          let msg = '';
+          
+          if (iType === 'multiplier' || itemName.includes("2X") || itemName.includes("ÇARPAN") || itemIcon.includes("2X")) { 
+              updates[`active_cards/${safeName}/multiplier`] = { date: today, val: "2X" }; 
+              msg = "⚡ 2X Puan Kartı aktif! Bugün tüm puanların ikiye katlanacak."; 
+          } 
+          else if (iType === 'streak' || itemName.includes("KORUMA") || itemName.includes("SERİ") || itemName.includes("KALKAN") || itemIcon.includes("🛡️")) { 
+              updates[`active_cards/${safeName}/streak`] = { date: today, expires: Date.now() + 7 * 24 * 60 * 60 * 1000, val: "aktif" }; 
+              msg = "🛡️ Haftalık Seri Koruma aktif! Önümüzdeki 7 gün eksi alsan bile serin bozulmayacak."; 
+          } 
+          else if (iType === 'avatar' || iType === 'title' || iType === 'frame') { 
+              updates[`active_cards/${safeName}/${iType}`] = { val: item.val || item.i || itemName, exp: Date.now() + 30 * 24 * 60 * 60 * 1000 }; 
+              msg = "✨ Kozmetik başarıyla profiline eklendi."; 
+          } 
+          else { 
+              msg = `✅ Eşya başarıyla kullanıldı.`; 
+          }
+          
+          db.ref('mavikent_premium').update(updates);
+          setActionModal({ active: true, type: 'success', data: { msg, icon: '✅', name: itemName } });
+      }
   };
 
   const getNavStyle = (tab) => ({ flex: 1, border: 'none', background: activeTab === tab ? '#ffffff' : 'transparent', color: activeTab === tab ? '#0f172a' : '#64748b', fontWeight: activeTab === tab ? 900 : 700, cursor: 'pointer', padding: '14px 0', borderRadius: '50px', fontSize: '14px', outline: 'none', boxShadow: activeTab === tab ? '0 10px 20px -5px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.3s' });
@@ -452,12 +523,85 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
         .elite-input:focus { border-color: #3b82f6 !important; background: #ffffff; box-shadow: 0 0 0 4px rgba(59,130,246,0.1) !important; }
         .clean-scroll::-webkit-scrollbar { width: 6px; } .clean-scroll::-webkit-scrollbar-track { background: transparent; } .clean-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .grid-mobile-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-        @keyframes popIn { 0% { opacity: 0; transform: scale(0.9); } 100% { opacity: 1; transform: scale(1); } }
+        
+        @keyframes popIn { 0% { opacity: 0; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
         @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
-        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes boxShake { 0% { transform: rotate(0deg); } 25% { transform: rotate(15deg); } 50% { transform: rotate(-15deg); } 75% { transform: rotate(10deg); } 100% { transform: rotate(0deg); } }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        .popIn-anim { animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .shake-anim { animation: boxShake 1.5s infinite; }
       `}</style>
 
-      {/* CÜZDAN GEÇMİŞİ (BANKA DEKONTU) MODALI */}
+      {/* YENİ: GİZEMLİ KUTU AÇILIŞ (UNBOXING) MODALI */}
+      {actionModal.active && actionModal.type === 'unboxing' && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.9)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999999, padding: '20px', backdropFilter: 'blur(10px)' }}>
+            <div style={{ textAlign: 'center', color: 'white' }}>
+                {actionModal.data.step === 'closed' ? (
+                    <div className="fade-in">
+                       <div className="shake-anim" style={{ fontSize: '120px', cursor: 'pointer', filter: 'drop-shadow(0 0 30px rgba(255,255,255,0.4))' }} onClick={() => {
+                           const prize = actionModal.data.prize;
+                           const updates = {};
+                           updates[`deliveries/${actionModal.data.boxKey}`] = null;
+                           updates[`deliveries/${db.ref().push().key}`] = { s: safeName, n: prize.n + " (Kutudan Çıktı)", i: prize.i || '🎁', st: 'wait', type: prize.type || 'normal', val: prize.val || prize.i, date: new Date().toLocaleDateString('tr-TR') };
+                           db.ref('mavikent_premium').update(updates);
+                           setActionModal({ active: true, type: 'unboxing', data: { ...actionModal.data, step: 'open' } });
+                       }}>🎁</div>
+                       <h2 style={{ marginTop: '30px', fontSize: '24px', fontWeight: 900 }}>Kutuyu Açmak İçin Dokun!</h2>
+                    </div>
+                ) : (
+                    <div className="popIn-anim" style={{ background: '#ffffff', padding: '50px 30px', borderRadius: '40px', width: '100%', maxWidth: '350px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)', color: '#0f172a' }}>
+                       <div style={{ fontSize: '14px', color: '#b45309', fontWeight: 900, letterSpacing: '2px', marginBottom: '10px' }}>TEBRİKLER!</div>
+                       <div style={{ fontSize: '90px', marginBottom: '15px' }}>{actionModal.data.prize.i || '🎁'}</div>
+                       <h2 style={{ color: '#10b981', fontSize: '26px', margin: '0 0 10px 0', fontWeight: 900 }}>{actionModal.data.prize.n}</h2>
+                       <p style={{ color: '#64748b', fontSize: '15px', fontWeight: 600, marginBottom: '25px' }}>Bu eşya onay için envanterine eklendi!</p>
+                       <button onClick={() => setActionModal({active:false})} className="profile-btn" style={{ background: '#0f172a', color: 'white', width: '100%', padding: '16px', fontSize: '16px' }}>HARİKA</button>
+                    </div>
+                )}
+            </div>
+        </div>
+      )}
+
+      {/* YENİ: EŞYA KULLANILDI (BAŞARI) MODALI */}
+      {actionModal.active && actionModal.type === 'success' && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999999, padding: '20px', backdropFilter: 'blur(8px)' }}>
+            <div className="popIn-anim" style={{ background: '#ffffff', padding: '40px 30px', borderRadius: '32px', textAlign: 'center', width: '100%', maxWidth: '350px', boxShadow: '0 25px 60px rgba(0,0,0,0.4)' }}>
+               <div style={{ fontSize: '70px', marginBottom: '15px' }}>{actionModal.data.icon}</div>
+               <h2 style={{ color: '#0f172a', fontSize: '24px', fontWeight: 900, margin: '0 0 10px 0', letterSpacing: '-0.5px' }}>Başarılı!</h2>
+               <p style={{ color: '#64748b', fontSize: '15px', fontWeight: 600, marginBottom: '25px', lineHeight: '1.5' }}>{actionModal.data.msg}</p>
+               <button onClick={() => setActionModal({active:false})} className="profile-btn" style={{ background: '#10b981', color: 'white', width: '100%', padding: '16px', fontSize: '16px' }}>TAMAM</button>
+            </div>
+        </div>
+      )}
+
+      {/* KAZI KAZAN MODALI */}
+      {scratchState.active && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', backdropFilter: 'blur(8px)' }}>
+          <div style={{ background: '#ffffff', borderRadius: '40px', width: '100%', maxWidth: '350px', textAlign: 'center', padding: '40px', boxShadow: '0 25px 50px rgba(0,0,0,0.4)', animation: 'popIn 0.4s' }}>
+             <h2 style={{ margin: '0 0 10px 0', fontWeight: 900, fontSize: '26px', color: '#0f172a' }}>KAZI KAZAN</h2>
+             <p style={{ color: '#64748b', fontSize: '15px', margin: '0 0 30px 0', fontWeight: 600 }}>Ödülünü görmek için gri alana dokun!</p>
+
+             <div onClick={revealScratch} style={{ background: scratchState.isRevealed ? '#ecfdf5' : 'linear-gradient(135deg, #cbd5e1, #94a3b8)', border: `2px dashed ${scratchState.isRevealed ? '#10b981' : '#64748b'}`, borderRadius: '20px', height: '150px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: scratchState.isRevealed ? 'default' : 'pointer', transition: 'all 0.4s', marginBottom: '25px', position: 'relative', overflow: 'hidden' }}>
+                {!scratchState.isRevealed ? (
+                   <div style={{ fontSize: '30px', color: '#475569', fontWeight: 900, opacity: 0.7 }}>TIRNAKLA KAZI</div>
+                ) : (
+                   <div className="fade-in">
+                      <div style={{ fontSize: '50px', marginBottom: '10px' }}>{scratchState.result?.i || '🎁'}</div>
+                      <div style={{ fontSize: '18px', fontWeight: 900, color: '#047857' }}>{scratchState.result?.n}</div>
+                   </div>
+                )}
+             </div>
+
+             {scratchState.isRevealed && (
+               <div className="fade-in">
+                 <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '25px', fontWeight: 600 }}>Envanterine eklendi.</div>
+                 <button onClick={() => setScratchState({active:false})} className="profile-btn" style={{ background: 'linear-gradient(135deg, #d4af37, #b45309)', color: 'white', width: '100%', padding: '16px', fontSize: '16px' }}>KAPAT</button>
+               </div>
+             )}
+          </div>
+        </div>
+      )}
+
+      {/* CÜZDAN GEÇMİŞİ MODALI */}
       {showTxnModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999999, padding: '20px', backdropFilter: 'blur(8px)' }}>
           <div style={{ background: '#ffffff', borderRadius: '32px', width: '100%', maxWidth: '450px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 60px rgba(0,0,0,0.4)', animation: 'popIn 0.3s forwards', overflow: 'hidden' }}>
@@ -602,7 +746,7 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
                      <div style={{ fontSize: '15px', color: '#64748b', fontWeight: 700, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}><span style={{ background: myBadge.color, color: 'white', padding: '4px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 900 }}>{myBadge.icon} {myBadge.name}</span>{myCosmetics.title?.val || 'Öğrenci'}</div>
                      <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
                         {is2XActive && <span style={{ color: 'white', fontWeight: 900, fontSize: '11px', background: 'linear-gradient(135deg, #f59e0b, #b45309)', padding: '6px 12px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(245,158,11,0.3)' }}>⚡ {isGlobal2X ? 'TÜM YURT 2X' : '2X AKTİF'}</span>}
-                        {hasStreak && <span style={{ color: 'white', fontWeight: 900, fontSize: '11px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', padding: '6px 12px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(59,130,246,0.3)' }}>🛡️ SERİ KORUMA AKTİF</span>}
+                        {hasStreak && <span style={{ color: 'white', fontWeight: 900, fontSize: '11px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', padding: '6px 12px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(59,130,246,0.3)' }}>🛡️ KORUMA</span>}
                      </div>
                    </div>
                 </div>
@@ -618,13 +762,24 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
                    <div style={{ textAlign: 'center', fontSize: '14px', fontWeight: 700, color: '#94a3b8' }}><span style={{ color: '#0f172a', fontWeight: 900 }}>{xpDetail.currentXp} XP</span> / {xpDetail.nextLevelXp} XP</div>
                 </div>
 
-                <div style={{ marginTop: '25px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderRadius: '24px', padding: '25px', textAlign: 'center', color: 'white', position: 'relative', overflow: 'hidden', boxShadow: '0 15px 30px rgba(15,23,42,0.3)' }}>
-                   <div style={{ fontSize: '50px', marginBottom: '10px' }}>🎰</div>
-                   <h3 style={{ margin: '0 0 5px 0', fontSize: '22px', fontWeight: 900 }}>Şans Çarkı</h3>
-                   <p style={{ margin: '0 0 15px 0', fontSize: '14px', fontWeight: 600, color: '#cbd5e1' }}>Biletinle çarkı çevir, RP sıralamana göre sürpriz ödülleri kap!</p>
-                   <button onClick={rollLottery} className="profile-btn badge-glow" style={{ background: '#d4af37', color: '#0f172a', padding: '16px 30px', fontSize: '16px', fontWeight: 900, width: '100%' }}>
-                      ÇARK ÇEVİR ({myTickets} BİLET)
-                   </button>
+                <div className="grid-mobile-2" style={{ marginTop: '25px' }}>
+                   <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderRadius: '24px', padding: '25px', textAlign: 'center', color: 'white', position: 'relative', overflow: 'hidden', boxShadow: '0 15px 30px rgba(15,23,42,0.3)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <div>
+                          <div style={{ fontSize: '50px', marginBottom: '10px' }}>🎰</div>
+                          <h3 style={{ margin: '0 0 5px 0', fontSize: '20px', fontWeight: 900 }}>Şans Çarkı</h3>
+                          <p style={{ margin: '0 0 15px 0', fontSize: '12px', fontWeight: 600, color: '#cbd5e1' }}>Biletini kullan, RP sıranla şansını katla!</p>
+                      </div>
+                      <button onClick={rollLottery} className="profile-btn badge-glow" style={{ background: '#d4af37', color: '#0f172a', padding: '14px', fontSize: '14px', fontWeight: 900, width: '100%' }}>ÇEVİR ({myTickets} BİLET)</button>
+                   </div>
+
+                   <div style={{ background: 'linear-gradient(135deg, #059669 0%, #047857 100%)', borderRadius: '24px', padding: '25px', textAlign: 'center', color: 'white', position: 'relative', overflow: 'hidden', boxShadow: '0 15px 30px rgba(5,150,105,0.3)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <div>
+                          <div style={{ fontSize: '50px', marginBottom: '10px' }}>🪙</div>
+                          <h3 style={{ margin: '0 0 5px 0', fontSize: '20px', fontWeight: 900 }}>Kazı Kazan</h3>
+                          <p style={{ margin: '0 0 15px 0', fontSize: '12px', fontWeight: 600, color: '#a7f3d0' }}>Hemen kazı, sürpriz market eşyalarını yakala!</p>
+                      </div>
+                      <button onClick={playScratchcard} className="profile-btn" style={{ background: 'white', color: '#047857', padding: '14px', fontSize: '14px', fontWeight: 900, width: '100%', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>OYNA (15 M)</button>
+                   </div>
                 </div>
                 
                 <div className="grid-mobile-2" style={{ marginTop: '20px' }}>
@@ -766,23 +921,26 @@ const StudentScreen = ({ appData, goBackToRoles }) => {
             <div className="fade-in">
                <h2 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '25px', color: '#0f172a', letterSpacing: '-0.5px' }}>🎒 Envanterim</h2>
                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                 {/* ONAYLANANLAR / DİJİTAL EŞYALAR */}
                  {Object.keys(appData?.deliveries || {}).reverse().filter(k => appData.deliveries[k].s === safeName && appData.deliveries[k].st === 'done').map(k => {
                     const item = appData.deliveries[k];
                     const iName = String(item.n || item.i || '').toUpperCase();
-                    const isDigital = item.type === 'multiplier' || item.type === 'streak' || item.type === 'avatar' || item.type === 'title' || item.type === 'frame' || iName.includes("GİZEMLİ") || iName.includes("2X") || iName.includes("ÇARPAN") || iName.includes("KORUMA");
+                    const isDigital = item.type === 'multiplier' || item.type === 'streak' || item.type === 'avatar' || item.type === 'title' || item.type === 'frame' || iName.includes("GİZEMLİ") || iName.includes("2X") || iName.includes("ÇARPAN") || iName.includes("KORUMA") || iName.includes("KUTU");
                     if (!isDigital) return null; 
                     return (
                       <div key={k} style={{ background: '#ffffff', borderRadius: '24px', border: '1px solid #f1f5f9', padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.05)' }}>
-                        <div><div style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px', marginBottom: '6px' }}>{item.i}</div><div style={{ fontSize: '12px', color: '#10b981', fontWeight: 900 }}>✅ HAZIR</div></div>
+                        {/* İSİM HATASI DÜZELTİLDİ: Artık n (isim) ve i (emoji) yan yana */}
+                        <div><div style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px', marginBottom: '6px' }}>{item.i} {item.n || item.i}</div><div style={{ fontSize: '12px', color: '#10b981', fontWeight: 900 }}>✅ HAZIR</div></div>
                         <button onClick={() => activateItem(k, item)} className="profile-btn" style={{ background: '#0f172a', color: 'white', padding: '12px 20px', fontSize: '14px', fontWeight: 800 }}>Kullan</button>
                       </div>
                     );
                  })}
+                 {/* BEKLEYENLER */}
                  {Object.keys(appData?.deliveries || {}).reverse().filter(k => appData.deliveries[k].s === safeName && appData.deliveries[k].st === 'wait').map(k => {
                     const item = appData.deliveries[k];
                     return (
                       <div key={k} style={{ background: '#ffffff', borderRadius: '24px', border: '1px solid #f1f5f9', padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.05)' }}>
-                        <div><div style={{ fontWeight: 800, fontSize: '16px', color: '#0f172a', marginBottom: '6px' }}>{item.i}</div><div style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 900 }}>⏳ BEKLİYOR</div></div>
+                        <div><div style={{ fontWeight: 800, fontSize: '16px', color: '#0f172a', marginBottom: '6px' }}>{item.i} {item.n || item.i}</div><div style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 900 }}>⏳ ONAY BEKLİYOR</div></div>
                         <div style={{ fontSize: '30px' }}>📦</div>
                       </div>
                     );
