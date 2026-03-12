@@ -28,8 +28,9 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       q3_text: appData?.quests?.q3?.text || '', q3_amt: appData?.quests?.q3?.amt || '', q3_type: appData?.quests?.q3?.type || 'M' 
   });
   
+  // STOK BİLGİSİ EKLENDİ
   const [newStudentName, setNewStudentName] = useState('');
-  const [newProduct, setNewProduct] = useState({ name: '', price: '', icon: '📦', type: 'normal' });
+  const [newProduct, setNewProduct] = useState({ name: '', price: '', icon: '📦', type: 'normal', stock: '' });
   const [editProductKey, setEditProductKey] = useState(null); 
   const [newAdminClan, setNewAdminClan] = useState({ name: '', tag: '', icon: '🛡️', leader: '' });
   const [newGiftCode, setNewGiftCode] = useState({ code: '', type: 'mcoin', val: '', uses: '1' });
@@ -211,19 +212,28 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     }
   };
 
+  // STOK GÜNCELLEMESİ EKLENDİ
   const handleAddProduct = () => {
     if (!newProduct.name || !newProduct.price) return alert("İsim ve fiyat zorunludur!");
+    const productData = { 
+        n: newProduct.name, 
+        p: parseInt(newProduct.price), 
+        i: newProduct.icon, 
+        type: newProduct.type,
+        stock: newProduct.stock !== '' ? parseInt(newProduct.stock) : 999 
+    };
+
     if (editProductKey) { 
-        db.ref(`mavikent_premium/market_products/${editProductKey}`).update({ n: newProduct.name, p: parseInt(newProduct.price), i: newProduct.icon, type: newProduct.type }); 
+        db.ref(`mavikent_premium/market_products/${editProductKey}`).update(productData); 
         setEditProductKey(null); 
     } else { 
-        db.ref('mavikent_premium/market_products').push({ n: newProduct.name, p: parseInt(newProduct.price), i: newProduct.icon, type: newProduct.type }); 
+        db.ref('mavikent_premium/market_products').push(productData); 
     }
-    setNewProduct({ name: '', price: '', icon: '📦', type: 'normal' }); 
+    setNewProduct({ name: '', price: '', icon: '📦', type: 'normal', stock: '' }); 
   };
   
   const editProduct = (key, prod) => { 
-      setNewProduct({ name: prod.n, price: prod.p, icon: prod.i, type: prod.type || 'normal' }); 
+      setNewProduct({ name: prod.n, price: prod.p, icon: prod.i, type: prod.type || 'normal', stock: prod.stock !== undefined ? prod.stock : '' }); 
       setEditProductKey(key); 
       window.scrollTo(0,0); 
   };
@@ -338,28 +348,86 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       setNewGiftCode({ code: '', type: 'mcoin', val: '', uses: '1' });
   };
 
-  const handleShoeRefund = () => {
-      let count = 0;
+  const handleCancelDelivery = (k, item, withRefund) => {
+    if (!window.confirm(withRefund ? "Siparişi iptal edip öğrenciye M-Coin iadesi yapmak istediğinize emin misiniz?" : "Siparişi iade OLMADAN tamamen silmek istediğinize emin misiniz?")) return;
+    
+    const updates = {};
+    updates[`deliveries/${k}`] = null;
+    
+    if (withRefund) {
+        let refundAmt = 0;
+        const itemName = String(item.n || item.i || '');
+        if (itemName.includes('(Çekiliş)')) refundAmt = 20;
+        else if (itemName.includes('(Kazı Kazan)')) refundAmt = 15;
+        else if (itemName.includes('(Kutudan Çıktı)')) refundAmt = 0; 
+        else {
+            const prod = Object.values(appData?.market_products || {}).find(p => p.n === itemName);
+            if (prod && prod.p) refundAmt = Number(prod.p);
+        }
+        
+        if (refundAmt > 0) {
+            updates[`wallet/${item.s}`] = (Number(appData?.wallet?.[item.s]) || 0) + refundAmt;
+            updates[`transactions/${item.s}/txn_refund_${Date.now()}`] = { desc: `İptal İadesi: ${itemName}`, amt: refundAmt, date: new Date().toLocaleString('tr-TR') };
+            alert(`✅ Sipariş iptal edildi ve ${item.s} adlı öğrenciye ${refundAmt} M iade edildi.`);
+        } else {
+            alert(`✅ Sipariş iptal edildi. (Bunun için iade edilecek sabit bir bedel bulunamadı)`);
+        }
+    } else {
+        alert("🗑️ Sipariş iadesiz olarak kalıcı silindi.");
+    }
+    
+    db.ref('mavikent_premium').update(updates);
+  };
+
+  const handleBulkDeliveryAction = (action) => {
+      const waitingKeys = Object.keys(appData?.deliveries || {}).filter(k => appData.deliveries[k].st === 'wait');
+      if (waitingKeys.length === 0) return alert("İşlem yapılacak bekleyen teslimat yok.");
+
       const updates = {};
-      Object.keys(appData?.deliveries || {}).forEach(k => {
-          const item = appData.deliveries[k];
-          if (item.i && item.i.toUpperCase().includes('AYAKKABI') && item.i.includes('Çekiliş')) {
-              updates[`wallet/${item.s}`] = (Number(appData?.wallet?.[item.s]) || 0) + 20;
-              updates[`transactions/${item.s}/txn_refund_${Date.now()}`] = { desc: 'Ayakkabı Çekilişi İadesi', amt: 20, date: new Date().toLocaleString('tr-TR') };
-              updates[`deliveries/${k}`] = null; 
-              count++;
-          }
-      });
-      if(count > 0) {
-          updates[`limits/shoe_won`] = null; 
+      
+      if (action === 'approve') {
+          if(!window.confirm(`${waitingKeys.length} adet teslimatı ONAYLAMAK istediğine emin misin?`)) return;
+          waitingKeys.forEach(k => updates[`deliveries/${k}/st`] = 'done');
           db.ref('mavikent_premium').update(updates);
-          alert(`✅ Toplam ${count} öğrencinin çekiliş ücreti (20 M) cüzdanına iade edildi ve ayakkabı bekleyen teslimatlardan silindi.`);
-      } else {
-          alert("⚠️ Çekilişten ayakkabı kazanıp da teslimat bekleyen kimse bulunamadı.");
+          alert(`✅ ${waitingKeys.length} adet teslimat toplu olarak onaylandı!`);
+      } 
+      else if (action === 'refund') {
+          if(!window.confirm(`${waitingKeys.length} adet teslimatı İPTAL EDİP M-COIN İADESİ yapmak istediğine emin misin?`)) return;
+          let localWallets = {};
+          waitingKeys.forEach(k => {
+              const item = appData.deliveries[k];
+              let refundAmt = 0;
+              const itemName = String(item.n || item.i || '');
+              
+              if (itemName.includes('(Çekiliş)')) refundAmt = 20;
+              else if (itemName.includes('(Kazı Kazan)')) refundAmt = 15;
+              else if (itemName.includes('(Kutudan Çıktı)')) refundAmt = 0; 
+              else {
+                  const prod = Object.values(appData?.market_products || {}).find(p => p.n === itemName);
+                  if (prod && prod.p) refundAmt = Number(prod.p);
+              }
+              
+              updates[`deliveries/${k}`] = null;
+              if (refundAmt > 0) {
+                  if (localWallets[item.s] === undefined) localWallets[item.s] = Number(appData?.wallet?.[item.s] || 0);
+                  localWallets[item.s] += refundAmt;
+                  updates[`wallet/${item.s}`] = localWallets[item.s];
+                  
+                  const tId = `txn_${Date.now()}_${Math.floor(Math.random()*10000)}_${k}`;
+                  updates[`transactions/${item.s}/${tId}`] = { desc: `Toplu İptal İadesi: ${itemName}`, amt: refundAmt, date: new Date().toLocaleString('tr-TR') };
+              }
+          });
+          db.ref('mavikent_premium').update(updates);
+          alert(`💰 ${waitingKeys.length} adet teslimat iptal edildi ve M-Coin iadeleri tamamlandı!`);
+      }
+      else if (action === 'delete') {
+          if(!window.confirm(`${waitingKeys.length} adet teslimatı İADESİZ OLARAK SİLMEK istediğine emin misin?`)) return;
+          waitingKeys.forEach(k => updates[`deliveries/${k}`] = null);
+          db.ref('mavikent_premium').update(updates);
+          alert(`🗑️ ${waitingKeys.length} adet teslimat kalıcı olarak silindi.`);
       }
   };
 
-  // --- HTML2CANVAS (PANO İNDİRME) KODLARI ---
   const loadHtml2Canvas = async () => {
       if (window.html2canvas) return window.html2canvas;
       return new Promise((resolve) => { 
@@ -529,7 +597,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   };
 
   const renderStudentGrid = (students, type) => (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
+    <div className="grid-mobile-2">
       {students.map(name => {
         let bgColor = '#ffffff'; let subText = '';
         
@@ -605,27 +673,46 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         .elite-input { outline: none !important; border: 2px solid #e2e8f0 !important; transition: all 0.2s; padding: 14px 20px; border-radius: 20px; width: 100%; font-weight: 700; color: #0f172a; background: #f8fafc; }
         .elite-input:focus { border-color: #3b82f6 !important; background: #ffffff; box-shadow: 0 0 0 4px rgba(59,130,246,0.1) !important; }
         .clean-scroll::-webkit-scrollbar { width: 6px; } .clean-scroll::-webkit-scrollbar-track { background: transparent; } .clean-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        
+        /* MOBİL UYUMLU ŞIK KUTUCUK TASARIMI */
+        .premium-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+        .premium-card { background: white; text-align: center; border-radius: 24px; padding: 35px 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: center; align-items: center; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
+        .premium-card .icon { font-size: 48px; margin-bottom: 15px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)); }
+        .premium-card .label { font-size: 15px; font-weight: 900; color: #0f172a; line-height: 1.3; }
+        
+        .grid-mobile-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
+        
+        @media (max-width: 768px) {
+            .premium-grid { grid-template-columns: repeat(2, 1fr); gap: 15px; }
+            .premium-card { padding: 20px 10px; border-radius: 20px; aspect-ratio: 1; }
+            .premium-card .icon { font-size: 40px; margin-bottom: 10px; }
+            .premium-card .label { font-size: 13px; letter-spacing: 0; }
+            .grid-mobile-2 { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        }
+        
         @keyframes popIn { 0% { opacity: 0; transform: scale(0.9); } 100% { opacity: 1; transform: scale(1); } }
         @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
         .fade-in { animation: fadeIn 0.4s ease-out; }
+        .popIn-anim { animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       `}</style>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '16px 24px', borderRadius: '50px', marginBottom: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
+      <div className="popIn-anim" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '16px 24px', borderRadius: '50px', marginBottom: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
         <button onClick={handleBack} className="premium-btn" style={{ background: '#f1f5f9', color: '#0f172a', padding: '12px 20px', fontWeight: 800 }}>← {currentModule || dashboardView !== 'main' ? 'Geri Dön' : 'Çıkış Yap'}</button>
         <div style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a' }}>YÖNETİCİ PANELİ</div>
       </div>
 
       <div className="fade-in" key={dashboardView + (currentModule || '')}>
+
         {!currentModule && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+          <div className="premium-grid">
             {dashboardView === 'main' && [
               { id: 'egitim', icon: '📚', label: 'EĞİTİM KONTROL' }, 
               { id: 'degerler', icon: '🕌', label: 'DAHİLİ DERS & DEĞERLER' },
               { id: 'isleyis', icon: '⚙️', label: 'YURT İŞLEYİŞ' }, 
               { id: 'yonetim', icon: '👑', label: 'SİSTEM YÖNETİMİ', bg: '#f8fafc' }
             ].map(mod => (
-              <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="card-hover" style={{ background: mod.bg || 'white', textAlign: 'center', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                <div style={{ fontSize: '48px', marginBottom: '15px' }}>{mod.icon}</div><div style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a', letterSpacing: '0.5px' }}>{mod.label}</div>
+              <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="premium-card card-hover" style={{ background: mod.bg || 'white' }}>
+                <div className="icon">{mod.icon}</div><div className="label">{mod.label}</div>
               </div>
             ))}
             
@@ -634,19 +721,19 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
               { id: 'egitim_deneme', icon: '📊', label: 'DENEME SINAVLARI' }, 
               { id: 'egitim_yazili', icon: '💯', label: 'YAZILI HAZIRLIK' } 
             ].map(mod => (
-              <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="card-hover" style={{ background: 'white', textAlign: 'center', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}><div style={{ fontSize: '42px', marginBottom: '16px' }}>{mod.icon}</div><div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{mod.label}</div></div>
+              <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
             ))}
             
-            {dashboardView === 'egitim_ders' && eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('class_view'); setSelectedSession(cls); }} className="card-hover" style={{ background: 'white', textAlign: 'center', fontWeight: 900, fontSize: '18px', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>📝 <br/><br/> {cls}</div>))}
-            {dashboardView === 'egitim_deneme' && eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('deneme_view'); setSelectedSession(cls); }} className="card-hover" style={{ background: 'white', textAlign: 'center', fontWeight: 900, fontSize: '18px', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>📊 <br/><br/> {cls}</div>))}
+            {dashboardView === 'egitim_ders' && eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('class_view'); setSelectedSession(cls); }} className="premium-card card-hover"><div className="icon">📝</div><div className="label">{cls}</div></div>))}
+            {dashboardView === 'egitim_deneme' && eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('deneme_view'); setSelectedSession(cls); }} className="premium-card card-hover"><div className="icon">📊</div><div className="label">{cls}</div></div>))}
             {dashboardView === 'egitim_yazili' && (
               <>
-                {eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('yazili_view'); setSelectedSession(cls); }} className="card-hover" style={{ background: 'white', textAlign: 'center', fontWeight: 900, fontSize: '18px', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>💯 <br/><br/> {cls}</div>))}
+                {eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('yazili_view'); setSelectedSession(cls); }} className="premium-card card-hover"><div className="icon">💯</div><div className="label">{cls}</div></div>))}
                 <div style={{ gridColumn: '1 / -1', marginTop: '10px' }}><button onClick={() => { if(window.confirm('Tüm sınıfların YAZILI notları sıfırlanacak. Emin misiniz?')) { const updates = {}; roster.forEach(n => updates[`exams/${n}/yazili`] = null); db.ref('mavikent_premium').update(updates); alert('Yazılı notları sıfırlandı!'); } }} className="premium-btn" style={{ width: '100%', background: '#ef4444', color: 'white', padding: '18px', fontSize: '15px' }}>🔄 HAFTALIK YAZILI PERFORMANSLARINI SIFIRLA</button></div>
               </>
             )}
 
-            {dashboardView === 'degerler' && levelList.map(lvl => (<div key={lvl} onClick={() => { setCurrentModule('values_view'); setSelectedSession(lvl); }} className="card-hover" style={{ background: 'white', textAlign: 'center', fontWeight: 900, fontSize: '18px', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>🕌 <br/><br/> {lvl}</div>))}
+            {dashboardView === 'degerler' && levelList.map(lvl => (<div key={lvl} onClick={() => { setCurrentModule('values_view'); setSelectedSession(lvl); }} className="premium-card card-hover"><div className="icon">🕌</div><div className="label">{lvl}</div></div>))}
             
             {dashboardView === 'isleyis' && [ 
               { id: 'yoklama', icon: '📋', label: 'Yoklama' }, 
@@ -654,7 +741,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
               { id: 'yatak', icon: '🛏️', label: 'Yatak / Dolap' }, 
               { id: 'kanaat', icon: '✍️', label: 'Kanaat Notu' } 
             ].map(mod => (
-              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="card-hover" style={{ background: 'white', textAlign: 'center', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}><div style={{ fontSize: '42px', marginBottom: '16px' }}>{mod.icon}</div><div style={{ fontSize: '15px', fontWeight: 800, textTransform: 'uppercase', color: '#0f172a' }}>{mod.label}</div></div>
+              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
             ))}
             
             {dashboardView === 'yonetim' && [ 
@@ -668,7 +755,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
               { id: 'admin_messages', icon: '✉️', label: 'MESAJLAR' }, 
               { id: 'admin_settings', icon: '⚙️', label: 'AYARLAR' } 
             ].map(mod => (
-              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="card-hover" style={{ background: 'white', textAlign: 'center', borderRadius: '24px', padding: '35px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}><div style={{ fontSize: '42px', marginBottom: '16px' }}>{mod.icon}</div><div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a' }}>{mod.label}</div></div>
+              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
             ))}
           </div>
         )}
@@ -680,9 +767,9 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
         {/* İŞLEYİŞ EKRANLARI */}
         {currentModule === 'yoklama' && !selectedSession && ( 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+            <div className="grid-mobile-2">
                 {['Sabah', 'Öğle', 'İkindi', 'Akşam', 'Yatsı', 'İzin Dönüşü', 'Ekstra'].map(s => ( 
-                    <div key={s} onClick={() => setSelectedSession(s)} className="card-hover" style={{ background: 'white', padding: '24px', textAlign: 'center', fontWeight: 900, fontSize: '16px', borderRadius: '20px', color: '#0f172a', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>{s}</div> 
+                    <div key={s} onClick={() => setSelectedSession(s)} className="premium-card card-hover"><div className="icon">⏰</div><div className="label">{s}</div></div> 
                 ))}
             </div> 
         )}
@@ -755,7 +842,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                         <option value="discount">🔥 % İndirim Ver (7 Gün)</option>
                     </select>
                     <input type="number" value={newGiftCode.val} onChange={e => setNewGiftCode({...newGiftCode, val: e.target.value})} placeholder="Miktar / Yüzde" className="elite-input" />
-                    <input type="number" value={newGiftCode.uses} onChange={e => setNewGiftCode({...newGiftCode, uses: e.target.value})} placeholder="Kaç Kez Kullanılabilir?" className="elite-input" />
+                    <input type="number" value={newGiftCode.uses} onChange={e => setNewGiftCode({...newGiftCode, uses: e.target.value})} placeholder="Kaç Kez Kullanılabilir? (Örn: 50)" className="elite-input" />
                     <button onClick={handleAdminCreateGiftCode} className="premium-btn" style={{ background: '#0f172a', color: 'white', gridColumn: '1 / -1', padding: '16px' }}>KODU YAYINLA</button>
                  </div>
              </div>
@@ -861,7 +948,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                       <option value="">Sınıf Seç</option>{classList.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     
-                    {/* BANKA GEÇMİŞLİ YÖNETİCİ M-COIN DÜZENLEMESİ */}
                     <button onClick={() => { 
                         const val = prompt(`${name} M:`, appData?.wallet?.[name] || 0); 
                         if(val !== null) { 
@@ -882,29 +968,37 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           </div>
         )}
 
-        {/* MARKET YÖNETİMİ */}
+        {/* YENİ: STOK SİSTEMLİ MARKET YÖNETİMİ */}
         {currentModule === 'admin_market' && (
           <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
              <h4 style={{ marginTop: 0, color:'#0f172a', fontSize: '18px', fontWeight: 900 }}>{editProductKey ? '✏️ ÜRÜNÜ GÜNCELLE' : '📦 YENİ ÜRÜN EKLE'}</h4>
              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '24px', background:'#f8fafc', padding:'20px', borderRadius:'24px' }}>
                <input value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="Adı" className="elite-input" style={{ width: '100%' }} />
-               <input value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} type="number" placeholder="Fiyat" className="elite-input" style={{ width: '100%' }} />
+               <input value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} type="number" placeholder="Fiyat (M)" className="elite-input" style={{ width: '100%' }} />
                <input value={newProduct.icon} onChange={e => setNewProduct({...newProduct, icon: e.target.value})} placeholder="Emoji (📦)" className="elite-input" style={{ width: '100%', textAlign: 'center' }} />
+               
+               {/* YENİ: STOK GİRİŞİ */}
+               <input value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} type="number" placeholder="Stok Adedi (Boş = Sınırsız)" className="elite-input" style={{ width: '100%' }} />
+               
                <select value={newProduct.type} onChange={e => setNewProduct({...newProduct, type: e.target.value})} className="elite-input" style={{ width: '100%' }}>
-                 <option value="normal">🍔 Normal</option><option value="avatar">👤 Avatar</option><option value="multiplier">⚡ 2X Kartı</option><option value="streak">🛡️ Seri Koruma</option><option value="title">🎖️ Ünvan</option><option value="frame">🖼️ Çerçeve</option>
+                 <option value="normal">🍔 Normal Fiziksel Ürün</option><option value="avatar">👤 Profil Avatarı</option><option value="multiplier">⚡ 2X Puan Kartı</option><option value="streak">🛡️ Haftalık Seri Kalkanı</option><option value="title">🎖️ Profil Ünvanı</option><option value="frame">🖼️ Avatar Çerçevesi</option>
                </select>
                <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px' }}>
                   <button onClick={handleAddProduct} className="premium-btn" style={{ flex: 1, background: editProductKey ? '#f59e0b' : '#10b981', color: 'white', padding: '16px' }}>{editProductKey ? 'KAYDET' : 'EKLE'}</button>
-                  {editProductKey && <button onClick={() => { setEditProductKey(null); setNewProduct({ name: '', price: '', icon: '📦', type: 'normal' }); }} className="btn-iptal" style={{ padding: '16px 24px' }}>İPTAL</button>}
+                  {editProductKey && <button onClick={() => { setEditProductKey(null); setNewProduct({ name: '', price: '', icon: '📦', type: 'normal', stock: '' }); }} className="btn-iptal" style={{ padding: '16px 24px' }}>İPTAL</button>}
                </div>
              </div>
-             <h4 style={{ borderTop: '2px solid #f1f5f9', paddingTop: '20px', margin: '0 0 16px 0', fontSize: '18px', fontWeight: 900 }}>MEVCUT ÜRÜNLER</h4>
+             <h4 style={{ borderTop: '2px solid #f1f5f9', paddingTop: '20px', margin: '0 0 16px 0', fontSize: '18px', fontWeight: 900 }}>MEVCUT ÜRÜNLER VE STOKLAR</h4>
              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                {Object.keys(appData?.market_products || {}).map(key => {
                  const p = appData.market_products[key];
+                 const stockText = p.stock !== undefined ? (p.stock > 0 ? `${p.stock} Adet Kaldı` : 'TÜKENDİ') : 'Sınırsız';
                  return (
-                   <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: '#f8fafc', borderRadius: '20px' }}>
-                     <div style={{ fontWeight: 800, fontSize: '15px', color: '#0f172a' }}>{p.i} {p.n} <span style={{ color: '#64748b' }}>({p.p} M)</span></div>
+                   <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: p.stock === 0 ? '#fef2f2' : '#f8fafc', borderRadius: '20px', border: `1px solid ${p.stock === 0 ? '#fca5a5' : '#e2e8f0'}` }}>
+                     <div>
+                         <div style={{ fontWeight: 900, fontSize: '15px', color: '#0f172a' }}>{p.i} {p.n} <span style={{ color: '#64748b' }}>({p.p} M)</span></div>
+                         <div style={{ fontSize: '12px', fontWeight: 800, color: p.stock === 0 ? '#ef4444' : '#10b981', marginTop: '4px' }}>Stok: {stockText}</div>
+                     </div>
                      <div style={{ display: 'flex', gap: '8px' }}>
                        <button onClick={() => editProduct(key, p)} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '12px 18px' }}>✏️</button>
                        <button onClick={() => { if(window.confirm('Silinsin mi?')) db.ref(`mavikent_premium/market_products/${key}`).remove() }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '12px 18px' }}>🗑️</button>
@@ -916,13 +1010,24 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           </div>
         )}
 
-        {/* TESLİMAT ETİKETLERİ EKLENDİ */}
+        {/* TESLİMAT YÖNETİMİ (TOPLU İŞLEM BUTONLARI EKLENDİ) */}
         {currentModule === 'admin_teslimat' && (
           <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
              <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
                <button onClick={() => setDeliveryTab('wait')} className="premium-btn" style={{ flex: 1, padding: '16px', background: deliveryTab === 'wait' ? '#0f172a' : '#f1f5f9', color: deliveryTab === 'wait' ? 'white' : '#64748b', fontSize: '15px' }}>BEKLEYENLER</button>
                <button onClick={() => setDeliveryTab('done')} className="premium-btn" style={{ flex: 1, padding: '16px', background: deliveryTab === 'done' ? '#10b981' : '#f1f5f9', color: deliveryTab === 'done' ? 'white' : '#64748b', fontSize: '15px' }}>ONAYLANMIŞ</button>
              </div>
+
+             {/* TOPLU İŞLEM BUTONLARI */}
+             {deliveryTab === 'wait' && Object.keys(appData?.deliveries || {}).filter(k => appData.deliveries[k].st === 'wait').length > 0 && (
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', background: '#fefce8', padding: '15px', borderRadius: '16px', border: '1px dashed #fde047' }}>
+                   <div style={{ width: '100%', fontSize: '13px', fontWeight: 900, color: '#b45309', marginBottom: '8px' }}>⚡ TOPLU İŞLEMLER (Tüm Bekleyenler)</div>
+                   <button onClick={() => handleBulkDeliveryAction('approve')} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '10px 15px', fontSize: '12px', flex: 1 }}>✅ TÜMÜNÜ ONAYLA</button>
+                   <button onClick={() => handleBulkDeliveryAction('refund')} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '10px 15px', fontSize: '12px', flex: 1 }}>💰 TÜMÜNÜ İPTAL ET (İADELİ)</button>
+                   <button onClick={() => handleBulkDeliveryAction('delete')} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '10px 15px', fontSize: '12px', flex: 1 }}>🗑️ TÜMÜNÜ SİL (İADESİZ)</button>
+                </div>
+             )}
+
              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                {Object.keys(appData?.deliveries || {}).reverse().filter(k => appData.deliveries[k].st === deliveryTab).map(k => {
                  const item = appData.deliveries[k];
@@ -933,15 +1038,26 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                  let badgeColor = isLottery ? '#8b5cf6' : isScratch ? '#059669' : isBox ? '#f59e0b' : '#3b82f6';
                  
                  return (
-                   <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', background: '#f8fafc', borderRadius: '20px', borderLeft: `6px solid ${badgeColor}` }}>
+                   <div key={k} style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center', padding: '20px', background: '#f8fafc', borderRadius: '20px', borderLeft: `6px solid ${badgeColor}` }}>
                      <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
                            <span style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>{item.s}</span>
                            <span style={{ background: badgeColor, color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900 }}>{badgeText}</span>
                         </div>
-                        <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>📦 {(item.n || item.i || '').replace('(Çekiliş)','').replace('(Kazı Kazan)','').replace('(Kutudan Çıktı)','')}</div>
+                        <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>
+                           📦 {(item.n || item.i || '').replace('(Çekiliş)','').replace('(Kazı Kazan)','').replace('(Kutudan Çıktı)','')}
+                        </div>
                      </div>
-                     <button onClick={() => db.ref(`mavikent_premium/deliveries/${k}/st`).set(deliveryTab === 'wait' ? 'done' : 'wait')} className="premium-btn" style={{ background: deliveryTab === 'wait' ? '#10b981' : '#64748b', color: 'white', padding: '12px 20px' }}>{deliveryTab === 'wait' ? 'TESLİM ET' : 'GERİ AL'}</button>
+                     
+                     {deliveryTab === 'wait' ? (
+                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button onClick={() => db.ref(`mavikent_premium/deliveries/${k}/st`).set('done')} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '10px 15px', fontSize: '12px' }}>✅ ONAYLA</button>
+                            <button onClick={() => handleCancelDelivery(k, item, true)} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '10px 15px', fontSize: '12px' }}>💰 İPTAL & İADE</button>
+                            <button onClick={() => handleCancelDelivery(k, item, false)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '10px 15px', fontSize: '12px' }}>🗑️ İADESİZ SİL</button>
+                         </div>
+                     ) : (
+                         <button onClick={() => db.ref(`mavikent_premium/deliveries/${k}/st`).set('wait')} className="premium-btn" style={{ background: '#64748b', color: 'white', padding: '10px 15px', fontSize: '12px' }}>GERİ AL</button>
+                     )}
                    </div>
                  );
                })}
@@ -1038,7 +1154,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
            </div>
         )}
 
-        {/* AYARLAR VE DUYURU YÖNETİMİ */}
+        {/* AYARLAR YÖNETİMİ (AYAKKABI İADE BUTONU KALDIRILDI) */}
         {currentModule === 'admin_settings' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
              <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', gridColumn: '1 / -1' }}>
@@ -1048,7 +1164,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                   <button onClick={() => { db.ref('mavikent_premium/settings/global_event').set('2x_xp'); alert("Tüm yurt için 2X XP aktif edildi!"); }} className="premium-btn" style={{ background: appData?.settings?.global_event === '2x_xp' ? '#10b981' : '#f8fafc', color: appData?.settings?.global_event === '2x_xp' ? 'white' : '#64748b', border: appData?.settings?.global_event === '2x_xp' ? 'none' : '2px solid #e2e8f0' }}>⭐ TÜM YURT 2X ÇARPAN</button>
                   <button onClick={() => { db.ref('mavikent_premium/settings/global_event').set('none'); alert("Etkinlikler durduruldu."); }} className="premium-btn" style={{ background: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? '#ef4444' : '#f8fafc', color: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? 'white' : '#64748b', border: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? 'none' : '2px solid #e2e8f0' }}>🚫 ETKİNLİKLERİ BİTİR</button>
                   <button onClick={() => { if(window.confirm('Tüm öğrencilere anında 1 adet Şans Çarkı Bileti hediye edilecek. Onaylıyor musun?')) { const updates = {}; roster.forEach(n => { updates[`tickets/${n}`] = (Number(appData?.tickets?.[n]) || 0) + 1; }); db.ref('mavikent_premium').update(updates); alert('🎟️ Biletler başarıyla dağıtıldı!'); } }} className="premium-btn" style={{ background: '#8b5cf6', color: 'white', border: 'none', padding: '15px' }}>🎟️ HERKESE 1 BİLET DAĞIT</button>
-                  <button onClick={handleShoeRefund} className="premium-btn" style={{ background: '#0f172a', color: '#d4af37', padding: '15px', border: '2px solid #d4af37 !important' }}>👟 AYAKKABI İADESİ YAP</button>
                </div>
              </div>
 
@@ -1091,7 +1206,8 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
              </div>
           </div>
       )}
-      </div>
+
+      </div> 
 
       {/* --- AÇILIR PENCERELER (MODALLAR) --- */}
       {selectedStudent && modalType === 'isleyis' && (
@@ -1223,4 +1339,4 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   );
 };
 
-export default AdminScreen;
+export default AdminScreen; 
