@@ -28,12 +28,16 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       q3_text: appData?.quests?.q3?.text || '', q3_amt: appData?.quests?.q3?.amt || '', q3_type: appData?.quests?.q3?.type || 'M' 
   });
   
-  // STOK BİLGİSİ EKLENDİ
   const [newStudentName, setNewStudentName] = useState('');
   const [newProduct, setNewProduct] = useState({ name: '', price: '', icon: '📦', type: 'normal', stock: '' });
+  const [bundleSelection, setBundleSelection] = useState([]);
   const [editProductKey, setEditProductKey] = useState(null); 
+  
   const [newAdminClan, setNewAdminClan] = useState({ name: '', tag: '', icon: '🛡️', leader: '' });
   const [newGiftCode, setNewGiftCode] = useState({ code: '', type: 'mcoin', val: '', uses: '1' });
+  
+  const [newGroupBuy, setNewGroupBuy] = useState({ name: '', totalCost: '', maxP: '', icon: '🤝' });
+  const [adminChatInput, setAdminChatInput] = useState(''); 
 
   const classList = ["5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf"];
   const eduClassList = ["5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf", "ELİT", "STANDART"];
@@ -64,7 +68,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
               roster.forEach(n => { updates[`tickets/${n}`] = (Number(appData?.tickets?.[n]) || 0) + 1; });
               updates[`settings/last_ticket_dist`] = todayStr;
               db.ref('mavikent_premium').update(updates);
-              alert("⏰ SİSTEM BİLDİRİMİ: Pazartesi 19:00 Çekiliş Hakları tüm öğrencilere otomatik olarak dağıtıldı!");
+              alert("⏰ SİSTEM BİLDİRİMİ: Pazartesi 19:00 Çekiliş Hakları dağıtıldı!");
           }
       }
   }, [appData, roster]);
@@ -93,12 +97,10 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     const lvl = Math.floor(Math.sqrt(currentXp / 50)) + 1; 
     let bns = lvl >= 15 ? 3 : lvl >= 10 ? 2 : lvl >= 5 ? 1 : 0;
     if (type === 'yatak') bns = Math.min(bns, 1);
-    
     const eliteMulti = isElite(name) && basePts > 0 && type !== 'kanaat' ? 2 : 0;
     const isGlobal2X = appData?.settings?.global_event === '2x_xp';
     const activeMultiplier = appData?.active_cards?.[name]?.multiplier;
     const isPersonal2X = activeMultiplier && activeMultiplier.date === new Date().toDateString();
-    
     let total = basePts > 0 ? basePts + bns + eliteMulti : basePts;
     if ((isPersonal2X || isGlobal2X) && total > 0 && type !== 'kanaat') total *= 2;
     return total;
@@ -111,7 +113,8 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     const isFail = status === 'a' || status === 'l' || (type === 'yatak' && basePts === 0) || (type === 'telefon' && status === 'a');
     
     if (isFail) {
-        const hasStreakSaver = appData?.active_cards?.[selectedStudent]?.streak?.date === new Date().toDateString();
+        const streakData = appData?.active_cards?.[selectedStudent]?.streak;
+        const hasStreakSaver = streakData && (streakData.date === new Date().toDateString() || (streakData.end && streakData.end > Date.now()));
         if (hasStreakSaver) { 
             alert(`🛡️ ${selectedStudent} SERİ KORUMA KALKANI kullandı! Eksi aldı ama serisi bozulmadı.`); 
             updates[`active_cards/${selectedStudent}/streak`] = null; 
@@ -157,15 +160,11 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalM;
         updates[`season_score/${selectedStudent}`] = (Number(appData?.season_score?.[selectedStudent]) || 0) + (earnedPoints + (isElite(selectedStudent) ? 2 : 0));
         updates[`xp/${selectedStudent}`] = (Number(appData?.xp?.[selectedStudent]) || 0) + (earnedPoints * 10);
-        
-        const tId = `txn_${Date.now()}_${Math.floor(Math.random()*1000)}`;
-        updates[`transactions/${selectedStudent}/${tId}`] = { desc: 'Günlük Eğitim/Ödev Başarısı', amt: finalM, date: new Date().toLocaleString('tr-TR') };
+        updates[`transactions/${selectedStudent}/txn_${Date.now()}`] = { desc: 'Günlük Eğitim Başarısı', amt: finalM, date: new Date().toLocaleString('tr-TR') };
     }
     
     db.ref('mavikent_premium').update(updates); 
-    setSelectedStudent(null); 
-    setModalType(null); 
-    alert("Eğitim Verileri Güncellendi!");
+    setSelectedStudent(null); setModalType(null); alert("Eğitim Verileri Güncellendi!");
   };
 
   const saveExamData = (type) => {
@@ -173,427 +172,114 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     if (type === 'deneme') {
         let totalNet = 0;
         for(let i=0; i<examSubjects.length; i++) { 
-            const d = parseFloat(examData[`d_${i}`]) || 0; 
-            const y = parseFloat(examData[`y_${i}`]) || 0; 
-            totalNet += (d - (y/3)); 
+            const d = parseFloat(examData[`d_${i}`]) || 0; const y = parseFloat(examData[`y_${i}`]) || 0; totalNet += (d - (y/3)); 
         }
         updates[`exams/${selectedStudent}/deneme`] = { ...examData, net: totalNet, date: new Date().toDateString() };
     } else if (type === 'yazili') {
         let total = 0; let count = 0;
         for(let i=0; i<examSubjects.length; i++) { 
-            const val = examData[`p_${i}`]; 
-            if(val !== undefined && val !== '') { total += parseFloat(val); count++; } 
+            const val = examData[`p_${i}`]; if(val !== undefined && val !== '') { total += parseFloat(val); count++; } 
         }
         updates[`exams/${selectedStudent}/yazili`] = { ...examData, avg: count > 0 ? (total / count) : 0, date: new Date().toDateString() };
     }
     db.ref('mavikent_premium').update(updates); 
-    setSelectedStudent(null); 
-    setModalType(null); 
-    alert(`${type.toUpperCase()} Kaydedildi!`);
+    setSelectedStudent(null); setModalType(null); alert(`${type.toUpperCase()} Kaydedildi!`);
   };
 
-  const completeQuest = (qId) => {
-    const q = appData?.quests?.[qId];
-    if(!q || !(q.participants || []).length) return alert("Bu göreve katılan kimse yok.");
-    
-    if(window.confirm(`${q.participants.length} öğrenciye ödülleri dağıtılacak. Onaylıyor musun?`)) {
-      q.participants.forEach(p => {
-        db.ref(`mavikent_premium/stats/${p}/completed_quests`).transaction(c => (Number(c)||0) + 1); 
-        if(q.type === 'M') { 
-            db.ref(`mavikent_premium/wallet/${p}`).transaction(c => (Number(c)||0) + parseInt(q.amt)); 
-            db.ref(`mavikent_premium/xp/${p}`).transaction(c => (Number(c)||0) + (parseInt(q.amt) * 10)); 
-            db.ref(`mavikent_premium/transactions/${p}`).push({ desc: `Görev Ödülü: ${q.text}`, amt: parseInt(q.amt), date: new Date().toLocaleString('tr-TR') });
-        } else { 
-            db.ref(`mavikent_premium/season_score/${p}`).transaction(c => (Number(c)||0) + parseInt(q.amt)); 
-        }
-      });
-      db.ref(`mavikent_premium/quests/${qId}/participants`).set(null); 
-      alert("Görev tamamlandı! Ödüller dağıtıldı.");
-    }
-  };
-
-  // STOK GÜNCELLEMESİ EKLENDİ
   const handleAddProduct = () => {
     if (!newProduct.name || !newProduct.price) return alert("İsim ve fiyat zorunludur!");
     const productData = { 
-        n: newProduct.name, 
-        p: parseInt(newProduct.price), 
-        i: newProduct.icon, 
-        type: newProduct.type,
+        n: newProduct.name, p: parseInt(newProduct.price), i: newProduct.icon, type: newProduct.type,
         stock: newProduct.stock !== '' ? parseInt(newProduct.stock) : 999 
     };
 
-    if (editProductKey) { 
-        db.ref(`mavikent_premium/market_products/${editProductKey}`).update(productData); 
-        setEditProductKey(null); 
-    } else { 
-        db.ref('mavikent_premium/market_products').push(productData); 
+    if (newProduct.type === 'bundle') {
+        if (bundleSelection.length === 0) return alert("Lütfen paket içine eklenecek ürünleri seçin!");
+        productData.bundleItems = bundleSelection;
     }
-    setNewProduct({ name: '', price: '', icon: '📦', type: 'normal', stock: '' }); 
+
+    if (editProductKey) { db.ref(`mavikent_premium/market_products/${editProductKey}`).update(productData); setEditProductKey(null); } 
+    else { db.ref('mavikent_premium/market_products').push(productData); }
+    setNewProduct({ name: '', price: '', icon: '📦', type: 'normal', stock: '' }); setBundleSelection([]);
   };
   
   const editProduct = (key, prod) => { 
       setNewProduct({ name: prod.n, price: prod.p, icon: prod.i, type: prod.type || 'normal', stock: prod.stock !== undefined ? prod.stock : '' }); 
-      setEditProductKey(key); 
-      window.scrollTo(0,0); 
+      setBundleSelection(prod.bundleItems || []); setEditProductKey(key); window.scrollTo(0,0); 
   };
 
-  const distributeExamRewards = (type) => {
-    const reward = parseInt(prompt(`Kaç Puan/M verilsin?`, "50"));
-    if (!reward || isNaN(reward)) return; 
-    let count = 0;
-    
-    roster.forEach(n => {
-       const d = appData?.exams?.[n]?.[type] || {}; 
-       const score = type === 'deneme' ? d.net : d.avg;
-       
-       if (score !== undefined && d.target && parseFloat(score) >= parseFloat(d.target)) {
-           let finalReward = reward;
-           if(appData?.settings?.global_event === '2x_xp' || appData?.active_cards?.[n]?.multiplier?.date === new Date().toDateString()) finalReward *= 2;
-           
-           db.ref(`mavikent_premium/wallet/${n}`).transaction(c => (Number(c)||0) + finalReward); 
-           db.ref(`mavikent_premium/season_score/${n}`).transaction(c => (Number(c)||0) + finalReward); 
-           db.ref(`mavikent_premium/transactions/${n}`).push({ desc: 'Sınav Başarısı Ödülü', amt: finalReward, date: new Date().toLocaleString('tr-TR') });
-           count++; 
-       }
-    });
-    alert(`${count} öğrenciye ödülleri dağıtıldı!`);
+  const handleCreateGroupBuy = () => {
+      const tc = parseInt(newGroupBuy.totalCost); const mp = parseInt(newGroupBuy.maxP);
+      if(!newGroupBuy.name || isNaN(tc) || isNaN(mp)) return alert("Tüm alanları doldurun!");
+      db.ref('mavikent_premium/group_buys').push({ n: newGroupBuy.name, i: newGroupBuy.icon, tc: tc, mp: mp, pp: Math.ceil(tc/mp), participants: [], active: true, date: new Date().toLocaleDateString('tr-TR') });
+      alert("🤝 İmece başlatıldı!"); setNewGroupBuy({ name: '', totalCost: '', maxP: '', icon: '🤝' });
   };
 
-  const handleWeeklyReset = () => { 
-      if(window.confirm("Haftalık veriler sıfırlanacak. Onaylıyor musun?")) { 
-          db.ref('mavikent_premium').update({ yoklama_w: null, telefon_w: null, yatak_w: null, kanaat_w: null, yoklama_d: null, telefon_d: null, yatak_d: null }); 
-      } 
+  const handleStartAuction = () => {
+      const item = document.getElementById('aucItem').value; const price = parseInt(document.getElementById('aucPrice').value);
+      if(!item || !price) return alert("İhale ürünü ve başlangıç fiyatı zorunludur!");
+      db.ref('mavikent_premium/auction').set({ item: item, minBid: price, currentBid: price, highestBidder: null, active: true });
+      alert("🔨 İhale başlatıldı! Öğrenciler artık teklif verebilir.");
+      document.getElementById('aucItem').value = ''; document.getElementById('aucPrice').value = '';
   };
-  
-  const handleSeasonEnd = () => {
-    if(!window.confirm("1. SEZON bitirilecek. Emin misin?")) return;
-    const updates = {};
-    roster.forEach(n => {
-        const rp = Number(appData?.season_score?.[n]) || 0;
-        let mCoin = 0; let frame = null; let title = null; const exp = Date.now() + 30 * 24 * 60 * 60 * 1000; 
-        
-        if (rp >= 1000) { mCoin = 200; frame = 'S1 Fatih'; title = '👑 S1 Fatih'; } 
-        else if (rp >= 750) { mCoin = 150; frame = 'S1 Elmas'; title = '💎 S1 Elmas'; } 
-        else if (rp >= 500) { mCoin = 100; frame = 'S1 Altın'; } 
-        else if (rp >= 250) { mCoin = 50; } 
-        else { mCoin = 20; } 
-        
-        if (mCoin > 0) { 
-            updates[`wallet/${n}`] = (Number(appData?.wallet?.[n]) || 0) + mCoin; 
-            updates[`transactions/${n}/txn_season_${Date.now()}`] = { desc: 'Sezon Sonu Ödülü', amt: mCoin, date: new Date().toLocaleString('tr-TR') };
-        }
-        if (frame) updates[`active_cards/${n}/frame`] = { val: frame, exp };
-        if (title) updates[`active_cards/${n}/title`] = { val: title, exp };
-        updates[`season_score/${n}`] = 0; 
-    });
-    db.ref('mavikent_premium').update(updates);
-  };
-  
-  const handleGlobalXpReset = () => { 
-      const confirmText = prompt("Tüm XP'leri sıfırlamak için 'SIFIRLA' yaz."); 
-      if (confirmText === 'SIFIRLA') { 
-          const updates = {}; 
-          roster.forEach(n => { updates[`xp/${n}`] = 0; }); 
-          db.ref('mavikent_premium').update(updates); 
-      } 
+
+  const handleEndAuction = () => {
+      if(!window.confirm("İhaleyi bitirmek istediğine emin misin?")) return;
+      const auc = appData?.auction;
+      if (auc && auc.highestBidder) {
+          db.ref('mavikent_premium/deliveries').push({ s: auc.highestBidder, i: `${auc.item} (İhale Kazancı)`, st: 'wait', type: 'normal', val: auc.item, date: new Date().toLocaleDateString('tr-TR') });
+          alert(`🏆 İhale bitti! ${auc.highestBidder} kazandı.`);
+      } else { alert("İhaleye kimse teklif vermedi."); }
+      db.ref('mavikent_premium/auction').set(null);
   };
 
   const handleAdminCreateClan = () => {
       if(!newAdminClan.name || !newAdminClan.tag || !newAdminClan.leader) return alert("Klan adı, TAG ve lider zorunludur!");
       const cId = `clan_${Date.now()}`;
       db.ref(`mavikent_premium/clans/${cId}`).set({ name: newAdminClan.name.toUpperCase(), tag: newAdminClan.tag.toUpperCase(), icon: newAdminClan.icon, desc: 'Yönetici tarafından kuruldu.', leader: newAdminClan.leader, members: [newAdminClan.leader] });
-      alert("Klan başarıyla oluşturuldu."); 
-      setNewAdminClan({ name: '', tag: '', icon: '🛡️', leader: '' });
+      alert("Klan başarıyla oluşturuldu."); setNewAdminClan({ name: '', tag: '', icon: '🛡️', leader: '' });
   };
 
   const handleAdminDeleteClan = (cId) => {
-      if(!window.confirm("Bu klanı sistemden tamamen silmek istediğine emin misin?")) return;
+      if(!window.confirm("Bu klanı silmek istediğine emin misin?")) return;
       const clan = appData?.clans?.[cId];
       if(clan && clan.members) {
-          const updates = {};
-          updates[`clans/${cId}`] = null;
+          const updates = {}; updates[`clans/${cId}`] = null;
           clan.members.forEach(m => { updates[`clan_war_participants/${m}`] = null; });
-          db.ref('mavikent_premium').update(updates);
-          alert("Klan ve üyelerin savaş durumları temizlendi.");
+          db.ref('mavikent_premium').update(updates); alert("Klan temizlendi.");
       }
-  };
-
-  const handleEndClanWar = () => {
-      const clans = Object.keys(appData?.clans || {}).map(cId => {
-          let warScore = 0;
-          (appData.clans[cId].members || []).forEach(m => { if(appData?.clan_war_participants?.[m]) warScore += Number(appData?.season_score?.[m] || 0); });
-          return { id: cId, warScore, members: appData.clans[cId].members || [] };
-      }).sort((a,b) => b.warScore - a.warScore);
-
-      if(clans.length === 0 || clans[0].warScore === 0) return alert("Savaş puanı olan klan yok.");
-      const winner = clans[0];
-      if(window.confirm(`Haftalık savaş bitirilecek. Birinci klan üyelerine (Toplam ${winner.members.length} kişi) 60'ar M-Coin ödül verilecek. Onaylıyor musun?`)) {
-          const updates = {};
-          winner.members.forEach(m => { 
-              updates[`wallet/${m}`] = (Number(appData?.wallet?.[m]) || 0) + 60; 
-              updates[`transactions/${m}/txn_warwin_${Date.now()}`] = { desc: 'Klan Savaşı Şampiyonluğu', amt: 60, date: new Date().toLocaleString('tr-TR') };
-          });
-          roster.forEach(m => { updates[`clan_war_participants/${m}`] = null; });
-          db.ref('mavikent_premium').update(updates);
-          alert("Savaş bitti! Ödüller şampiyon klanın üyelerine dağıtıldı ve herkesin savaş durumu sıfırlandı.");
-      }
-  };
-
-  const handleAdminCreateGiftCode = () => {
-      if(!newGiftCode.code || !newGiftCode.val) return alert("Kod adı ve İndirim/Miktarı zorunludur!");
-      const codeKey = newGiftCode.code.toUpperCase().trim();
-      db.ref(`mavikent_premium/gift_codes/${codeKey}`).set({ type: newGiftCode.type, val: parseInt(newGiftCode.val), uses: parseInt(newGiftCode.uses) || 1, date: new Date().toLocaleDateString('tr-TR') });
-      alert(`✅ ${codeKey} kodu başarıyla oluşturuldu!`);
-      setNewGiftCode({ code: '', type: 'mcoin', val: '', uses: '1' });
-  };
-
-  const handleCancelDelivery = (k, item, withRefund) => {
-    if (!window.confirm(withRefund ? "Siparişi iptal edip öğrenciye M-Coin iadesi yapmak istediğinize emin misiniz?" : "Siparişi iade OLMADAN tamamen silmek istediğinize emin misiniz?")) return;
-    
-    const updates = {};
-    updates[`deliveries/${k}`] = null;
-    
-    if (withRefund) {
-        let refundAmt = 0;
-        const itemName = String(item.n || item.i || '');
-        if (itemName.includes('(Çekiliş)')) refundAmt = 20;
-        else if (itemName.includes('(Kazı Kazan)')) refundAmt = 15;
-        else if (itemName.includes('(Kutudan Çıktı)')) refundAmt = 0; 
-        else {
-            const prod = Object.values(appData?.market_products || {}).find(p => p.n === itemName);
-            if (prod && prod.p) refundAmt = Number(prod.p);
-        }
-        
-        if (refundAmt > 0) {
-            updates[`wallet/${item.s}`] = (Number(appData?.wallet?.[item.s]) || 0) + refundAmt;
-            updates[`transactions/${item.s}/txn_refund_${Date.now()}`] = { desc: `İptal İadesi: ${itemName}`, amt: refundAmt, date: new Date().toLocaleString('tr-TR') };
-            alert(`✅ Sipariş iptal edildi ve ${item.s} adlı öğrenciye ${refundAmt} M iade edildi.`);
-        } else {
-            alert(`✅ Sipariş iptal edildi. (Bunun için iade edilecek sabit bir bedel bulunamadı)`);
-        }
-    } else {
-        alert("🗑️ Sipariş iadesiz olarak kalıcı silindi.");
-    }
-    
-    db.ref('mavikent_premium').update(updates);
   };
 
   const handleBulkDeliveryAction = (action) => {
       const waitingKeys = Object.keys(appData?.deliveries || {}).filter(k => appData.deliveries[k].st === 'wait');
-      if (waitingKeys.length === 0) return alert("İşlem yapılacak bekleyen teslimat yok.");
-
+      if (waitingKeys.length === 0) return alert("Bekleyen teslimat yok.");
       const updates = {};
-      
       if (action === 'approve') {
-          if(!window.confirm(`${waitingKeys.length} adet teslimatı ONAYLAMAK istediğine emin misin?`)) return;
-          waitingKeys.forEach(k => updates[`deliveries/${k}/st`] = 'done');
-          db.ref('mavikent_premium').update(updates);
-          alert(`✅ ${waitingKeys.length} adet teslimat toplu olarak onaylandı!`);
+          if(!window.confirm(`Toplu onaylansın mı?`)) return;
+          waitingKeys.forEach(k => updates[`deliveries/${k}/st`] = 'done'); db.ref('mavikent_premium').update(updates); alert(`✅ Toplu onaylandı!`);
       } 
       else if (action === 'refund') {
-          if(!window.confirm(`${waitingKeys.length} adet teslimatı İPTAL EDİP M-COIN İADESİ yapmak istediğine emin misin?`)) return;
+          if(!window.confirm(`Toplu iptal ve iade edilsin mi?`)) return;
           let localWallets = {};
           waitingKeys.forEach(k => {
-              const item = appData.deliveries[k];
-              let refundAmt = 0;
-              const itemName = String(item.n || item.i || '');
-              
-              if (itemName.includes('(Çekiliş)')) refundAmt = 20;
-              else if (itemName.includes('(Kazı Kazan)')) refundAmt = 15;
-              else if (itemName.includes('(Kutudan Çıktı)')) refundAmt = 0; 
-              else {
-                  const prod = Object.values(appData?.market_products || {}).find(p => p.n === itemName);
-                  if (prod && prod.p) refundAmt = Number(prod.p);
-              }
-              
+              const item = appData.deliveries[k]; let refundAmt = 0; const itemName = String(item.n || item.i || '');
+              if (itemName.includes('(Çekiliş)')) refundAmt = 20; else if (itemName.includes('(Kazı Kazan)')) refundAmt = 15; 
+              else { const prod = Object.values(appData?.market_products || {}).find(p => p.n === itemName); if (prod && prod.p) refundAmt = Number(prod.p); }
               updates[`deliveries/${k}`] = null;
               if (refundAmt > 0) {
                   if (localWallets[item.s] === undefined) localWallets[item.s] = Number(appData?.wallet?.[item.s] || 0);
-                  localWallets[item.s] += refundAmt;
-                  updates[`wallet/${item.s}`] = localWallets[item.s];
-                  
-                  const tId = `txn_${Date.now()}_${Math.floor(Math.random()*10000)}_${k}`;
-                  updates[`transactions/${item.s}/${tId}`] = { desc: `Toplu İptal İadesi: ${itemName}`, amt: refundAmt, date: new Date().toLocaleString('tr-TR') };
+                  localWallets[item.s] += refundAmt; updates[`wallet/${item.s}`] = localWallets[item.s];
+                  updates[`transactions/${item.s}/txn_${Date.now()}_${Math.floor(Math.random()*1000)}`] = { desc: `İptal İadesi: ${itemName}`, amt: refundAmt, date: new Date().toLocaleString('tr-TR') };
               }
           });
-          db.ref('mavikent_premium').update(updates);
-          alert(`💰 ${waitingKeys.length} adet teslimat iptal edildi ve M-Coin iadeleri tamamlandı!`);
-      }
-      else if (action === 'delete') {
-          if(!window.confirm(`${waitingKeys.length} adet teslimatı İADESİZ OLARAK SİLMEK istediğine emin misin?`)) return;
-          waitingKeys.forEach(k => updates[`deliveries/${k}`] = null);
-          db.ref('mavikent_premium').update(updates);
-          alert(`🗑️ ${waitingKeys.length} adet teslimat kalıcı olarak silindi.`);
+          db.ref('mavikent_premium').update(updates); alert(`💰 İadeleri tamamlandı!`);
       }
   };
 
-  const loadHtml2Canvas = async () => {
-      if (window.html2canvas) return window.html2canvas;
-      return new Promise((resolve) => { 
-          const script = document.createElement('script'); 
-          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; 
-          script.onload = () => resolve(window.html2canvas); 
-          document.head.appendChild(script); 
-      });
-  };
-
-  const downloadPanoAsJPG = async (type) => {
-      const btnId = `btn-pano-${type}`; 
-      const originalText = document.getElementById(btnId).innerText; 
-      document.getElementById(btnId).innerText = "⏳ Lüks Pano Hazırlanıyor...";
-      
-      const html2canvas = await loadHtml2Canvas(); 
-      const container = document.createElement('div');
-      container.style.cssText = "position:absolute;left:-9999px;top:0;width:1200px;background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:60px;font-family:'Plus Jakarta Sans',sans-serif;color:white;border-radius:40px;";
-      
-      const renderTop3 = (title, data, unit, icon) => {
-          let html = `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);padding:35px;border-radius:30px;width:31%;box-shadow:0 20px 40px rgba(0,0,0,0.3);"><div style="font-size:60px;text-align:center;margin-bottom:20px;filter:drop-shadow(0 10px 10px rgba(0,0,0,0.5));">${icon}</div><h3 style="text-align:center;color:#d4af37;font-size:22px;font-weight:900;margin:0 0 30px 0;letter-spacing:1px;text-transform:uppercase;">${title}</h3>`;
-          const topData = data.slice(0, 3);
-          if(topData.length === 0 || topData[0].val === 0) { 
-              html += `<div style="text-align:center;color:#64748b;font-weight:700;font-size:18px;">Henüz Veri Yok</div>`; 
-          } else {
-              topData.forEach((item, idx) => {
-                  const colors = ['#f59e0b', '#cbd5e1', '#b45309']; 
-                  const bgColors = ['rgba(245,158,11,0.1)', 'rgba(203,213,225,0.1)', 'rgba(180,83,9,0.1)'];
-                  if(item.val > 0) { 
-                      html += `<div style="display:flex;justify-content:space-between;align-items:center;background:${bgColors[idx]};padding:20px;border-radius:20px;margin-bottom:15px;border-left:4px solid ${colors[idx]};"><div style="display:flex;align-items:center;gap:15px;"><span style="font-size:24px;font-weight:900;color:${colors[idx]}">#${idx+1}</span><span style="font-size:18px;font-weight:800;color:white;">${String(item.n).split(' ')[0]}</span></div><div style="font-size:24px;font-weight:900;color:white;">${item.val} <span style="font-size:12px;color:#94a3b8;">${unit}</span></div></div>`; 
-                  }
-              });
-          }
-          html += `</div>`; 
-          return html;
-      };
-      
-      let titleStr = ''; 
-      let contentHTML = '<div style="display:flex;justify-content:space-between;margin-top:50px;">';
-      if (type === 'egitim') {
-          titleStr = 'HAFTANIN EĞİTİM LİDERLERİ';
-          contentHTML += renderTop3('Soru Şampiyonu', roster.map(n => ({ n, val: Number(appData?.education_d?.[n]?.questions||0) })).sort((a,b)=>b.val-a.val), 'Soru', '🧠');
-          contentHTML += renderTop3('Kitap Kurdu', roster.map(n => ({ n, val: Number(appData?.education_d?.[n]?.pages||0) })).sort((a,b)=>b.val-a.val), 'Sayfa', '📖');
-          contentHTML += renderTop3('Deneme Fatihi', roster.map(n => ({ n, val: Number(appData?.exams?.[n]?.deneme?.net||0) })).sort((a,b)=>b.val-a.val), 'Net', '🎯');
-      } else if (type === 'isleyis') {
-          titleStr = 'YURT İŞLEYİŞ VE LİDERLİK PANOSU';
-          contentHTML += renderTop3('RP Kralları', roster.map(n => ({ n, val: Number(appData?.season_score?.[n]||0) })).sort((a,b)=>b.val-a.val), 'RP', '👑');
-          contentHTML += renderTop3('M-Coin Zenginleri', roster.map(n => ({ n, val: Number(appData?.wallet?.[n]||0) })).sort((a,b)=>b.val-a.val), 'M', '💳');
-          contentHTML += renderTop3('XP Liderleri', roster.map(n => ({ n, val: Number(appData?.xp?.[n]||0) })).sort((a,b)=>b.val-a.val), 'XP', '⭐');
-      } else if (type === 'degerler') {
-          titleStr = 'DEĞERLER EĞİTİMİ YILDIZLARI';
-          contentHTML += renderTop3('Katılım Liderleri', roster.map(n => { const counts = Object.values(appData?.values_edu_d?.[n] || {}).filter(v => v.done).length; return { n, val: counts }; }).sort((a,b)=>b.val-a.val), 'Ders', '🕌');
-          contentHTML += renderTop3('Takke Muhafızları', roster.map(n => { const sess = appData?.yoklama_d?.[n]?.sessions || {}; let tCount = Object.values(sess).filter(s => s.st === 't').length; return { n, val: tCount }; }).sort((a,b)=>b.val-a.val), 'Kez', '👳‍♂️');
-          contentHTML += renderTop3('Kanaat Liderleri', roster.map(n => ({ n, val: Number(appData?.kanaat_w?.[n]||0) })).sort((a,b)=>b.val-a.val), 'Puan', '✍️');
-      }
-      contentHTML += '</div>';
-      
-      container.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid rgba(255,255,255,0.1);padding-bottom:40px;"><div><h1 style="margin:0;font-size:60px;font-weight:900;letter-spacing:-2px;color:white;">MAVİKENT <span style="color:#d4af37;">ELITE</span></h1><h2 style="margin:10px 0 0 0;font-size:26px;color:#cbd5e1;font-weight:700;letter-spacing:1px;">${titleStr}</h2></div><div style="text-align:right;"><div style="font-size:20px;font-weight:600;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;letter-spacing:2px;">Tarih</div><div style="font-size:32px;font-weight:900;color:#d4af37;">${new Date().toLocaleDateString('tr-TR')}</div></div></div>${contentHTML}`;
-      document.body.appendChild(container);
-      
-      try { 
-          const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#0f172a', useCORS: true }); 
-          const link = document.createElement('a'); 
-          link.download = `Mavikent_${type}_Panosu.jpg`; 
-          link.href = canvas.toDataURL('image/jpeg', 0.9); 
-          link.click(); 
-      } 
-      catch(e) { console.error("Hata", e); } 
-      finally { 
-          document.body.removeChild(container); 
-          document.getElementById(btnId).innerText = originalText; 
-      }
-  };
-
-  const downloadReportAsJPG = async (type, className) => {
-      const btnId = `btn-jpg-${type}`; 
-      const originalText = document.getElementById(btnId).innerText; 
-      document.getElementById(btnId).innerText = "⏳ Hazırlanıyor...";
-      
-      const html2canvas = await loadHtml2Canvas(); 
-      const container = document.createElement('div');
-      container.style.cssText = "position:absolute;left:-9999px;top:0;width:1200px;background:#ffffff;padding:40px;font-family:'Plus Jakarta Sans',sans-serif;color:#0f172a;";
-      
-      const studentsToMap = type === 'degerler' ? roster.filter(n => appData?.student_levels?.[n] === className) : getFilteredRoster(className);
-      let title = ''; 
-      let tableHTML = `<table style="width: 100%; border-collapse: collapse; text-align: center; margin-top: 20px;">`;
-      
-      if (type === 'deneme') {
-          title = 'DENEME SINAVI SONUÇLARI';
-          let dataArr = studentsToMap.map(n => {
-              const data = appData?.exams?.[n]?.deneme || {}; let totalNet = 0; let subsHTML = '';
-              examSubjects.forEach((s, i) => { 
-                  const d = parseFloat(data[`d_${i}`])||0; 
-                  const y = parseFloat(data[`y_${i}`])||0; 
-                  const net = d-(y/3); 
-                  totalNet += net; 
-                  subsHTML += `<td style="padding:15px;border-bottom:1px solid #e2e8f0;"><div style="font-size:12px;color:#64748b;">${d}D ${y}Y</div><div style="font-weight:900;font-size:16px;">${net.toFixed(1)} N</div></td>`; 
-              });
-              const target = parseFloat(data.target)||0; let statusHTML = '-';
-              if (target>0 && totalNet>0) { statusHTML = totalNet >= target ? `<span style="background:#10b981;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">BAŞARILI ✓</span>` : `<span style="background:#ef4444;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">GELİŞTİRİLMELİ ✕</span>`; }
-              return { n, totalNet, target, subsHTML, statusHTML };
-          }).sort((a,b) => b.totalNet - a.totalNet);
-          
-          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th>`;
-          examSubjects.forEach(s => tableHTML += `<th style="padding:15px;">${s}</th>`);
-          tableHTML += `<th style="padding:15px;background:#3b82f6;">Toplam Net</th><th style="padding:15px;background:#d4af37;color:#0f172a;">Hedef</th><th style="padding:15px;border-radius:0 12px 0 0;">Durum</th></tr>`;
-          
-          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:16px;border-bottom:1px solid #e2e8f0;">${d.n}</td>${d.subsHTML}<td style="padding:15px;font-weight:900;font-size:20px;color:#3b82f6;border-bottom:1px solid #e2e8f0;">${d.totalNet.toFixed(2)}</td><td style="padding:15px;font-weight:800;font-size:18px;color:#d4af37;border-bottom:1px solid #e2e8f0;">${d.target}</td><td style="padding:15px;border-bottom:1px solid #e2e8f0;">${d.statusHTML}</td></tr>`; });
-      
-      } else if (type === 'yazili') {
-          title = 'HAFTALIK YAZILI DEĞERLENDİRME';
-          let dataArr = studentsToMap.map(n => {
-              const data = appData?.exams?.[n]?.yazili || {}; let total = 0; let count = 0; let subsHTML = '';
-              examSubjects.forEach((s, i) => { 
-                  const val = data[`p_${i}`]; 
-                  if (val!==undefined&&val!=='') { total+=parseFloat(val); count++; } 
-                  subsHTML += `<td style="padding:15px;border-bottom:1px solid #e2e8f0;font-weight:800;font-size:16px;">${val||'-'}</td>`; 
-              });
-              const avg = count>0 ? (total/count) : 0; const target = parseFloat(data.target)||0; let statusHTML = '-';
-              if (target>0 && avg>0) { statusHTML = avg >= target ? `<span style="background:#10b981;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">BAŞARILI ✓</span>` : `<span style="background:#ef4444;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">GELİŞTİRİLMELİ ✕</span>`; }
-              return { n, avg, target, subsHTML, statusHTML };
-          }).sort((a,b) => b.avg - a.avg);
-          
-          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th>`;
-          examSubjects.forEach(s => tableHTML += `<th style="padding:15px;">${s}</th>`);
-          tableHTML += `<th style="padding:15px;background:#3b82f6;">Ortalama</th><th style="padding:15px;background:#d4af37;color:#0f172a;">Hedef</th><th style="padding:15px;border-radius:0 12px 0 0;">Durum</th></tr>`;
-          
-          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:16px;border-bottom:1px solid #e2e8f0;">${d.n}</td>${d.subsHTML}<td style="padding:15px;font-weight:900;font-size:20px;color:#3b82f6;border-bottom:1px solid #e2e8f0;">${d.avg.toFixed(1)}</td><td style="padding:15px;font-weight:800;font-size:18px;color:#d4af37;border-bottom:1px solid #e2e8f0;">${d.target}</td><td style="padding:15px;border-bottom:1px solid #e2e8f0;">${d.statusHTML}</td></tr>`; });
-      
-      } else if (type === 'egitim') {
-          title = 'GÜNLÜK EĞİTİM VE ÖDEV TAKİBİ';
-          let dataArr = studentsToMap.map(n => { const d = appData?.education_d?.[n] || {}; return { n, lessons: (d.lessons||[]).join(', ')||'-', pages: d.pages||0, questions: d.questions||0 }; }).sort((a,b) => b.questions - a.questions);
-          
-          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th><th style="padding:15px;">Ödevler</th><th style="padding:15px;">Kitap (S)</th><th style="padding:15px;border-radius:0 12px 0 0;background:#3b82f6;">Soru</th></tr>`;
-          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:16px;border-bottom:1px solid #e2e8f0;">${d.n}</td><td style="padding:15px;font-weight:700;color:#10b981;border-bottom:1px solid #e2e8f0;">${d.lessons}</td><td style="padding:15px;font-weight:800;font-size:16px;border-bottom:1px solid #e2e8f0;">${d.pages}</td><td style="padding:15px;font-weight:900;font-size:20px;color:#3b82f6;border-bottom:1px solid #e2e8f0;">${d.questions}</td></tr>`; });
-      
-      } else if (type === 'degerler') {
-          const todayStr = new Date().toDateString();
-          const log = appData?.values_log?.[className]?.[todayStr] || { subject: 'Belirtilmedi', topic: '-' };
-          title = `DEĞERLER EĞİTİMİ (${log.subject} - ${log.topic})`;
-          
-          let dataArr = studentsToMap.map(n => {
-              const isDone = appData?.values_edu_d?.[n]?.[todayStr]?.done;
-              return { n, statusHTML: isDone ? `<span style="background:#10b981;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">KATILDI ✓</span>` : `<span style="background:#ef4444;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">KATILMADI ✕</span>` };
-          });
-          
-          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th><th style="padding:15px;border-radius:0 12px 0 0;">Günlük Katılım</th></tr>`;
-          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:16px;border-bottom:1px solid #e2e8f0;color:#0f172a;">${d.n}</td><td style="padding:15px;border-bottom:1px solid #e2e8f0;">${d.statusHTML}</td></tr>`; });
-      }
-      
-      tableHTML += `</table>`;
-      container.innerHTML = `<div style="background:linear-gradient(135deg, #0f172a, #1e293b);padding:30px;border-radius:24px;display:flex;justify-content:space-between;align-items:center;color:white;box-shadow:0 10px 30px rgba(0,0,0,0.1);"><div><h1 style="margin:0;font-size:42px;font-weight:900;letter-spacing:-1px;">MAVİKENT <span style="color:#d4af37;">ELITE</span></h1><h2 style="margin:5px 0 0 0;font-size:20px;color:#cbd5e1;font-weight:700;">${className} - ${title}</h2></div><div style="text-align:right;"><div style="font-size:16px;font-weight:600;color:#cbd5e1;">Tarih</div><div style="font-size:22px;font-weight:800;color:#d4af37;">${new Date().toLocaleDateString('tr-TR')}</div></div></div>${tableHTML}`;
-      document.body.appendChild(container);
-      
-      try { 
-          const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff', useCORS: true }); 
-          const link = document.createElement('a'); 
-          link.download = `Mavikent_${className}_${type}.jpg`; 
-          link.href = canvas.toDataURL('image/jpeg', 0.9); 
-          link.click(); 
-      } 
-      catch(e) { console.error(e); } 
-      finally { 
-          document.body.removeChild(container); 
-          document.getElementById(btnId).innerText = originalText; 
-      }
+  const sendAdminChat = () => {
+      if(!adminChatInput.trim()) return;
+      db.ref('mavikent_premium/global_chat').push({ s: 'YÖNETİCİ', t: adminChatInput, ts: Date.now(), type: 'admin', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) });
+      setAdminChatInput('');
   };
 
   const renderStudentGrid = (students, type) => (
@@ -625,7 +311,8 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         
         const isEliteStud = isElite(name);
         const has2X = (appData?.active_cards?.[name]?.multiplier?.date === new Date().toDateString()) || (appData?.settings?.global_event === '2x_xp');
-        const hasStreak = appData?.active_cards?.[name]?.streak?.date === new Date().toDateString();
+        const streakData = appData?.active_cards?.[name]?.streak;
+        const hasStreak = streakData && (streakData.date === new Date().toDateString() || (streakData.end && streakData.end > Date.now()));
 
         return (
           <div key={name} onClick={() => { 
@@ -673,23 +360,12 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         .elite-input { outline: none !important; border: 2px solid #e2e8f0 !important; transition: all 0.2s; padding: 14px 20px; border-radius: 20px; width: 100%; font-weight: 700; color: #0f172a; background: #f8fafc; }
         .elite-input:focus { border-color: #3b82f6 !important; background: #ffffff; box-shadow: 0 0 0 4px rgba(59,130,246,0.1) !important; }
         .clean-scroll::-webkit-scrollbar { width: 6px; } .clean-scroll::-webkit-scrollbar-track { background: transparent; } .clean-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        
-        /* MOBİL UYUMLU ŞIK KUTUCUK TASARIMI */
         .premium-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
         .premium-card { background: white; text-align: center; border-radius: 24px; padding: 35px 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: center; align-items: center; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
         .premium-card .icon { font-size: 48px; margin-bottom: 15px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)); }
         .premium-card .label { font-size: 15px; font-weight: 900; color: #0f172a; line-height: 1.3; }
-        
         .grid-mobile-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
-        
-        @media (max-width: 768px) {
-            .premium-grid { grid-template-columns: repeat(2, 1fr); gap: 15px; }
-            .premium-card { padding: 20px 10px; border-radius: 20px; aspect-ratio: 1; }
-            .premium-card .icon { font-size: 40px; margin-bottom: 10px; }
-            .premium-card .label { font-size: 13px; letter-spacing: 0; }
-            .grid-mobile-2 { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-        }
-        
+        @media (max-width: 768px) { .premium-grid { grid-template-columns: repeat(2, 1fr); gap: 15px; } .premium-card { padding: 20px 10px; border-radius: 20px; aspect-ratio: 1; } .premium-card .icon { font-size: 40px; margin-bottom: 10px; } .premium-card .label { font-size: 13px; letter-spacing: 0; } .grid-mobile-2 { grid-template-columns: repeat(2, 1fr); gap: 12px; } }
         @keyframes popIn { 0% { opacity: 0; transform: scale(0.9); } 100% { opacity: 1; transform: scale(1); } }
         @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
         .fade-in { animation: fadeIn 0.4s ease-out; }
@@ -752,7 +428,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
               { id: 'admin_lig', icon: '🏆', label: 'ELİT LİG' }, 
               { id: 'admin_clans', icon: '🚩', label: 'KLANLAR' }, 
               { id: 'admin_codes', icon: '🎟️', label: 'KODLAR' },
-              { id: 'admin_messages', icon: '✉️', label: 'MESAJLAR' }, 
+              { id: 'admin_chat', icon: '💬', label: 'SOHBET YÖNETİMİ' }, 
               { id: 'admin_settings', icon: '⚙️', label: 'AYARLAR' } 
             ].map(mod => (
               <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
@@ -760,10 +436,51 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           </div>
         )}
 
-        {/* LÜKS PANO İNDİRME BUTONLARI */}
-        {!currentModule && dashboardView === 'egitim' && (<div style={{ marginTop: '20px' }}><button id="btn-pano-egitim" onClick={() => downloadPanoAsJPG('egitim')} className="premium-btn" style={{ width: '100%', background: '#0f172a', color: '#d4af37', padding: '24px', fontSize: '16px', letterSpacing: '1px', border: '2px solid #d4af37 !important' }}>📸 EĞİTİM İSTATİSTİKLERİ VE ENLERİ PANOSU (JPG)</button></div>)}
-        {!currentModule && dashboardView === 'isleyis' && (<div style={{ marginTop: '20px' }}><button id="btn-pano-isleyis" onClick={() => downloadPanoAsJPG('isleyis')} className="premium-btn" style={{ width: '100%', background: '#0f172a', color: '#d4af37', padding: '24px', fontSize: '16px', letterSpacing: '1px', border: '2px solid #d4af37 !important' }}>📸 LİDERLİK VE İŞLEYİŞ ENLERİ PANOSU (JPG)</button></div>)}
-        {!currentModule && dashboardView === 'degerler' && (<div style={{ marginTop: '20px' }}><button id="btn-pano-degerler" onClick={() => downloadPanoAsJPG('degerler')} className="premium-btn" style={{ width: '100%', background: '#0f172a', color: '#d4af37', padding: '24px', fontSize: '16px', letterSpacing: '1px', border: '2px solid #d4af37 !important' }}>📸 DEĞERLER EĞİTİMİ ENLERİ PANOSU (JPG)</button></div>)}
+        {/* SOHBET KONTROL MERKEZİ */}
+        {currentModule === 'admin_chat' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+               <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                  <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '15px' }}>💬 Canlı Meydan Kontrolü</h4>
+                  <div className="clean-scroll" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', height: '300px', overflowY: 'auto', padding: '15px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {Object.keys(appData?.global_chat || {}).length === 0 ? <div style={{ textAlign: 'center', color: '#64748b' }}>Sohbet boş.</div> : (
+                          Object.keys(appData.global_chat).map(k => {
+                              const msg = appData.global_chat[k];
+                              return (
+                                  <div key={k} style={{ background: 'white', padding: '12px 15px', borderRadius: '12px', borderLeft: `4px solid ${msg.type==='admin' ? '#ef4444' : '#3b82f6'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <div>
+                                          <div style={{ fontSize: '12px', fontWeight: 900, color: msg.type==='admin' ? '#ef4444' : '#0f172a' }}>{msg.s} <span style={{color:'#94a3b8', fontWeight:600}}>- {msg.date}</span></div>
+                                          <div style={{ fontSize: '14px', color: '#334155', marginTop: '4px' }}>{msg.t}</div>
+                                      </div>
+                                      <div style={{ display: 'flex', gap: '8px' }}>
+                                          <button onClick={() => { if(window.confirm('Mesaj silinsin mi?')) db.ref(`mavikent_premium/global_chat/${k}`).remove(); }} className="premium-btn" style={{ background: '#f1f5f9', color: '#ef4444', padding: '6px 12px', fontSize: '12px' }}>Sil</button>
+                                          {msg.type !== 'admin' && msg.type !== 'system' && <button onClick={() => { if(window.confirm(`${msg.s} adlı öğrenciyi sohbetten banlamak istiyor musun?`)) db.ref(`mavikent_premium/banned_chat/${msg.s}`).set(true); }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '6px 12px', fontSize: '12px' }}>Banla</button>}
+                                      </div>
+                                  </div>
+                              )
+                          })
+                      )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                      <input type="text" value={adminChatInput} onChange={e => setAdminChatInput(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') sendAdminChat(); }} placeholder="Tüm yurda duyuru/mesaj at..." className="elite-input" style={{ flex: 1 }} />
+                      <button onClick={sendAdminChat} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '0 20px', fontWeight: 900 }}>YÖNETİCİ MESAJI</button>
+                  </div>
+               </div>
+
+               <div style={{ background: '#fef2f2', padding: '30px', borderRadius: '24px', border: '1px solid #fca5a5' }}>
+                  <h4 style={{ marginTop: 0, color: '#b91c1c', fontWeight: 900, fontSize: '18px', marginBottom: '15px' }}>⛔ Sohbetten Banlananlar</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {Object.keys(appData?.banned_chat || {}).length === 0 ? <div style={{ color: '#991b1b', fontSize: '14px' }}>Banlı öğrenci yok.</div> : (
+                          Object.keys(appData.banned_chat).map(u => (
+                              <div key={u} style={{ background: 'white', padding: '12px 15px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ fontWeight: 800, color: '#0f172a' }}>{u}</div>
+                                  <button onClick={() => db.ref(`mavikent_premium/banned_chat/${u}`).remove()} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '6px 12px', fontSize: '12px' }}>Banı Kaldır</button>
+                              </div>
+                          ))
+                      )}
+                  </div>
+               </div>
+            </div>
+        )}
 
         {/* İŞLEYİŞ EKRANLARI */}
         {currentModule === 'yoklama' && !selectedSession && ( 
@@ -785,32 +502,9 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         {((currentModule === 'yoklama' && selectedSession) || ['telefon', 'yatak', 'kanaat'].includes(currentModule)) && renderStudentGrid(roster, 'isleyis')}
         
         {/* EĞİTİM VE DEĞERLER EKRANLARI */}
-        {currentModule === 'class_view' && (
-          <>
-             {renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_ders')}
-             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                <button id="btn-jpg-egitim" onClick={() => downloadReportAsJPG('egitim', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#0f172a', color: 'white', fontSize: '16px' }}>📸 SINIF ÖDEV/KİTAP RAPORU (JPG İNDİR)</button>
-             </div>
-          </>
-        )}
-        
-        {currentModule === 'deneme_view' && (
-          <>
-             {renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_deneme')}
-             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                <button id="btn-jpg-deneme" onClick={() => downloadReportAsJPG('deneme', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#3b82f6', color: 'white', fontSize: '16px' }}>📸 SINIF DENEME RAPORU (JPG İNDİR)</button>
-             </div>
-          </>
-        )}
-        
-        {currentModule === 'yazili_view' && (
-          <>
-             {renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_yazili')}
-             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                <button id="btn-jpg-yazili" onClick={() => downloadReportAsJPG('yazili', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#10b981', color: 'white', fontSize: '16px' }}>📸 SINIF YAZILI RAPORU (JPG İNDİR)</button>
-             </div>
-          </>
-        )}
+        {currentModule === 'class_view' && renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_ders')}
+        {currentModule === 'deneme_view' && renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_deneme')}
+        {currentModule === 'yazili_view' && renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_yazili')}
         
         {currentModule === 'values_view' && (
           <>
@@ -823,9 +517,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                 <button onClick={() => { db.ref(`mavikent_premium/values_log/${selectedSession}/${new Date().toDateString()}`).set(valuesTopic); alert("Konu Kaydedildi"); }} className="premium-btn" style={{ width: '100%', padding: '16px', background: '#0f172a', color: 'white', fontSize: '15px' }}>DERSİ YAYINLA</button>
             </div>
             {renderStudentGrid(roster.filter(n => appData?.student_levels?.[n] === selectedSession), 'degerler')}
-            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                <button id="btn-jpg-degerler" onClick={() => downloadReportAsJPG('degerler', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#d4af37', color: 'white', fontSize: '16px' }}>📸 HAFTALIK VELİ BİLGİLENDİRME (JPG İNDİR)</button>
-             </div>
           </>
         )}
 
@@ -842,7 +533,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                         <option value="discount">🔥 % İndirim Ver (7 Gün)</option>
                     </select>
                     <input type="number" value={newGiftCode.val} onChange={e => setNewGiftCode({...newGiftCode, val: e.target.value})} placeholder="Miktar / Yüzde" className="elite-input" />
-                    <input type="number" value={newGiftCode.uses} onChange={e => setNewGiftCode({...newGiftCode, uses: e.target.value})} placeholder="Kaç Kez Kullanılabilir? (Örn: 50)" className="elite-input" />
+                    <input type="number" value={newGiftCode.uses} onChange={e => setNewGiftCode({...newGiftCode, uses: e.target.value})} placeholder="Kaç Kez Kullanılabilir?" className="elite-input" />
                     <button onClick={handleAdminCreateGiftCode} className="premium-btn" style={{ background: '#0f172a', color: 'white', gridColumn: '1 / -1', padding: '16px' }}>KODU YAYINLA</button>
                  </div>
              </div>
@@ -874,51 +565,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                     })}
                  </div>
              </div>
-
-             <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                 <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '15px' }}>⏳ Aktif 7 Günlük İndirimler (İnfaz Merkezi)</h4>
-                 <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Öğrencilerin indirim haklarını süresi bitmeden iptal edebilirsiniz.</p>
-                 {Object.keys(appData?.active_discounts || {}).length === 0 && <div style={{ color: '#94a3b8', fontWeight: 700, fontSize: '14px' }}>Şu an aktif indirim kullanan kimse yok.</div>}
-                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                     {Object.keys(appData?.active_discounts || {}).map(sName => {
-                         const disc = appData.active_discounts[sName];
-                         const isExpired = Date.now() > disc.expiry;
-                         const remainingDays = Math.max(0, Math.ceil((disc.expiry - Date.now()) / (1000 * 60 * 60 * 24)));
-                         return (
-                             <div key={sName} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isExpired ? '#fef2f2' : '#ecfdf5', border: `1px solid ${isExpired ? '#fca5a5' : '#a7f3d0'}`, padding: '16px 20px', borderRadius: '16px' }}>
-                                 <div>
-                                     <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>{sName}</div>
-                                     <div style={{ fontSize: '13px', color: isExpired ? '#ef4444' : '#059669', fontWeight: 800, marginTop: '4px' }}>
-                                         %{disc.value} İndirim • {isExpired ? 'SÜRESİ DOLDU' : `Kalan: ${remainingDays} Gün`}
-                                     </div>
-                                 </div>
-                                 <button onClick={() => { if(window.confirm(`${sName} adlı öğrencinin indirim hakkı elinden alınacak. Onaylıyor musun?`)) db.ref(`mavikent_premium/active_discounts/${sName}`).remove(); }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '10px 20px', fontSize: '13px' }}>YAK (SİL)</button>
-                             </div>
-                         )
-                     })}
-                 </div>
-             </div>
-          </div>
-        )}
-
-        {/* MESAJLAR MODÜLÜ */}
-        {currentModule === 'admin_messages' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-             <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0f172a', marginBottom: '10px' }}>✉️ Öğrencilerden Gelen Mesajlar</h2>
-             {Object.keys(appData?.messages || {}).length === 0 && <div style={{ color: '#64748b', fontWeight: 700, padding: '20px', background: 'white', borderRadius: '20px' }}>Henüz gelen mesaj yok.</div>}
-             {Object.keys(appData?.messages || {}).reverse().map(k => {
-                const msg = appData.messages[k];
-                return (
-                  <div key={k} style={{ background: 'white', padding: '24px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', borderLeft: '4px solid #3b82f6' }}>
-                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-                        <span style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>{msg.sender}</span>
-                        <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>{msg.date}</span>
-                     </div>
-                     <p style={{ color: '#334155', margin: '0 0 20px 0', lineHeight: '1.6', fontSize: '15px', fontWeight: 500 }}>{msg.text}</p>
-                     <button onClick={() => { if(window.confirm("Mesaj silinsin mi?")) db.ref(`mavikent_premium/messages/${k}`).remove(); }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '10px 20px', fontSize: '13px' }}>Sil</button>
-                  </div>
-                )
-             })}
           </div>
         )}
 
@@ -968,49 +614,106 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           </div>
         )}
 
-        {/* YENİ: STOK SİSTEMLİ MARKET YÖNETİMİ */}
+        {/* MARKET YÖNETİMİ VE İHALE */}
         {currentModule === 'admin_market' && (
-          <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-             <h4 style={{ marginTop: 0, color:'#0f172a', fontSize: '18px', fontWeight: 900 }}>{editProductKey ? '✏️ ÜRÜNÜ GÜNCELLE' : '📦 YENİ ÜRÜN EKLE'}</h4>
-             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '24px', background:'#f8fafc', padding:'20px', borderRadius:'24px' }}>
-               <input value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="Adı" className="elite-input" style={{ width: '100%' }} />
-               <input value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} type="number" placeholder="Fiyat (M)" className="elite-input" style={{ width: '100%' }} />
-               <input value={newProduct.icon} onChange={e => setNewProduct({...newProduct, icon: e.target.value})} placeholder="Emoji (📦)" className="elite-input" style={{ width: '100%', textAlign: 'center' }} />
-               
-               {/* YENİ: STOK GİRİŞİ */}
-               <input value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} type="number" placeholder="Stok Adedi (Boş = Sınırsız)" className="elite-input" style={{ width: '100%' }} />
-               
-               <select value={newProduct.type} onChange={e => setNewProduct({...newProduct, type: e.target.value})} className="elite-input" style={{ width: '100%' }}>
-                 <option value="normal">🍔 Normal Fiziksel Ürün</option><option value="avatar">👤 Profil Avatarı</option><option value="multiplier">⚡ 2X Puan Kartı</option><option value="streak">🛡️ Haftalık Seri Kalkanı</option><option value="title">🎖️ Profil Ünvanı</option><option value="frame">🖼️ Avatar Çerçevesi</option>
-               </select>
-               <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px' }}>
-                  <button onClick={handleAddProduct} className="premium-btn" style={{ flex: 1, background: editProductKey ? '#f59e0b' : '#10b981', color: 'white', padding: '16px' }}>{editProductKey ? 'KAYDET' : 'EKLE'}</button>
-                  {editProductKey && <button onClick={() => { setEditProductKey(null); setNewProduct({ name: '', price: '', icon: '📦', type: 'normal', stock: '' }); }} className="btn-iptal" style={{ padding: '16px 24px' }}>İPTAL</button>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+             
+             {/* İHALE (AÇIK ARTIRMA) PANELİ */}
+             <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '20px' }}>🔨 HAFTALIK İHALE (AÇIK ARTIRMA)</h4>
+                {appData?.auction?.active ? (
+                    <div style={{ background: '#fefce8', border: '1px solid #fde047', padding: '20px', borderRadius: '16px' }}>
+                        <div style={{ fontSize: '18px', fontWeight: 900, color: '#b45309' }}>Yayındaki İhale: {appData.auction.item}</div>
+                        <div style={{ fontSize: '14px', color: '#854d0e', marginTop: '5px', fontWeight: 700 }}>En Yüksek Teklif: {appData.auction.currentBid} M ({appData.auction.highestBidder || 'Henüz teklif yok'})</div>
+                        <button onClick={handleEndAuction} className="premium-btn" style={{ background: '#ef4444', color: 'white', marginTop: '15px', padding: '12px 20px', width: '100%' }}>İHALEYİ BİTİR & TESLİM ET</button>
+                    </div>
+                ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
+                        <input type="text" id="aucItem" placeholder="İhale Ürünü (Örn: Sınırsız Ev İzni)" className="elite-input" style={{ gridColumn: '1 / -1' }} />
+                        <input type="number" id="aucPrice" placeholder="Başlangıç (M)" className="elite-input" />
+                        <button onClick={handleStartAuction} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '16px' }}>İHALEYİ BAŞLAT</button>
+                    </div>
+                )}
+             </div>
+
+             {/* İMECE (KİTLE FONLAMA) PANELİ */}
+             <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '20px' }}>🤝 İMECE (ORTAK ALIM) OLUŞTUR</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
+                    <input type="text" value={newGroupBuy.name} onChange={e => setNewGroupBuy({...newGroupBuy, name: e.target.value})} placeholder="Örn: Tüm Yurda Çiğköfte" className="elite-input" style={{ gridColumn: '1 / -1' }} />
+                    <input type="number" value={newGroupBuy.totalCost} onChange={e => setNewGroupBuy({...newGroupBuy, totalCost: e.target.value})} placeholder="Toplam Maliyet (M)" className="elite-input" />
+                    <input type="number" value={newGroupBuy.maxP} onChange={e => setNewGroupBuy({...newGroupBuy, maxP: e.target.value})} placeholder="Kaç Kişi Ortak Olacak?" className="elite-input" />
+                    <button onClick={handleCreateGroupBuy} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '16px' }}>İMECE BAŞLAT</button>
+                </div>
+             </div>
+
+             <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+               <h4 style={{ marginTop: 0, color:'#0f172a', fontSize: '18px', fontWeight: 900 }}>{editProductKey ? '✏️ ÜRÜNÜ GÜNCELLE' : '📦 YENİ ÜRÜN EKLE'}</h4>
+               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '24px', background:'#f8fafc', padding:'20px', borderRadius:'24px' }}>
+                 <input value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="Adı" className="elite-input" style={{ width: '100%' }} />
+                 <input value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} type="number" placeholder="Fiyat (M)" className="elite-input" style={{ width: '100%' }} />
+                 <input value={newProduct.icon} onChange={e => setNewProduct({...newProduct, icon: e.target.value})} placeholder="Emoji (📦)" className="elite-input" style={{ width: '100%', textAlign: 'center' }} />
+                 <input value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} type="number" placeholder="Stok Adedi (Boş = Sınırsız)" className="elite-input" style={{ width: '100%' }} />
+                 <select value={newProduct.type} onChange={e => setNewProduct({...newProduct, type: e.target.value})} className="elite-input" style={{ width: '100%' }}>
+                   <option value="normal">🍔 Normal Ürün</option>
+                   <option value="ticket">🎟️ Çekiliş Bileti</option>
+                   <option value="bundle">🎁 Paket (Bundle Fırsatı)</option>
+                   <option value="gift">🎁 Arkadaşa Hediye Ürünü</option>
+                   <option value="avatar">👤 Profil Avatarı</option>
+                   <option value="multiplier">⚡ 2X Puan Kartı</option>
+                   <option value="streak">🛡️ Haftalık Seri Kalkanı</option>
+                   <option value="title">🎖️ Profil Ünvanı</option>
+                   <option value="frame">🖼️ Avatar Çerçevesi</option>
+                 </select>
+
+                 {/* EĞER PAKET SEÇİLİRSE ALTTA SEÇENEKLER ÇIKAR */}
+                 {newProduct.type === 'bundle' && (
+                     <div style={{ gridColumn: '1 / -1', background: 'white', padding: '15px', borderRadius: '16px', border: '1px dashed #cbd5e1' }}>
+                         <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', marginBottom: '10px' }}>Paket İçeriğini Seçin (Mevcut Ürünler):</div>
+                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                             {Object.keys(appData?.market_products || {}).filter(k => appData.market_products[k].type !== 'bundle').map(k => {
+                                 const p = appData.market_products[k];
+                                 const isSelected = bundleSelection.includes(p.n);
+                                 return (
+                                     <div key={k} onClick={() => setBundleSelection(isSelected ? bundleSelection.filter(n => n !== p.n) : [...bundleSelection, p.n])} style={{ background: isSelected ? '#10b981' : '#f1f5f9', color: isSelected ? 'white' : '#64748b', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 800, cursor: 'pointer' }}>
+                                         {p.i} {p.n}
+                                     </div>
+                                 )
+                             })}
+                         </div>
+                     </div>
+                 )}
+
+                 <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px' }}>
+                    <button onClick={handleAddProduct} className="premium-btn" style={{ flex: 1, background: editProductKey ? '#f59e0b' : '#10b981', color: 'white', padding: '16px' }}>{editProductKey ? 'KAYDET' : 'EKLE'}</button>
+                    {editProductKey && <button onClick={() => { setEditProductKey(null); setNewProduct({ name: '', price: '', icon: '📦', type: 'normal', stock: '' }); setBundleSelection([]); }} className="btn-iptal" style={{ padding: '16px 24px' }}>İPTAL</button>}
+                 </div>
                </div>
-             </div>
-             <h4 style={{ borderTop: '2px solid #f1f5f9', paddingTop: '20px', margin: '0 0 16px 0', fontSize: '18px', fontWeight: 900 }}>MEVCUT ÜRÜNLER VE STOKLAR</h4>
-             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-               {Object.keys(appData?.market_products || {}).map(key => {
-                 const p = appData.market_products[key];
-                 const stockText = p.stock !== undefined ? (p.stock > 0 ? `${p.stock} Adet Kaldı` : 'TÜKENDİ') : 'Sınırsız';
-                 return (
-                   <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: p.stock === 0 ? '#fef2f2' : '#f8fafc', borderRadius: '20px', border: `1px solid ${p.stock === 0 ? '#fca5a5' : '#e2e8f0'}` }}>
-                     <div>
-                         <div style={{ fontWeight: 900, fontSize: '15px', color: '#0f172a' }}>{p.i} {p.n} <span style={{ color: '#64748b' }}>({p.p} M)</span></div>
-                         <div style={{ fontSize: '12px', fontWeight: 800, color: p.stock === 0 ? '#ef4444' : '#10b981', marginTop: '4px' }}>Stok: {stockText}</div>
+               <h4 style={{ borderTop: '2px solid #f1f5f9', paddingTop: '20px', margin: '0 0 16px 0', fontSize: '18px', fontWeight: 900 }}>MEVCUT ÜRÜNLER VE STOKLAR</h4>
+               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                 {Object.keys(appData?.market_products || {}).map(key => {
+                   const p = appData.market_products[key];
+                   const stockText = p.stock !== undefined ? (p.stock > 0 ? `${p.stock} Kaldı` : 'TÜKENDİ') : 'Sınırsız';
+                   return (
+                     <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: p.stock === 0 ? '#fef2f2' : '#f8fafc', borderRadius: '20px', border: `1px solid ${p.stock === 0 ? '#fca5a5' : '#e2e8f0'}` }}>
+                       <div>
+                           <div style={{ fontWeight: 900, fontSize: '15px', color: '#0f172a' }}>{p.i} {p.n} <span style={{ color: '#64748b' }}>({p.p} M)</span></div>
+                           <div style={{ fontSize: '12px', fontWeight: 800, color: p.stock === 0 ? '#ef4444' : '#10b981', marginTop: '4px' }}>Stok: {stockText} | Tür: {p.type === 'bundle' ? 'Paket' : p.type}</div>
+                           {p.type === 'bundle' && <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>İçerik: {(p.bundleItems||[]).join(', ')}</div>}
+                       </div>
+                       <div style={{ display: 'flex', gap: '8px' }}>
+                         <button onClick={() => editProduct(key, p)} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '12px 18px' }}>✏️</button>
+                         <button onClick={() => { if(window.confirm('Silinsin mi?')) db.ref(`mavikent_premium/market_products/${key}`).remove() }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '12px 18px' }}>🗑️</button>
+                       </div>
                      </div>
-                     <div style={{ display: 'flex', gap: '8px' }}>
-                       <button onClick={() => editProduct(key, p)} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '12px 18px' }}>✏️</button>
-                       <button onClick={() => { if(window.confirm('Silinsin mi?')) db.ref(`mavikent_premium/market_products/${key}`).remove() }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '12px 18px' }}>🗑️</button>
-                     </div>
-                   </div>
-                 );
-               })}
-             </div>
+                   );
+                 })}
+               </div>
+            </div>
           </div>
         )}
 
-        {/* TESLİMAT YÖNETİMİ (TOPLU İŞLEM BUTONLARI EKLENDİ) */}
+        {/* TESLİMAT YÖNETİMİ */}
         {currentModule === 'admin_teslimat' && (
           <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
              <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
@@ -1018,7 +721,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                <button onClick={() => setDeliveryTab('done')} className="premium-btn" style={{ flex: 1, padding: '16px', background: deliveryTab === 'done' ? '#10b981' : '#f1f5f9', color: deliveryTab === 'done' ? 'white' : '#64748b', fontSize: '15px' }}>ONAYLANMIŞ</button>
              </div>
 
-             {/* TOPLU İŞLEM BUTONLARI */}
              {deliveryTab === 'wait' && Object.keys(appData?.deliveries || {}).filter(k => appData.deliveries[k].st === 'wait').length > 0 && (
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', background: '#fefce8', padding: '15px', borderRadius: '16px', border: '1px dashed #fde047' }}>
                    <div style={{ width: '100%', fontSize: '13px', fontWeight: 900, color: '#b45309', marginBottom: '8px' }}>⚡ TOPLU İŞLEMLER (Tüm Bekleyenler)</div>
@@ -1154,7 +856,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
            </div>
         )}
 
-        {/* AYARLAR YÖNETİMİ (AYAKKABI İADE BUTONU KALDIRILDI) */}
+        {/* AYARLAR YÖNETİMİ (OTOMATİK BORSA / ENFLASYON SIFIRLAMA EKLENDİ) */}
         {currentModule === 'admin_settings' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
              <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', gridColumn: '1 / -1' }}>
@@ -1164,6 +866,9 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                   <button onClick={() => { db.ref('mavikent_premium/settings/global_event').set('2x_xp'); alert("Tüm yurt için 2X XP aktif edildi!"); }} className="premium-btn" style={{ background: appData?.settings?.global_event === '2x_xp' ? '#10b981' : '#f8fafc', color: appData?.settings?.global_event === '2x_xp' ? 'white' : '#64748b', border: appData?.settings?.global_event === '2x_xp' ? 'none' : '2px solid #e2e8f0' }}>⭐ TÜM YURT 2X ÇARPAN</button>
                   <button onClick={() => { db.ref('mavikent_premium/settings/global_event').set('none'); alert("Etkinlikler durduruldu."); }} className="premium-btn" style={{ background: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? '#ef4444' : '#f8fafc', color: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? 'white' : '#64748b', border: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? 'none' : '2px solid #e2e8f0' }}>🚫 ETKİNLİKLERİ BİTİR</button>
                   <button onClick={() => { if(window.confirm('Tüm öğrencilere anında 1 adet Şans Çarkı Bileti hediye edilecek. Onaylıyor musun?')) { const updates = {}; roster.forEach(n => { updates[`tickets/${n}`] = (Number(appData?.tickets?.[n]) || 0) + 1; }); db.ref('mavikent_premium').update(updates); alert('🎟️ Biletler başarıyla dağıtıldı!'); } }} className="premium-btn" style={{ background: '#8b5cf6', color: 'white', border: 'none', padding: '15px' }}>🎟️ HERKESE 1 BİLET DAĞIT</button>
+                  
+                  {/* KİŞİSEL ENFLASYONU (BORSA) SIFIRLAMA BUTONU */}
+                  <button onClick={() => { if(window.confirm('Tüm öğrencilerin kişisel enflasyonları sıfırlanacak. Ürün fiyatları ana fiyata dönecek. Emin misiniz?')) { db.ref('mavikent_premium/personal_inflation').set(null); alert('Enflasyon sıfırlandı!'); } }} className="premium-btn" style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '15px' }}>🔄 KİŞİSEL ENFLASYONLARI SIFIRLA</button>
                </div>
              </div>
 
@@ -1205,11 +910,10 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                <button onClick={() => { if(window.confirm('Tüm cihaz engelleri kaldırılacak. Emin misiniz?')) { db.ref('mavikent_premium/banned_devices').set(null); alert('Tüm engeller kaldırıldı!'); } }} className="premium-btn" style={{ width: '100%', padding: '16px', background: 'transparent', color: '#ef4444', border: '2px solid #ef4444 !important' }}>TÜM ENGELLERİ KALDIR</button>
              </div>
           </div>
-      )}
+        )}
 
       </div> 
 
-      {/* --- AÇILIR PENCERELER (MODALLAR) --- */}
       {selectedStudent && modalType === 'isleyis' && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', animation: 'fadeIn 0.3s ease-out' }}>
           <div style={{ backgroundColor: '#ffffff', padding: '40px', borderRadius: '32px', width: '100%', maxWidth: '420px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)', maxHeight: '90vh', overflowY: 'auto', animation: 'popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}>
@@ -1339,4 +1043,4 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   );
 };
 
-export default AdminScreen; 
+export default AdminScreen;
