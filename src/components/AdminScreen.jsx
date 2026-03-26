@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 
 const AdminScreen = ({ appData, goBackToRoles }) => {
@@ -39,6 +39,9 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const [newGroupBuy, setNewGroupBuy] = useState({ name: '', totalCost: '', maxP: '', icon: '🤝' });
   const [adminChatInput, setAdminChatInput] = useState(''); 
 
+  const csvDenemeRef = useRef(null);
+  const csvYaziliRef = useRef(null);
+
   const classList = ["5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf"];
   const eduClassList = ["5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf", "ELİT", "STANDART"];
   const levelList = ["SEVİYE 1/A", "SEVİYE 1/B", "SEVİYE 2"];
@@ -57,6 +60,18 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       "STANDART": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"] 
   };
   const valuesSubjectsList = ["K.Kerim", "İlmihal", "Siyer-i Nebi", "Adabı Muaşeret", "Tecvid"];
+
+  const collectionTypes = [
+      { id: 'AKILLI SAAT', label: 'Akıllı Saat', icon: '⌚' }, 
+      { id: 'FORMA', label: 'Forma', icon: '👕' },
+      { id: 'KRAMPON', label: 'Krampon', icon: '👟' }, 
+      { id: 'ÇİKOLATA EVİM', label: 'Çikolata Evim', icon: '🍫' },
+      { id: 'KÜNEFE', label: 'Künefe', icon: '🍮' }, 
+      { id: 'NEŞELİ BALIK', label: 'Neşeli Balık', icon: '🐟' },
+      { id: 'PİZZA', label: 'Pizza', icon: '🍕' }, 
+      { id: 'FUTBOL TOPU', label: 'Futbol Topu', icon: '⚽' }
+  ];
+  const exactCollections = collectionTypes.map(c => c.id);
 
   useEffect(() => {
       if (!appData || !roster.length) return;
@@ -171,19 +186,97 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     const updates = {};
     if (type === 'deneme') {
         let totalNet = 0;
+        let subjectsData = {};
         for(let i=0; i<examSubjects.length; i++) { 
-            const d = parseFloat(examData[`d_${i}`]) || 0; const y = parseFloat(examData[`y_${i}`]) || 0; totalNet += (d - (y/3)); 
+            const d = parseFloat(examData[`d_${i}`]) || 0; 
+            const y = parseFloat(examData[`y_${i}`]) || 0; 
+            const b = parseFloat(examData[`b_${i}`]) || 0;
+            const net = d - (y/3); 
+            totalNet += net; 
+            subjectsData[i] = { d, y, b, net };
         }
-        updates[`exams/${selectedStudent}/deneme`] = { ...examData, net: totalNet, date: new Date().toDateString() };
+        updates[`exams/${selectedStudent}/deneme`] = { 
+            subjects: subjectsData, 
+            net: totalNet, 
+            target: parseFloat(examData.target) || 0,
+            date: new Date().toDateString() 
+        };
     } else if (type === 'yazili') {
-        let total = 0; let count = 0;
+        let total = 0; let count = 0; let writeData = {};
         for(let i=0; i<examSubjects.length; i++) { 
-            const val = examData[`p_${i}`]; if(val !== undefined && val !== '') { total += parseFloat(val); count++; } 
+            const val = examData[`p_${i}`]; 
+            if(val !== undefined && val !== '') { total += parseFloat(val); count++; writeData[`p_${i}`] = parseFloat(val); } 
         }
-        updates[`exams/${selectedStudent}/yazili`] = { ...examData, avg: count > 0 ? (total / count) : 0, date: new Date().toDateString() };
+        updates[`exams/${selectedStudent}/yazili`] = { 
+            ...writeData, 
+            avg: count > 0 ? (total / count) : 0, 
+            target: parseFloat(examData.target) || 0,
+            date: new Date().toDateString() 
+        };
     }
     db.ref('mavikent_premium').update(updates); 
     setSelectedStudent(null); setModalType(null); alert(`${type.toUpperCase()} Kaydedildi!`);
+  };
+
+  const downloadCSVTemplate = (type) => {
+      let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+      if (type === 'deneme') {
+          csvContent += "Ogrenci_Adi,Turkce_D,Turkce_Y,Turkce_B,Matematik_D,Matematik_Y,Matematik_B,Fen_D,Fen_Y,Fen_B,Sosyal_D,Sosyal_Y,Sosyal_B,Ingilizce_D,Ingilizce_Y,Ingilizce_B,Din_D,Din_Y,Din_B,Hedef_Net\n";
+          getFilteredRoster(selectedSession).forEach(name => { csvContent += `${name},0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n`; });
+      } else if (type === 'yazili') {
+          csvContent += "Ogrenci_Adi,Turkce,Matematik,Fen,Sosyal,Ingilizce,Din,Hedef_Ortalama\n";
+          getFilteredRoster(selectedSession).forEach(name => { csvContent += `${name},0,0,0,0,0,0,0\n`; });
+      }
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Mavikent_${selectedSession}_${type}_Sablon.csv`);
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  };
+
+  const handleCSVUpload = (e, type) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+          alert("⚠️ Lütfen Excel'de dosyanızı doldurduktan sonra 'Farklı Kaydet' diyerek 'CSV (Virgülle ayrılmış)' formatında kaydedip sisteme yükleyin.");
+          e.target.value = null; return;
+      }
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+          const text = evt.target.result;
+          const rows = text.split(/\r?\n/).map(row => row.split(/[,;]/));
+          const updates = {}; let matchCount = 0;
+          const normalize = (str) => String(str).toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ').trim();
+          
+          for (let i = 1; i < rows.length; i++) { 
+              const cols = rows[i];
+              if (cols.length < 2) continue; 
+              const rawName = cols[0];
+              const matchedStudent = roster.find(n => normalize(n) === normalize(rawName));
+              if (matchedStudent) {
+                  matchCount++;
+                  if (type === 'deneme') {
+                      let totalNet = 0; let subjectsData = {};
+                      for (let j = 0; j < 6; j++) {
+                          const d = parseFloat(cols[1 + j*3]) || 0; const y = parseFloat(cols[2 + j*3]) || 0; const b = parseFloat(cols[3 + j*3]) || 0;
+                          const net = d - (y/3); totalNet += net; subjectsData[j] = { d, y, b, net };
+                      }
+                      updates[`exams/${matchedStudent}/deneme`] = { subjects: subjectsData, net: totalNet, target: parseFloat(cols[19]) || 0, date: new Date().toDateString() };
+                  } else if (type === 'yazili') {
+                      let total = 0; let count = 0; let writeData = {};
+                      for (let j = 0; j < 6; j++) {
+                          const val = cols[1 + j];
+                          if (val !== undefined && val !== '' && !isNaN(parseFloat(val))) { total += parseFloat(val); count++; writeData[`p_${j}`] = parseFloat(val); }
+                      }
+                      updates[`exams/${matchedStudent}/yazili`] = { ...writeData, avg: count > 0 ? (total / count) : 0, target: parseFloat(cols[7]) || 0, date: new Date().toDateString() };
+                  }
+              }
+          }
+          if (Object.keys(updates).length > 0) { db.ref('mavikent_premium').update(updates); alert(`✅ Başarılı! ${matchCount} öğrencinin sınav verisi aktarıldı.`); } 
+          else { alert('⚠️ Hata: İsimler eşleşmedi.'); }
+          e.target.value = null; 
+      };
+      reader.readAsText(file, 'UTF-8');
   };
 
   const handleAddProduct = () => {
@@ -254,12 +347,25 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       const waitingKeys = Object.keys(appData?.deliveries || {}).filter(k => appData.deliveries[k].st === 'wait');
       if (waitingKeys.length === 0) return alert("Bekleyen teslimat yok.");
       const updates = {};
+      
       if (action === 'approve') {
-          if(!window.confirm(`Toplu onaylansın mı?`)) return;
-          waitingKeys.forEach(k => updates[`deliveries/${k}/st`] = 'done'); db.ref('mavikent_premium').update(updates); alert(`✅ Toplu onaylandı!`);
+          if(!window.confirm(`Görünen tüm teslimatları onaylamak istediğine emin misin?`)) return;
+          waitingKeys.forEach(k => {
+              const item = appData.deliveries[k];
+              const iName = String(item.n || item.i || '').toUpperCase();
+              const isDigital = item.type === 'multiplier' || item.type === 'streak' || item.type === 'avatar' || item.type === 'title' || item.type === 'frame' || item.type === 'ticket' || iName.includes("BİLET") || iName.includes("ÇEKİLİŞ");
+
+              if (isDigital) {
+                  if (item.type === 'ticket' || iName.includes("BİLET") || iName.includes("ÇEKİLİŞ")) { updates[`tickets/${item.s}`] = (Number(appData?.tickets?.[item.s]) || 0) + 1; } 
+                  else if (item.type === 'multiplier') { updates[`active_cards/${item.s}/multiplier`] = { date: new Date().toDateString(), val: "2X" }; } 
+                  else if (item.type === 'streak') { const today = new Date(); let nextSat = new Date(); nextSat.setDate(today.getDate() + 6); nextSat.setHours(15, 0, 0, 0); updates[`active_cards/${item.s}/streak`] = { val: "aktif", date: new Date().toDateString(), end: nextSat.getTime() }; } 
+              }
+              updates[`deliveries/${k}/st`] = 'done';
+          });
+          db.ref('mavikent_premium').update(updates); alert(`✅ Toplu onaylandı!`);
       } 
       else if (action === 'refund') {
-          if(!window.confirm(`Toplu iptal ve iade edilsin mi?`)) return;
+          if(!window.confirm(`Tüm bekleyen siparişleri iptal edip ücretlerini iade etmek istediğine emin misin?`)) return;
           let localWallets = {};
           waitingKeys.forEach(k => {
               const item = appData.deliveries[k]; let refundAmt = 0; const itemName = String(item.n || item.i || '');
@@ -269,17 +375,207 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
               if (refundAmt > 0) {
                   if (localWallets[item.s] === undefined) localWallets[item.s] = Number(appData?.wallet?.[item.s] || 0);
                   localWallets[item.s] += refundAmt; updates[`wallet/${item.s}`] = localWallets[item.s];
-                  updates[`transactions/${item.s}/txn_${Date.now()}_${Math.floor(Math.random()*1000)}`] = { desc: `İptal İadesi: ${itemName}`, amt: refundAmt, date: new Date().toLocaleString('tr-TR') };
+                  updates[`transactions/${item.s}/txn_${Date.now()}_${Math.floor(Math.random()*1000)}`] = { desc: `Toplu İade: ${itemName}`, amt: refundAmt, date: new Date().toLocaleString('tr-TR') };
               }
           });
-          db.ref('mavikent_premium').update(updates); alert(`💰 İadeleri tamamlandı!`);
+          db.ref('mavikent_premium').update(updates); alert(`💰 İadeler tamamlandı!`);
       }
+      else if (action === 'delete') {
+          if(!window.confirm(`Tüm bekleyen siparişleri İADESİZ olarak silmek istediğine emin misin?`)) return;
+          waitingKeys.forEach(k => updates[`deliveries/${k}`] = null);
+          db.ref('mavikent_premium').update(updates); alert(`🗑️ Teslimatlar silindi.`);
+      }
+  };
+
+  const handleApproveDelivery = (key, item) => {
+      if (!window.confirm("Bu siparişi onaylamak (teslim etmek) istediğinize emin misiniz?")) return;
+      const updates = {};
+      const iName = String(item.n || item.i || '').toUpperCase();
+      const iType = String(item.type || '').toLowerCase();
+      
+      const isDigital = iType === 'multiplier' || iType === 'streak' || iType === 'avatar' || iType === 'title' || iType === 'frame' || iType === 'ticket' || iName.includes("BİLET") || iName.includes("ÇEKİLİŞ") || iName.includes("2X") || iName.includes("ÇARPAN") || iName.includes("KORUMA") || iName.includes("SERİ") || iName.includes("ÜNVAN");
+
+      if (isDigital) {
+          if (iType === 'ticket' || iName.includes("BİLET") || iName.includes("ÇEKİLİŞ")) { updates[`tickets/${item.s}`] = (Number(appData?.tickets?.[item.s]) || 0) + 1; } 
+          else if (iType === 'multiplier' || iName.includes("2X") || iName.includes("ÇARPAN")) { updates[`active_cards/${item.s}/multiplier`] = { date: new Date().toDateString(), val: "2X" }; } 
+          else if (iType === 'streak' || iName.includes("KORUMA") || iName.includes("SERİ")) { const today = new Date(); let nextSat = new Date(); nextSat.setDate(today.getDate() + 6); nextSat.setHours(15, 0, 0, 0); updates[`active_cards/${item.s}/streak`] = { val: "aktif", date: new Date().toDateString(), end: nextSat.getTime() }; } 
+          else if (iType === 'title' || iName.includes("ÜNVAN")) { updates[`active_cards/${item.s}/title`] = { val: item.n || item.i, exp: Date.now() + 14 * 24 * 60 * 60 * 1000 }; } 
+          else if (iType === 'avatar' || iType === 'frame') { updates[`active_cards/${item.s}/${iType}`] = { val: item.val || item.i || iName, exp: Date.now() + 30 * 24 * 60 * 60 * 1000 }; }
+          updates[`global_chat/sys_${Date.now()}`] = { s: 'SİSTEM', t: `✨ ${item.s} adlı öğrencinin dijital ürünü (${item.n || item.i}) yönetici tarafından onaylandı ve hesaba tanımlandı!`, type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) };
+      } else {
+          updates[`global_chat/sys_${Date.now()}`] = { s: 'SİSTEM', t: `📦 ${item.s} adlı öğrencinin siparişi (${item.n || item.i}) teslim edildi! Afiyet olsun.`, type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) };
+      }
+      updates[`deliveries/${key}/st`] = 'done';
+      db.ref('mavikent_premium').update(updates); alert(`✅ Onaylandı ve duyurusu yapıldı!`);
+  };
+
+  const handleCancelDelivery = (k, item, withRefund) => {
+      if (!window.confirm(withRefund ? "İptal edip iade yapmak istediğinize emin misiniz?" : "İadesiz SİLMEK istediğinize emin misiniz?")) return;
+      const updates = {}; updates[`deliveries/${k}`] = null;
+      if (withRefund) {
+          let refundAmt = 0; const iName = String(item.n || item.i || '');
+          if (iName.includes('(Çekiliş)')) refundAmt = 20; else if (iName.includes('(Kazı Kazan)')) refundAmt = 15;
+          else { const prod = Object.values(appData?.market_products || {}).find(p => p.n === iName); if (prod && prod.p) refundAmt = Number(prod.p); }
+          
+          if (refundAmt > 0) {
+              updates[`wallet/${item.s}`] = (Number(appData?.wallet?.[item.s]) || 0) + refundAmt;
+              updates[`transactions/${item.s}/txn_ref_${Date.now()}`] = { desc: `İade: ${iName}`, amt: refundAmt, date: new Date().toLocaleString('tr-TR') };
+              alert(`✅ İade edildi: ${refundAmt} M`);
+          } else { alert(`✅ İptal edildi. (Sabit bedel bulunamadı)`); }
+      } else { alert("🗑️ Kalıcı olarak silindi."); }
+      db.ref('mavikent_premium').update(updates);
+  };
+
+  const handleDeliverCollection = (student, collName, keysArray) => {
+      if(!window.confirm(`${student} adlı öğrenciye ${collName} ödülünü fiziki olarak verdiniz mi?`)) return;
+      const updates = {};
+      keysArray.slice(0, 3).forEach(k => { updates[`deliveries/${k}`] = null; });
+      const newKey = db.ref().push().key;
+      updates[`deliveries/${newKey}`] = { s: student, i: `${collName} (Ödül Teslim Edildi)`, st: 'done', type: 'reward', val: '🏆', date: new Date().toLocaleDateString('tr-TR') };
+      db.ref('mavikent_premium').update(updates); alert(`🏆 Ödül verildi!`);
+  };
+
+  const handleCancelCollection = (student, keysArray, itemsArray, withRefund) => {
+      if (!window.confirm(withRefund ? `Parçaları iptal edip iade yapmak istiyor musun?` : `İadesiz silmek istiyor musun?`)) return;
+      const updates = {}; let totalRefund = 0;
+      keysArray.forEach((k, idx) => {
+          updates[`deliveries/${k}`] = null;
+          if (withRefund) {
+              const iName = String(itemsArray[idx].n || itemsArray[idx].i || '').toUpperCase();
+              if (iName.includes('(ÇEKİLİŞ)')) totalRefund += 20; else if (iName.includes('(KAZI KAZAN)')) totalRefund += 15;
+          }
+      });
+      if (withRefund && totalRefund > 0) {
+          updates[`wallet/${student}`] = (Number(appData?.wallet?.[student]) || 0) + totalRefund;
+          updates[`transactions/${student}/txn_ref_${Date.now()}`] = { desc: `Parça İadesi`, amt: totalRefund, date: new Date().toLocaleString('tr-TR') };
+          alert(`✅ ${totalRefund} M iade edildi.`);
+      } else { alert("🗑️ Parçalar silindi."); }
+      db.ref('mavikent_premium').update(updates);
   };
 
   const sendAdminChat = () => {
       if(!adminChatInput.trim()) return;
       db.ref('mavikent_premium/global_chat').push({ s: 'YÖNETİCİ', t: adminChatInput, ts: Date.now(), type: 'admin', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) });
       setAdminChatInput('');
+  };
+
+  const cleanString = (str) => {
+      if (!str) return '';
+      let clean = String(str).replace(/\(.*?\)/g, '').trim().toLocaleUpperCase('tr-TR');
+      clean = clean.replace(/[^\w\sÇĞİÖŞÜçğıöşü]/gi, '').trim(); 
+      if (clean.includes('SAAT')) return 'AKILLI SAAT';
+      if (clean.includes('FORMA')) return 'FORMA';
+      if (clean.includes('KRAMPON')) return 'KRAMPON';
+      if (clean.includes('EVİM') || clean.includes('KOLATA') || clean.includes('ÇIKOLATA')) return 'ÇİKOLATA EVİM';
+      if (clean.includes('KNEFE') || clean.includes('KÜNEFE')) return 'KÜNEFE';
+      if (clean.includes('BALIK') || clean.includes('NEŞELİ')) return 'NEŞELİ BALIK';
+      if (clean.includes('PZZA') || clean.includes('PİZZA') || clean.includes('PIZZA')) return 'PİZZA';
+      if (clean.includes('TOP') || clean.includes('FUTBOL')) return 'FUTBOL TOPU';
+      if (clean.includes('ÇEKİLİŞ') || clean.includes('CEKILIS')) return 'DİNAMİK ÇEKİLİŞ HAKKI';
+      return clean;
+  };
+
+  const loadHtml2Canvas = async () => {
+      if (window.html2canvas) return window.html2canvas;
+      return new Promise((resolve) => { const script = document.createElement('script'); script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; script.onload = () => resolve(window.html2canvas); document.head.appendChild(script); });
+  };
+
+  const downloadPanoAsJPG = async (type) => {
+      const btnId = `btn-pano-${type}`; const originalText = document.getElementById(btnId).innerText; document.getElementById(btnId).innerText = "⏳ Lüks Pano Hazırlanıyor...";
+      const html2canvas = await loadHtml2Canvas(); const container = document.createElement('div');
+      container.style.cssText = "position:absolute;left:-9999px;top:0;width:1200px;background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:60px;font-family:'Plus Jakarta Sans',sans-serif;color:white;border-radius:40px;";
+      
+      const renderTop3 = (title, data, unit, icon) => {
+          let html = `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);padding:35px;border-radius:30px;width:31%;box-shadow:0 20px 40px rgba(0,0,0,0.3);"><div style="font-size:60px;text-align:center;margin-bottom:20px;filter:drop-shadow(0 10px 10px rgba(0,0,0,0.5));">${icon}</div><h3 style="text-align:center;color:#d4af37;font-size:22px;font-weight:900;margin:0 0 30px 0;letter-spacing:1px;text-transform:uppercase;">${title}</h3>`;
+          const topData = data.slice(0, 3);
+          if(topData.length === 0 || topData[0].val === 0) { html += `<div style="text-align:center;color:#64748b;font-weight:700;font-size:18px;">Henüz Veri Yok</div>`; } else { topData.forEach((item, idx) => { const colors = ['#f59e0b', '#cbd5e1', '#b45309']; const bgColors = ['rgba(245,158,11,0.1)', 'rgba(203,213,225,0.1)', 'rgba(180,83,9,0.1)']; if(item.val > 0) { html += `<div style="display:flex;justify-content:space-between;align-items:center;background:${bgColors[idx]};padding:20px;border-radius:20px;margin-bottom:15px;border-left:4px solid ${colors[idx]};"><div style="display:flex;align-items:center;gap:15px;"><span style="font-size:24px;font-weight:900;color:${colors[idx]}">#${idx+1}</span><span style="font-size:18px;font-weight:800;color:white;">${String(item.n).split(' ')[0]}</span></div><div style="font-size:24px;font-weight:900;color:white;">${item.val} <span style="font-size:12px;color:#94a3b8;">${unit}</span></div></div>`; } }); }
+          html += `</div>`; return html;
+      };
+      
+      let titleStr = ''; let contentHTML = '<div style="display:flex;justify-content:space-between;margin-top:50px;">';
+      if (type === 'egitim') {
+          titleStr = 'HAFTANIN EĞİTİM LİDERLERİ';
+          contentHTML += renderTop3('Soru Şampiyonu', roster.map(n => ({ n, val: Number(appData?.education_d?.[n]?.questions||0) })).sort((a,b)=>b.val-a.val), 'Soru', '🧠');
+          contentHTML += renderTop3('Kitap Kurdu', roster.map(n => ({ n, val: Number(appData?.education_d?.[n]?.pages||0) })).sort((a,b)=>b.val-a.val), 'Sayfa', '📖');
+          contentHTML += renderTop3('Deneme Fatihi', roster.map(n => ({ n, val: Number(appData?.exams?.[n]?.deneme?.net||0) })).sort((a,b)=>b.val-a.val), 'Net', '🎯');
+      } else if (type === 'isleyis') {
+          titleStr = 'YURT İŞLEYİŞ VE LİDERLİK PANOSU';
+          contentHTML += renderTop3('RP Kralları', roster.map(n => ({ n, val: Number(appData?.season_score?.[n]||0) })).sort((a,b)=>b.val-a.val), 'RP', '👑');
+          contentHTML += renderTop3('M-Coin Zenginleri', roster.map(n => ({ n, val: Number(appData?.wallet?.[n]||0) })).sort((a,b)=>b.val-a.val), 'M', '💳');
+          contentHTML += renderTop3('XP Liderleri', roster.map(n => ({ n, val: Number(appData?.xp?.[n]||0) })).sort((a,b)=>b.val-a.val), 'XP', '⭐');
+      } else if (type === 'degerler') {
+          titleStr = 'DEĞERLER EĞİTİMİ YILDIZLARI';
+          contentHTML += renderTop3('Katılım Liderleri', roster.map(n => { const counts = Object.values(appData?.values_edu_d?.[n] || {}).filter(v => v.done).length; return { n, val: counts }; }).sort((a,b)=>b.val-a.val), 'Ders', '🕌');
+          contentHTML += renderTop3('Takke Muhafızları', roster.map(n => { const sess = appData?.yoklama_d?.[n]?.sessions || {}; let tCount = Object.values(sess).filter(s => s.st === 't').length; return { n, val: tCount }; }).sort((a,b)=>b.val-a.val), 'Kez', '👳‍♂️');
+          contentHTML += renderTop3('Kanaat Liderleri', roster.map(n => ({ n, val: Number(appData?.kanaat_w?.[n]||0) })).sort((a,b)=>b.val-a.val), 'Puan', '✍️');
+      }
+      contentHTML += '</div>';
+      
+      container.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid rgba(255,255,255,0.1);padding-bottom:40px;"><div><h1 style="margin:0;font-size:60px;font-weight:900;letter-spacing:-2px;color:white;">MAVİKENT <span style="color:#d4af37;">ELITE</span></h1><h2 style="margin:10px 0 0 0;font-size:26px;color:#cbd5e1;font-weight:700;letter-spacing:1px;">${titleStr}</h2></div><div style="text-align:right;"><div style="font-size:20px;font-weight:600;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;letter-spacing:2px;">Tarih</div><div style="font-size:32px;font-weight:900;color:#d4af37;">${new Date().toLocaleDateString('tr-TR')}</div></div></div>${contentHTML}`;
+      document.body.appendChild(container);
+      
+      try { const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#0f172a', useCORS: true }); const link = document.createElement('a'); link.download = `Mavikent_${type}_Panosu.jpg`; link.href = canvas.toDataURL('image/jpeg', 0.9); link.click(); } catch(e) { console.error(e); } finally { document.body.removeChild(container); document.getElementById(btnId).innerText = originalText; }
+  };
+
+  const downloadReportAsJPG = async (type, className) => {
+      const btnId = `btn-jpg-${type}`; const originalText = document.getElementById(btnId).innerText; document.getElementById(btnId).innerText = "⏳ Hazırlanıyor...";
+      
+      const html2canvas = await loadHtml2Canvas(); const container = document.createElement('div');
+      container.style.cssText = "position:absolute;left:-9999px;top:0;width:1200px;background:#ffffff;padding:40px;font-family:'Plus Jakarta Sans',sans-serif;color:#0f172a;";
+      
+      const studentsToMap = type === 'degerler' ? roster.filter(n => appData?.student_levels?.[n] === className) : getFilteredRoster(className);
+      let title = ''; let tableHTML = `<table style="width: 100%; border-collapse: collapse; text-align: center; margin-top: 20px;">`;
+      
+      if (type === 'deneme') {
+          title = 'DENEME SINAVI SONUÇLARI (VELİ BİLGİLENDİRME)';
+          let dataArr = studentsToMap.map(n => {
+              const data = appData?.exams?.[n]?.deneme || {}; let totalNet = 0; let subsHTML = '';
+              examSubjects.forEach((s, i) => { const d = parseFloat(data?.subjects?.[i]?.d) || 0; const y = parseFloat(data?.subjects?.[i]?.y) || 0; const b = parseFloat(data?.subjects?.[i]?.b) || 0; const net = d - (y/3); totalNet += net; subsHTML += `<td style="padding:15px;border-bottom:1px solid #e2e8f0;"><div style="font-size:11px;color:#64748b;">${d}D ${y}Y ${b}B</div><div style="font-weight:900;font-size:15px;">${net.toFixed(2)} N</div></td>`; });
+              const target = parseFloat(data.target)||0; let statusHTML = '-';
+              if (target > 0) { statusHTML = totalNet >= target ? `<span style="background:#10b981;color:white;padding:6px 12px;border-radius:8px;font-weight:900;font-size:12px;letter-spacing:0.5px;">HEDEFİ GEÇTİ ✅</span>` : `<span style="background:#ef4444;color:white;padding:6px 12px;border-radius:8px;font-weight:900;font-size:12px;letter-spacing:0.5px;">HEDEFİN ALTINDA ❌</span>`; }
+              return { n, totalNet, target, subsHTML, statusHTML };
+          }).sort((a,b) => b.totalNet - a.totalNet);
+          
+          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th>`;
+          examSubjects.forEach(s => tableHTML += `<th style="padding:15px;font-size:13px;">${s}</th>`);
+          tableHTML += `<th style="padding:15px;background:#3b82f6;">Toplam Net</th><th style="padding:15px;background:#d4af37;color:#0f172a;">Hedef</th><th style="padding:15px;border-radius:0 12px 0 0;">Durum</th></tr>`;
+          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:15px;border-bottom:1px solid #e2e8f0;">${d.n}</td>${d.subsHTML}<td style="padding:15px;font-weight:900;font-size:18px;color:#3b82f6;border-bottom:1px solid #e2e8f0;">${d.totalNet.toFixed(2)}</td><td style="padding:15px;font-weight:800;font-size:16px;color:#d4af37;border-bottom:1px solid #e2e8f0;">${d.target}</td><td style="padding:15px;border-bottom:1px solid #e2e8f0;">${d.statusHTML}</td></tr>`; });
+      
+      } else if (type === 'yazili') {
+          title = 'HAFTALIK YAZILI DEĞERLENDİRME';
+          let dataArr = studentsToMap.map(n => {
+              const data = appData?.exams?.[n]?.yazili || {}; let total = 0; let count = 0; let subsHTML = '';
+              examSubjects.forEach((s, i) => { const val = data[`p_${i}`]; if (val!==undefined&&val!=='') { total+=parseFloat(val); count++; } subsHTML += `<td style="padding:15px;border-bottom:1px solid #e2e8f0;font-weight:800;font-size:16px;">${val||'-'}</td>`; });
+              const avg = count>0 ? (total/count) : 0; const target = parseFloat(data.target)||0; let statusHTML = '-';
+              if (target>0 && avg>0) { statusHTML = avg >= target ? `<span style="background:#10b981;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">HEDEFİ GEÇTİ ✅</span>` : `<span style="background:#ef4444;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">HEDEFİN ALTINDA ❌</span>`; }
+              return { n, avg, target, subsHTML, statusHTML };
+          }).sort((a,b) => b.avg - a.avg);
+          
+          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th>`;
+          examSubjects.forEach(s => tableHTML += `<th style="padding:15px;">${s}</th>`);
+          tableHTML += `<th style="padding:15px;background:#3b82f6;">Ortalama</th><th style="padding:15px;background:#d4af37;color:#0f172a;">Hedef</th><th style="padding:15px;border-radius:0 12px 0 0;">Durum</th></tr>`;
+          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:16px;border-bottom:1px solid #e2e8f0;">${d.n}</td>${d.subsHTML}<td style="padding:15px;font-weight:900;font-size:20px;color:#3b82f6;border-bottom:1px solid #e2e8f0;">${d.avg.toFixed(1)}</td><td style="padding:15px;font-weight:800;font-size:18px;color:#d4af37;border-bottom:1px solid #e2e8f0;">${d.target}</td><td style="padding:15px;border-bottom:1px solid #e2e8f0;">${d.statusHTML}</td></tr>`; });
+      
+      } else if (type === 'egitim') {
+          title = 'GÜNLÜK EĞİTİM VE ÖDEV TAKİBİ';
+          let dataArr = studentsToMap.map(n => { const d = appData?.education_d?.[n] || {}; return { n, lessons: (d.lessons||[]).join(', ')||'-', pages: d.pages||0, questions: d.questions||0 }; }).sort((a,b) => b.questions - a.questions);
+          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th><th style="padding:15px;">Ödevler</th><th style="padding:15px;">Kitap (S)</th><th style="padding:15px;border-radius:0 12px 0 0;background:#3b82f6;">Soru</th></tr>`;
+          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:16px;border-bottom:1px solid #e2e8f0;">${d.n}</td><td style="padding:15px;font-weight:700;color:#10b981;border-bottom:1px solid #e2e8f0;">${d.lessons}</td><td style="padding:15px;font-weight:800;font-size:16px;border-bottom:1px solid #e2e8f0;">${d.pages}</td><td style="padding:15px;font-weight:900;font-size:20px;color:#3b82f6;border-bottom:1px solid #e2e8f0;">${d.questions}</td></tr>`; });
+      
+      } else if (type === 'degerler') {
+          const todayStr = new Date().toDateString();
+          const log = appData?.values_log?.[className]?.[todayStr] || { subject: 'Belirtilmedi', topic: '-' };
+          title = `DEĞERLER EĞİTİMİ (${log.subject} - ${log.topic})`;
+          let dataArr = studentsToMap.map(n => { const isDone = appData?.values_edu_d?.[n]?.[todayStr]?.done; return { n, statusHTML: isDone ? `<span style="background:#10b981;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">KATILDI ✓</span>` : `<span style="background:#ef4444;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">KATILMADI ✕</span>` }; });
+          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th><th style="padding:15px;border-radius:0 12px 0 0;">Günlük Katılım</th></tr>`;
+          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:16px;border-bottom:1px solid #e2e8f0;color:#0f172a;">${d.n}</td><td style="padding:15px;border-bottom:1px solid #e2e8f0;">${d.statusHTML}</td></tr>`; });
+      }
+      
+      tableHTML += `</table>`;
+      container.innerHTML = `<div style="background:linear-gradient(135deg, #0f172a, #1e293b);padding:30px;border-radius:24px;display:flex;justify-content:space-between;align-items:center;color:white;box-shadow:0 10px 30px rgba(0,0,0,0.1);"><div><h1 style="margin:0;font-size:42px;font-weight:900;letter-spacing:-1px;">MAVİKENT <span style="color:#d4af37;">ELITE</span></h1><h2 style="margin:5px 0 0 0;font-size:20px;color:#cbd5e1;font-weight:700;">${className} - ${title}</h2></div><div style="text-align:right;"><div style="font-size:16px;font-weight:600;color:#cbd5e1;">Tarih</div><div style="font-size:22px;font-weight:800;color:#d4af37;">${new Date().toLocaleDateString('tr-TR')}</div></div></div>${tableHTML}`;
+      document.body.appendChild(container);
+      
+      try { const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff', useCORS: true }); const link = document.createElement('a'); link.download = `Mavikent_${className}_${type}.jpg`; link.href = canvas.toDataURL('image/jpeg', 0.9); link.click(); } catch(e) { console.error(e); } finally { document.body.removeChild(container); document.getElementById(btnId).innerText = originalText; }
   };
 
   const renderStudentGrid = (students, type) => (
@@ -302,11 +598,11 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         } 
         else if (currentModule === 'deneme_view') { 
             const net = appData?.exams?.[name]?.deneme?.net; 
-            subText = net ? `Net: ${parseFloat(net).toFixed(2)}` : 'Girilmedi'; 
+            subText = net !== undefined ? `Net: ${parseFloat(net).toFixed(2)}` : 'Girilmedi'; 
         } 
         else if (currentModule === 'yazili_view') { 
             const avg = appData?.exams?.[name]?.yazili?.avg; 
-            subText = avg ? `Ort: ${parseFloat(avg).toFixed(1)}` : 'Girilmedi'; 
+            subText = avg !== undefined ? `Ort: ${parseFloat(avg).toFixed(1)}` : 'Girilmedi'; 
         }
         
         const isEliteStud = isElite(name);
@@ -371,6 +667,10 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         .fade-in { animation: fadeIn 0.4s ease-out; }
         .popIn-anim { animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       `}</style>
+
+      {/* CSV YÜKLEME GİZLİ INPUTLARI */}
+      <input type="file" ref={csvDenemeRef} accept=".csv, .xlsx, .xls" style={{display: 'none'}} onChange={(e) => handleCSVUpload(e, 'deneme')} />
+      <input type="file" ref={csvYaziliRef} accept=".csv, .xlsx, .xls" style={{display: 'none'}} onChange={(e) => handleCSVUpload(e, 'yazili')} />
 
       <div className="popIn-anim" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '16px 24px', borderRadius: '50px', marginBottom: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
         <button onClick={handleBack} className="premium-btn" style={{ background: '#f1f5f9', color: '#0f172a', padding: '12px 20px', fontWeight: 800 }}>← {currentModule || dashboardView !== 'main' ? 'Geri Dön' : 'Çıkış Yap'}</button>
@@ -501,10 +801,37 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         
         {((currentModule === 'yoklama' && selectedSession) || ['telefon', 'yatak', 'kanaat'].includes(currentModule)) && renderStudentGrid(roster, 'isleyis')}
         
-        {/* EĞİTİM VE DEĞERLER EKRANLARI */}
-        {currentModule === 'class_view' && renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_ders')}
-        {currentModule === 'deneme_view' && renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_deneme')}
-        {currentModule === 'yazili_view' && renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_yazili')}
+        {/* EĞİTİM VE DEĞERLER EKRANLARI (EKLENEN ÖZELLİK: CSV VE ŞABLON BUTONLARI) */}
+        {currentModule === 'class_view' && (
+          <>
+             {renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_ders')}
+             <div style={{ display: 'flex', gap: '10px', marginTop: '20px', flexWrap: 'wrap' }}>
+                <button id="btn-jpg-egitim" onClick={() => downloadReportAsJPG('egitim', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#d4af37', color: 'white', fontSize: '16px', minWidth: '200px' }}>📸 VELİ BİLGİLENDİRME (JPG İNDİR)</button>
+             </div>
+          </>
+        )}
+        
+        {currentModule === 'deneme_view' && (
+          <>
+             {renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_deneme')}
+             <div style={{ display: 'flex', gap: '10px', marginTop: '20px', flexWrap: 'wrap' }}>
+                <button id="btn-jpg-deneme" onClick={() => downloadReportAsJPG('deneme', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#3b82f6', color: 'white', fontSize: '16px', minWidth: '200px' }}>📸 VELİ BİLGİLENDİRME (JPG İNDİR)</button>
+                <button onClick={() => downloadCSVTemplate('deneme')} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#10b981', color: 'white', fontSize: '16px', minWidth: '200px' }}>📥 ŞABLON İNDİR (CSV)</button>
+                <button onClick={() => csvDenemeRef.current.click()} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#0f172a', color: 'white', fontSize: '16px', minWidth: '200px' }}>📤 TOPLU SONUÇ YÜKLE</button>
+             </div>
+          </>
+        )}
+
+        {currentModule === 'yazili_view' && (
+          <>
+             {renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_yazili')}
+             <div style={{ display: 'flex', gap: '10px', marginTop: '20px', flexWrap: 'wrap' }}>
+                <button id="btn-jpg-yazili" onClick={() => downloadReportAsJPG('yazili', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#10b981', color: 'white', fontSize: '16px', minWidth: '200px' }}>📸 VELİ BİLGİLENDİRME (JPG İNDİR)</button>
+                <button onClick={() => downloadCSVTemplate('yazili')} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#3b82f6', color: 'white', fontSize: '16px', minWidth: '200px' }}>📥 ŞABLON İNDİR (CSV)</button>
+                <button onClick={() => csvYaziliRef.current.click()} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#0f172a', color: 'white', fontSize: '16px', minWidth: '200px' }}>📤 TOPLU SONUÇ YÜKLE</button>
+             </div>
+          </>
+        )}
         
         {currentModule === 'values_view' && (
           <>
@@ -517,6 +844,11 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                 <button onClick={() => { db.ref(`mavikent_premium/values_log/${selectedSession}/${new Date().toDateString()}`).set(valuesTopic); alert("Konu Kaydedildi"); }} className="premium-btn" style={{ width: '100%', padding: '16px', background: '#0f172a', color: 'white', fontSize: '15px' }}>DERSİ YAYINLA</button>
             </div>
             {renderStudentGrid(roster.filter(n => appData?.student_levels?.[n] === selectedSession), 'degerler')}
+            
+            {/* EKLENEN ÖZELLİK: DEĞERLER EĞİTİMİ VELİ BİLGİLENDİRME (JPG) BUTONU */}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px', flexWrap: 'wrap' }}>
+                <button id="btn-jpg-degerler" onClick={() => downloadReportAsJPG('degerler', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#d4af37', color: 'white', fontSize: '16px', minWidth: '200px' }}>📸 VELİ BİLGİLENDİRME (JPG İNDİR)</button>
+            </div>
           </>
         )}
 
@@ -618,7 +950,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         {currentModule === 'admin_market' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
              
-             {/* İHALE (AÇIK ARTIRMA) PANELİ */}
              <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
                 <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '20px' }}>🔨 HAFTALIK İHALE (AÇIK ARTIRMA)</h4>
                 {appData?.auction?.active ? (
@@ -636,7 +967,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                 )}
              </div>
 
-             {/* İMECE (KİTLE FONLAMA) PANELİ */}
              <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
                 <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '20px' }}>🤝 İMECE (ORTAK ALIM) OLUŞTUR</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
@@ -666,7 +996,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                    <option value="frame">🖼️ Avatar Çerçevesi</option>
                  </select>
 
-                 {/* EĞER PAKET SEÇİLİRSE ALTTA SEÇENEKLER ÇIKAR */}
                  {newProduct.type === 'bundle' && (
                      <div style={{ gridColumn: '1 / -1', background: 'white', padding: '15px', borderRadius: '16px', border: '1px dashed #cbd5e1' }}>
                          <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', marginBottom: '10px' }}>Paket İçeriğini Seçin (Mevcut Ürünler):</div>
@@ -714,58 +1043,125 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         )}
 
         {/* TESLİMAT YÖNETİMİ */}
-        {currentModule === 'admin_teslimat' && (
-          <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-             <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-               <button onClick={() => setDeliveryTab('wait')} className="premium-btn" style={{ flex: 1, padding: '16px', background: deliveryTab === 'wait' ? '#0f172a' : '#f1f5f9', color: deliveryTab === 'wait' ? 'white' : '#64748b', fontSize: '15px' }}>BEKLEYENLER</button>
-               <button onClick={() => setDeliveryTab('done')} className="premium-btn" style={{ flex: 1, padding: '16px', background: deliveryTab === 'done' ? '#10b981' : '#f1f5f9', color: deliveryTab === 'done' ? 'white' : '#64748b', fontSize: '15px' }}>ONAYLANMIŞ</button>
-             </div>
+        {currentModule === 'admin_teslimat' && (() => {
+            const allDeliveries = Object.keys(appData?.deliveries || {}).map(k => ({ key: k, ...appData.deliveries[k] })).reverse();
+            const waitDeliveries = allDeliveries.filter(d => d.st === 'wait');
+            const doneDeliveries = allDeliveries.filter(d => d.st === 'done');
 
-             {deliveryTab === 'wait' && Object.keys(appData?.deliveries || {}).filter(k => appData.deliveries[k].st === 'wait').length > 0 && (
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', background: '#fefce8', padding: '15px', borderRadius: '16px', border: '1px dashed #fde047' }}>
-                   <div style={{ width: '100%', fontSize: '13px', fontWeight: 900, color: '#b45309', marginBottom: '8px' }}>⚡ TOPLU İŞLEMLER (Tüm Bekleyenler)</div>
-                   <button onClick={() => handleBulkDeliveryAction('approve')} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '10px 15px', fontSize: '12px', flex: 1 }}>✅ TÜMÜNÜ ONAYLA</button>
-                   <button onClick={() => handleBulkDeliveryAction('refund')} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '10px 15px', fontSize: '12px', flex: 1 }}>💰 TÜMÜNÜ İPTAL ET (İADELİ)</button>
-                   <button onClick={() => handleBulkDeliveryAction('delete')} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '10px 15px', fontSize: '12px', flex: 1 }}>🗑️ TÜMÜNÜ SİL (İADESİZ)</button>
-                </div>
-             )}
+            const studentGroups = {};
+            waitDeliveries.forEach(d => {
+                if (!studentGroups[d.s]) {
+                    studentGroups[d.s] = { normal: [], collections: {} };
+                }
+                const itemNameUpper = String(d.i || d.n).toUpperCase();
+                const matchedCollection = exactCollections.find(cId => itemNameUpper.includes(cId));
+                
+                if (matchedCollection) {
+                    if (!studentGroups[d.s].collections[matchedCollection]) studentGroups[d.s].collections[matchedCollection] = [];
+                    studentGroups[d.s].collections[matchedCollection].push(d);
+                } else {
+                    studentGroups[d.s].normal.push(d);
+                }
+            });
 
-             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-               {Object.keys(appData?.deliveries || {}).reverse().filter(k => appData.deliveries[k].st === deliveryTab).map(k => {
-                 const item = appData.deliveries[k];
-                 const isLottery = item.i && item.i.includes("(Çekiliş)");
-                 const isScratch = item.i && item.i.includes("(Kazı Kazan)");
-                 const isBox = item.n && item.n.includes("(Kutudan)");
-                 let badgeText = isLottery ? '🎰 ÇEKİLİŞ' : isScratch ? '🪙 KAZI KAZAN' : isBox ? '🎁 KUTU' : '🛍️ MARKET';
-                 let badgeColor = isLottery ? '#8b5cf6' : isScratch ? '#059669' : isBox ? '#f59e0b' : '#3b82f6';
-                 
-                 return (
-                   <div key={k} style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center', padding: '20px', background: '#f8fafc', borderRadius: '20px', borderLeft: `6px solid ${badgeColor}` }}>
-                     <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                           <span style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>{item.s}</span>
-                           <span style={{ background: badgeColor, color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900 }}>{badgeText}</span>
-                        </div>
-                        <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>
-                           📦 {(item.n || item.i || '').replace('(Çekiliş)','').replace('(Kazı Kazan)','').replace('(Kutudan Çıktı)','')}
-                        </div>
+            return (
+              <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                 <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+                   <button onClick={() => setDeliveryTab('wait')} className="premium-btn" style={{ flex: 1, padding: '16px', background: deliveryTab === 'wait' ? '#0f172a' : '#f1f5f9', color: deliveryTab === 'wait' ? 'white' : '#64748b', fontSize: '15px' }}>BEKLEYENLER ({waitDeliveries.length})</button>
+                   <button onClick={() => setDeliveryTab('done')} className="premium-btn" style={{ flex: 1, padding: '16px', background: deliveryTab === 'done' ? '#10b981' : '#f1f5f9', color: deliveryTab === 'done' ? 'white' : '#64748b', fontSize: '15px' }}>ONAYLANMIŞ ({doneDeliveries.length})</button>
+                 </div>
+
+                 {deliveryTab === 'wait' && waitDeliveries.length > 0 && (
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', background: '#fefce8', padding: '15px', borderRadius: '16px', border: '1px dashed #fde047' }}>
+                       <div style={{ width: '100%', fontSize: '13px', fontWeight: 900, color: '#b45309', marginBottom: '8px' }}>⚡ TOPLU İŞLEMLER (Tüm Bekleyenler İçin)</div>
+                       <button onClick={() => handleBulkDeliveryAction('approve')} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '10px 15px', fontSize: '12px', flex: 1 }}>✅ TÜMÜNÜ ONAYLA</button>
+                       <button onClick={() => handleBulkDeliveryAction('refund')} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '10px 15px', fontSize: '12px', flex: 1 }}>💰 TÜMÜNÜ İPTAL ET (İADELİ)</button>
+                       <button onClick={() => handleBulkDeliveryAction('delete')} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '10px 15px', fontSize: '12px', flex: 1 }}>🗑️ TÜMÜNÜ SİL (İADESİZ)</button>
+                    </div>
+                 )}
+
+                 {deliveryTab === 'wait' ? (
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                         {Object.keys(studentGroups).length === 0 ? (
+                             <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontWeight: 700 }}>Bekleyen sipariş yok.</div>
+                         ) : (
+                             Object.keys(studentGroups).map(student => {
+                                 const { normal, collections } = studentGroups[student];
+                                 return (
+                                     <div key={student} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '20px' }}>
+                                         <div style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                             <span style={{ fontSize: '24px' }}>👤</span> {student}
+                                         </div>
+
+                                         {Object.keys(collections).map(cName => {
+                                             const items = collections[cName];
+                                             const count = items.length;
+                                             const isReady = count >= 3;
+                                             const cObj = collectionTypes.find(c => c.id === cName) || { icon: '🎁' };
+                                             
+                                             return (
+                                                 <div key={cName} style={{ background: isReady ? '#ecfdf5' : '#fffbeb', border: `1px solid ${isReady ? '#10b981' : '#f59e0b'}`, borderRadius: '16px', padding: '15px', marginBottom: '10px' }}>
+                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                                         <div style={{ fontWeight: 900, color: isReady ? '#047857' : '#b45309', fontSize: '15px' }}>{cObj.icon} {cName} ({count}/3)</div>
+                                                         {isReady ? (
+                                                             <button onClick={() => handleDeliverCollection(student, cName, items.map(i=>i.key))} className="premium-btn badge-glow" style={{ background: '#10b981', color: 'white', padding: '8px 16px', fontSize: '12px' }}>🏆 ÖDÜLÜ VER</button>
+                                                         ) : (
+                                                             <div style={{ display: 'flex', gap: '5px' }}>
+                                                                 <button onClick={() => handleCancelCollection(student, items.map(i=>i.key), items, true)} className="premium-btn" style={{ background: 'white', color: '#f59e0b', border: '1px solid #fcd34d !important', padding: '6px 12px', fontSize: '11px' }}>İade</button>
+                                                                 <button onClick={() => handleCancelCollection(student, items.map(i=>i.key), items, false)} className="premium-btn" style={{ background: 'white', color: '#ef4444', border: '1px solid #fca5a5 !important', padding: '6px 12px', fontSize: '11px' }}>Sil</button>
+                                                             </div>
+                                                         )}
+                                                     </div>
+                                                     <div style={{ display: 'flex', gap: '6px' }}>
+                                                         {[1,2,3].map(i => (<div key={i} style={{ flex: 1, height: '8px', borderRadius: '4px', background: i <= count ? (isReady ? '#10b981' : '#f59e0b') : '#e2e8f0' }}></div>))}
+                                                     </div>
+                                                 </div>
+                                             )
+                                         })}
+
+                                         {normal.map(ord => {
+                                             const isLottery = ord.i && ord.i.includes("(Çekiliş)");
+                                             const isScratch = ord.i && ord.i.includes("(Kazı Kazan)");
+                                             const isBox = ord.n && ord.n.includes("(Kutudan)");
+                                             let badgeText = isLottery ? '🎰 ÇEKİLİŞ' : isScratch ? '🪙 KAZI KAZAN' : isBox ? '🎁 KUTU' : '🛍️ MARKET';
+                                             let badgeColor = isLottery ? '#8b5cf6' : isScratch ? '#059669' : isBox ? '#f59e0b' : '#3b82f6';
+                                             
+                                             return (
+                                                 <div key={ord.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '12px 15px', borderRadius: '12px', borderLeft: `4px solid ${badgeColor}`, marginBottom: '8px' }}>
+                                                     <div>
+                                                         <div style={{ fontWeight: 800, fontSize: '14px', color: '#334155', marginBottom: '4px' }}>{ord.i || ord.n}</div>
+                                                         <span style={{ background: badgeColor, color: 'white', padding: '2px 6px', borderRadius: '6px', fontSize: '10px', fontWeight: 800 }}>{badgeText}</span>
+                                                     </div>
+                                                     <div style={{ display: 'flex', gap: '5px' }}>
+                                                         <button onClick={() => db.ref(`mavikent_premium/deliveries/${ord.key}/st`).set('done')} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '6px 12px', fontSize: '12px' }}>✅ Ver</button>
+                                                         <button onClick={() => handleCancelDelivery(ord.key, ord, true)} className="premium-btn" style={{ background: '#f1f5f9', color: '#f59e0b', padding: '6px 12px', fontSize: '12px' }}>💰 İade</button>
+                                                         <button onClick={() => handleCancelDelivery(ord.key, ord, false)} className="premium-btn" style={{ background: '#f1f5f9', color: '#ef4444', padding: '6px 12px', fontSize: '12px' }}>🗑️ Sil</button>
+                                                     </div>
+                                                 </div>
+                                             )
+                                         })}
+                                     </div>
+                                 )
+                             })
+                         )}
                      </div>
-                     
-                     {deliveryTab === 'wait' ? (
-                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                            <button onClick={() => db.ref(`mavikent_premium/deliveries/${k}/st`).set('done')} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '10px 15px', fontSize: '12px' }}>✅ ONAYLA</button>
-                            <button onClick={() => handleCancelDelivery(k, item, true)} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '10px 15px', fontSize: '12px' }}>💰 İPTAL & İADE</button>
-                            <button onClick={() => handleCancelDelivery(k, item, false)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '10px 15px', fontSize: '12px' }}>🗑️ İADESİZ SİL</button>
-                         </div>
-                     ) : (
-                         <button onClick={() => db.ref(`mavikent_premium/deliveries/${k}/st`).set('wait')} className="premium-btn" style={{ background: '#64748b', color: 'white', padding: '10px 15px', fontSize: '12px' }}>GERİ AL</button>
-                     )}
-                   </div>
-                 );
-               })}
-             </div>
-          </div>
-        )}
+                 ) : (
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                         {doneDeliveries.map(item => (
+                             <div key={item.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '15px 20px', borderRadius: '16px', borderLeft: '4px solid #10b981', borderTop: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
+                                 <div>
+                                    <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '15px' }}>{item.s}</div>
+                                    <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>{item.i || item.n} <span style={{fontSize:'11px', color:'#94a3b8'}}>({item.date})</span></div>
+                                 </div>
+                                 <button onClick={() => db.ref(`mavikent_premium/deliveries/${item.key}/st`).set('wait')} className="premium-btn" style={{ background: '#f1f5f9', color: '#64748b', padding: '8px 15px', fontSize: '12px' }}>Geri Al</button>
+                             </div>
+                         ))}
+                         {doneDeliveries.length === 0 && <div style={{ textAlign: 'center', color: '#94a3b8', padding: '20px', fontWeight: 700 }}>Geçmiş işlem bulunmuyor.</div>}
+                     </div>
+                 )}
+              </div>
+            );
+        })()}
 
         {/* GÖREV YÖNETİMİ */}
         {currentModule === 'admin_quests' && (
@@ -785,6 +1181,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                      <div style={{ display: 'flex', gap: '12px' }}>
                        <button onClick={() => { db.ref(`mavikent_premium/quests/${qId}`).update({ text: questInputs[`${qId}_text`], amt: questInputs[`${qId}_amt`], type: questInputs[`${qId}_type`] }); alert("Görev Yayınlandı!"); }} className="premium-btn" style={{ flex: 1, background: '#3b82f6', color: 'white', padding: '16px' }}>YAYINLA</button>
                        <button onClick={() => completeQuest(qId)} className="premium-btn" style={{ flex: 1, background: '#10b981', color: 'white', padding: '16px' }}>✅ BİTİR ({parts.length})</button>
+                       <button onClick={() => { if(window.confirm('Bu görevi tamamen silmek istediğine emin misin?')) { db.ref(`mavikent_premium/quests/${qId}`).set(null); setQuestInputs({...questInputs, [`${qId}_text`]: '', [`${qId}_amt`]: '', [`${qId}_type`]: 'M'}); alert("Görev Silindi!"); } }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '16px', minWidth: '80px' }}>🗑️ SİL</button>
                      </div>
                    </div>
                  )
@@ -856,18 +1253,16 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
            </div>
         )}
 
-        {/* AYARLAR YÖNETİMİ (OTOMATİK BORSA / ENFLASYON SIFIRLAMA EKLENDİ) */}
+        {/* AYARLAR YÖNETİMİ */}
         {currentModule === 'admin_settings' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
              <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', gridColumn: '1 / -1' }}>
                <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '8px' }}>⚡ SİSTEM ETKİNLİKLERİ</h4>
-               <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', fontWeight: 600 }}>Tüm yurtta aynı anda devreye girecek etkinlikler ve manuel bilet dağıtımı.</p>
+               <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', fontWeight: 600 }}>Tüm yurtta aynı anda devreye girecek etkinlikler ve enflasyon yönetimi.</p>
                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                   <button onClick={() => { db.ref('mavikent_premium/settings/global_event').set('2x_xp'); alert("Tüm yurt için 2X XP aktif edildi!"); }} className="premium-btn" style={{ background: appData?.settings?.global_event === '2x_xp' ? '#10b981' : '#f8fafc', color: appData?.settings?.global_event === '2x_xp' ? 'white' : '#64748b', border: appData?.settings?.global_event === '2x_xp' ? 'none' : '2px solid #e2e8f0' }}>⭐ TÜM YURT 2X ÇARPAN</button>
                   <button onClick={() => { db.ref('mavikent_premium/settings/global_event').set('none'); alert("Etkinlikler durduruldu."); }} className="premium-btn" style={{ background: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? '#ef4444' : '#f8fafc', color: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? 'white' : '#64748b', border: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? 'none' : '2px solid #e2e8f0' }}>🚫 ETKİNLİKLERİ BİTİR</button>
                   <button onClick={() => { if(window.confirm('Tüm öğrencilere anında 1 adet Şans Çarkı Bileti hediye edilecek. Onaylıyor musun?')) { const updates = {}; roster.forEach(n => { updates[`tickets/${n}`] = (Number(appData?.tickets?.[n]) || 0) + 1; }); db.ref('mavikent_premium').update(updates); alert('🎟️ Biletler başarıyla dağıtıldı!'); } }} className="premium-btn" style={{ background: '#8b5cf6', color: 'white', border: 'none', padding: '15px' }}>🎟️ HERKESE 1 BİLET DAĞIT</button>
-                  
-                  {/* KİŞİSEL ENFLASYONU (BORSA) SIFIRLAMA BUTONU */}
                   <button onClick={() => { if(window.confirm('Tüm öğrencilerin kişisel enflasyonları sıfırlanacak. Ürün fiyatları ana fiyata dönecek. Emin misiniz?')) { db.ref('mavikent_premium/personal_inflation').set(null); alert('Enflasyon sıfırlandı!'); } }} className="premium-btn" style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '15px' }}>🔄 KİŞİSEL ENFLASYONLARI SIFIRLA</button>
                </div>
              </div>
@@ -914,6 +1309,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
       </div> 
 
+      {/* --- AÇILIR PENCERELER (MODALLAR) --- */}
       {selectedStudent && modalType === 'isleyis' && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', animation: 'fadeIn 0.3s ease-out' }}>
           <div style={{ backgroundColor: '#ffffff', padding: '40px', borderRadius: '32px', width: '100%', maxWidth: '420px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)', maxHeight: '90vh', overflowY: 'auto', animation: 'popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}>
@@ -1008,25 +1404,56 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
       {selectedStudent && (modalType === 'deneme' || modalType === 'yazili') && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', animation: 'fadeIn 0.3s ease-out' }}>
-          <div style={{ backgroundColor: '#ffffff', padding: '40px', borderRadius: '32px', width: '100%', maxWidth: '450px', maxHeight: '90vh', overflowY: 'auto', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)', animation: 'popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+          <div style={{ backgroundColor: '#ffffff', padding: '40px', borderRadius: '32px', width: '100%', maxWidth: '450px', maxHeight: '90vh', overflowY: 'auto', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)', animation: 'popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)', position: 'relative' }}>
+             
+             <button onClick={() => {
+                 if(window.confirm(`${selectedStudent} adlı öğrencinin ${modalType === 'deneme' ? 'Deneme' : 'Yazılı'} geçmişi tamamen silinecek. Onaylıyor musun?`)) {
+                     db.ref(`mavikent_premium/exams/${selectedStudent}/${modalType}`).set(null);
+                     setExamData({});
+                     alert('Geçmiş başarıyla temizlendi!');
+                 }
+             }} style={{ position: 'absolute', top: '20px', right: '20px', background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5', padding: '8px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', transition: '0.2s' }}>🗑️ Geçmişi Sil</button>
+
              <h3 style={{ margin: '0 0 8px 0', color: '#0f172a', fontWeight: 900, fontSize: '28px', letterSpacing: '-0.5px' }}>{selectedStudent}</h3>
-             <div style={{ fontSize: '14px', color: '#3b82f6', fontWeight: 900, marginBottom: '30px', letterSpacing: '1px' }}>{modalType === 'deneme' ? 'DENEME SINAVI' : 'YAZILI'} GİRİŞİ</div>
+             <div style={{ fontSize: '14px', color: '#3b82f6', fontWeight: 900, marginBottom: '30px', letterSpacing: '1px' }}>{modalType === 'deneme' ? 'DETAYLI DENEME SINAVI (OPTİK)' : 'YAZILI GİRİŞİ'}</div>
              
              <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '24px', marginBottom: '24px', border: '1px solid #e2e8f0' }}>
-                 {examSubjects.map((sub, idx) => (
+                 {examSubjects.map((sub, idx) => {
+                     const currentD = parseFloat(examData[`d_${idx}`]) || 0;
+                     const currentY = parseFloat(examData[`y_${idx}`]) || 0;
+                     const currentNet = (currentD - (currentY / 3)).toFixed(2);
+                     
+                     return (
                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: idx !== examSubjects.length-1 ? '16px' : '0' }}>
-                         <span style={{ fontWeight: 800, fontSize: '16px', color: '#0f172a' }}>{sub}</span>
+                         <span style={{ fontWeight: 800, fontSize: '15px', color: '#0f172a', width: '100px', textAlign: 'left' }}>{sub}</span>
                          {modalType === 'deneme' ? (
-                             <div style={{ display: 'flex', gap: '12px' }}>
-                                 <input type="number" placeholder="D" value={examData[`d_${idx}`] || ''} onChange={e => setExamData({...examData, [`d_${idx}`]: e.target.value})} className="elite-input" style={{ width: '70px', padding: '12px 0', textAlign: 'center', fontSize: '16px' }} />
-                                 <input type="number" placeholder="Y" value={examData[`y_${idx}`] || ''} onChange={e => setExamData({...examData, [`y_${idx}`]: e.target.value})} className="elite-input" style={{ width: '70px', padding: '12px 0', textAlign: 'center', fontSize: '16px' }} />
+                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                 <input type="number" placeholder="D" value={examData[`d_${idx}`] || ''} onChange={e => setExamData({...examData, [`d_${idx}`]: e.target.value})} className="elite-input" style={{ width: '50px', padding: '10px 0', textAlign: 'center', fontSize: '14px', border: '1px solid #10b981 !important', color: '#047857', background: '#ecfdf5' }} title="Doğru Sayısı" />
+                                 <input type="number" placeholder="Y" value={examData[`y_${idx}`] || ''} onChange={e => setExamData({...examData, [`y_${idx}`]: e.target.value})} className="elite-input" style={{ width: '50px', padding: '10px 0', textAlign: 'center', fontSize: '14px', border: '1px solid #ef4444 !important', color: '#b91c1c', background: '#fef2f2' }} title="Yanlış Sayısı" />
+                                 <input type="number" placeholder="B" value={examData[`b_${idx}`] || ''} onChange={e => setExamData({...examData, [`b_${idx}`]: e.target.value})} className="elite-input" style={{ width: '50px', padding: '10px 0', textAlign: 'center', fontSize: '14px', border: '1px solid #94a3b8 !important', color: '#475569', background: '#f8fafc' }} title="Boş Sayısı" />
+                                 
+                                 <div style={{ width: '65px', padding: '10px 0', background: '#0f172a', color: 'white', borderRadius: '12px', fontWeight: 900, fontSize: '14px', textAlign: 'center' }} title="Ders Neti">
+                                     {currentNet}
+                                 </div>
                              </div>
                          ) : (
                              <input type="number" placeholder="Not" value={examData[`p_${idx}`] || ''} onChange={e => setExamData({...examData, [`p_${idx}`]: e.target.value})} className="elite-input" style={{ width: '90px', padding: '12px 0', textAlign: 'center', fontSize: '16px' }} />
                          )}
                      </div>
-                 ))}
+                 )})}
              </div>
+
+             {modalType === 'deneme' && (
+                 <div style={{ background: '#eff6ff', border: '2px dashed #3b82f6', padding: '15px', borderRadius: '16px', marginBottom: '20px', color: '#1e3a8a', fontWeight: 900, fontSize: '20px' }}>
+                     TOPLAM NET: {
+                         examSubjects.reduce((total, _, i) => {
+                             const d = parseFloat(examData[`d_${i}`]) || 0;
+                             const y = parseFloat(examData[`y_${i}`]) || 0;
+                             return total + (d - (y / 3));
+                         }, 0).toFixed(2)
+                     }
+                 </div>
+             )}
 
              <div style={{ textAlign: 'left', fontWeight: '900', fontSize: '14px', color: '#64748b', marginBottom: '10px', paddingLeft: '8px' }}>HEDEF {modalType === 'deneme' ? 'NET' : 'ORTALAMA'}:</div>
              <input type="number" value={examData.target || ''} onChange={e => setExamData({...examData, target: e.target.value})} placeholder="Örn: 85" className="elite-input" style={{ width: '100%', padding: '20px', fontSize: '20px', textAlign: 'center', marginBottom: '35px' }} />
