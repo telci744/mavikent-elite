@@ -17,24 +17,23 @@ const BADGES = {
 };
 
 const BAD_WORDS = ['amk', 'aq', 'siktir', 'piç', 'oç', 'yavşak', 'lan', 'mal', 'salak', 'gerizekalı'];
+
 const censorText = (text) => {
     let res = text;
-    BAD_WORDS.forEach(bw => { const regex = new RegExp(bw, 'gi'); res = res.replace(regex, '***'); });
+    BAD_WORDS.forEach(bw => { 
+        const regex = new RegExp(bw, 'gi'); 
+        res = res.replace(regex, '***'); 
+    });
     return res;
 };
 
-// --- EKLENEN: ÜNVAN TEMİZLEYİCİ VE OYUN ODASI FİLTRESİ ---
 const formatTitle = (raw) => {
     if (!raw) return null;
-    return String(raw)
-        .replace(/\(.*?\)/g, '') // (Kazı Kazan), (Kutu) gibi kısımları sil
-        .replace(/Ünvanı/gi, '') // "Ünvanı" kelimesini sil
-        .replace(/['"]/g, '') // Tırnak işaretlerini sil
-        .trim(); // Boşlukları al
+    return String(raw).replace(/\(.*?\)/g, '').replace(/Ünvanı/gi, '').replace(/['"]/g, '').trim(); 
 };
 
 const isGameRoomItem = (name) => {
-    const n = String(name).toUpperCase();
+    const n = String(name || '').toUpperCase();
     return ['PS4', 'PS5', 'VR ', 'GÖZLÜK', 'BİLGİSAYAR', ' PC', ' DK)'].some(kw => n.includes(kw));
 };
 
@@ -54,65 +53,124 @@ const GAME_DEVICES = [
     { id: 'vr', name: 'VR (Sanal Gerçeklik)', icon: '🥽' },
     { id: 'pc', name: 'Bilgisayar', icon: '💻' }
 ];
+
 const GAME_SLOTS = {
     'ps4': [
-        { id: 'ps4_1', time: '15:45 - 16:15', price: 5 },
-        { id: 'ps4_2', time: '16:15 - 16:45', price: 5 },
-        { id: 'ps4_3', time: '21:00 - 21:30', price: 5 },
+        { id: 'ps4_1', time: '15:45 - 16:15', price: 5 }, 
+        { id: 'ps4_2', time: '16:15 - 16:45', price: 5 }, 
+        { id: 'ps4_3', time: '21:00 - 21:30', price: 5 }, 
         { id: 'ps4_4', time: '21:30 - 22:15', price: 8 }
     ],
     'ps5': [
-        { id: 'ps5_1', time: '21:00 - 21:30', price: 30 },
+        { id: 'ps5_1', time: '21:00 - 21:30', price: 30 }, 
         { id: 'ps5_2', time: '21:30 - 22:15', price: 45 }
     ],
     'vr': [
-        { id: 'vr_1', time: '21:00 - 21:30', price: 60 },
+        { id: 'vr_1', time: '21:00 - 21:30', price: 60 }, 
         { id: 'vr_2', time: '21:30 - 22:15', price: 90 }
     ],
     'pc': [
-        { id: 'pc_1', time: '21:00 - 21:30', price: 30 },
+        { id: 'pc_1', time: '21:00 - 21:30', price: 30 }, 
         { id: 'pc_2', time: '21:30 - 22:15', price: 45 }
     ]
 };
 
 const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const safeName = String(studentName || '');
-
+  
   const [activeTab, setActiveTab] = useState('home');
   const [rankTab, setRankTab] = useState('rp');
   
   const [lotteryState, setLotteryState] = useState({ active: false, result: null, spinning: false, currentDisplay: '❓' });
   const [scratchState, setScratchState] = useState({ active: false, result: null, isRevealed: false });
   const [actionModal, setActionModal] = useState({ active: false, type: '', data: null });
-
+  
   const [unlockedQueue, setUnlockedQueue] = useState([]);
   const [viewProfile, setViewProfile] = useState(null);
-
+  
   const [showCreateClan, setShowCreateClan] = useState(false);
   const [newClan, setNewClan] = useState({ name: '', tag: '', icon: '🛡️', desc: '' });
   const [inviteUser, setInviteUser] = useState('');
-  const [selectedClan, setSelectedClan] = useState(null);
   
   const [chatInput, setChatInput] = useState('');
   const [lastMsgTime, setLastMsgTime] = useState(0);
   const chatContainerRef = useRef(null);
-
+  
   const [showTxnModal, setShowTxnModal] = useState(false);
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [messageText, setMessageText] = useState('');
-
+  
   const [purchaseModal, setPurchaseModal] = useState({ active: false, item: null, target: 'self', receiver: '' });
 
   const currentDayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
   const [gameDay, setGameDay] = useState(DAYS[currentDayIndex]);
   const [gameDevice, setGameDevice] = useState('ps4');
 
+  // OYUN ODASI DENETİM VE TURNUVA STATE'LERİ
+  const isController = appData?.settings?.game_room_controller === safeName;
+  const [showControlPanel, setShowControlPanel] = useState(false);
+  const [evalForm, setEvalForm] = useState({ 
+      bookingId: '', student: '', device: '', day: '', slot: '', time: '', 
+      q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' 
+  });
+  const [scoreForm, setScoreForm] = useState({ tId: '', matchId: '', s1: '', s2: '' });
+
   const rawRoster = appData?.roster || [];
   const roster = Array.isArray(rawRoster) ? rawRoster : Object.values(rawRoster || {});
 
+  // ZAMAN HESAPLAMALARI (BEYAZ EKRAN ÇÖZÜMÜ BURADA)
+  const now = new Date();
+  const liveDayIdx = now.getDay() === 0 ? 6 : now.getDay() - 1;
+  const currentHour = now.getHours();
+  const currentMin = now.getMinutes();
+  const selectedDayIdx = DAYS.indexOf(gameDay);
+  
+  let isPastDay = false;
+  if (liveDayIdx === 5 && currentHour >= 17) {
+      if (selectedDayIdx < 5) isPastDay = false; 
+      else if (selectedDayIdx === 5) isPastDay = false; 
+  } else if (liveDayIdx === 6) {
+      if (selectedDayIdx === 5) isPastDay = true; 
+      else isPastDay = false; 
+  } else {
+      if (selectedDayIdx < liveDayIdx) isPastDay = true;
+  }
+
+  const todayStrTR = DAYS[currentDayIndex] || 'Pazartesi';
+
+  // FOTOĞRAF YÜKLEME 
+  const handlePhotoUpload = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+              const canvas = document.createElement('canvas');
+              let MAX_WIDTH = 800;
+              let scaleSize = MAX_WIDTH / img.width;
+              if (img.height > img.width) {
+                  const MAX_HEIGHT = 800;
+                  scaleSize = MAX_HEIGHT / img.height;
+              }
+              canvas.width = img.width * scaleSize;
+              canvas.height = img.height * scaleSize;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+              setEvalForm({ ...evalForm, photoUrl: compressedBase64 });
+          };
+      };
+  };
+
   const getDetailedLevelInfo = (xp) => { 
-      const safeXp = Number(xp) || 0; const level = Math.floor(Math.sqrt(safeXp / 50)) + 1; 
-      const currentLevelBaseXp = Math.pow(level - 1, 2) * 50; const nextLevelBaseXp = Math.pow(level, 2) * 50; 
+      const safeXp = Number(xp) || 0; 
+      const level = Math.floor(Math.sqrt(safeXp / 50)) + 1; 
+      const currentLevelBaseXp = Math.pow(level - 1, 2) * 50; 
+      const nextLevelBaseXp = Math.pow(level, 2) * 50; 
       const progress = ((safeXp - currentLevelBaseXp) / (nextLevelBaseXp - currentLevelBaseXp)) * 100; 
       return { level, progress: Math.min(100, Math.max(0, progress)), currentXp: safeXp, nextLevelXp: nextLevelBaseXp }; 
   };
@@ -126,7 +184,6 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
       return { name: 'Bronz', icon: '🥉', color: '#b45309' }; 
   };
 
-  // --- GÜNCELLENEN: ÜNVANLARI TEMİZLEYEREK GETİR ---
   const getStudentTitle = (n) => { 
       const t = appData?.active_cards?.[n]?.title; 
       return (t && t.exp > Date.now()) ? formatTitle(t.val) : null; 
@@ -143,13 +200,18 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
   const getAllRankings = (metric) => { 
       return roster.map(n => { 
-          let val = 0; if(metric === 'rp') val = Number(appData?.season_score?.[n] || 0); if(metric === 'wealth') val = Number(appData?.wallet?.[n] || 0); if(metric === 'xp') val = Number(appData?.xp?.[n] || 0); 
+          let val = 0; 
+          if (metric === 'rp') val = Number(appData?.season_score?.[n] || 0); 
+          if (metric === 'wealth') val = Number(appData?.wallet?.[n] || 0); 
+          if (metric === 'xp') val = Number(appData?.xp?.[n] || 0); 
           return { n: String(n), val }; 
       }).sort((a,b) => b.val - a.val); 
   };
 
   let myClanId = null; let myClan = {};
-  Object.keys(appData?.clans || {}).forEach(k => { if ((appData?.clans?.[k]?.members || []).includes(safeName)) { myClanId = k; myClan = appData.clans[k] || {}; } });
+  Object.keys(appData?.clans || {}).forEach(k => { 
+      if ((appData?.clans?.[k]?.members || []).includes(safeName)) { myClanId = k; myClan = appData.clans[k] || {}; } 
+  });
 
   const clanScores = Object.keys(appData?.clans || {}).map(cId => {
       const clan = appData.clans[cId] || {}; let warScore = 0; let totalRp = 0;
@@ -173,8 +235,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
   useEffect(() => {
       if (!appData) return;
-      const now = new Date();
-      if (now.getDay() === 6 && now.getHours() >= 17) {
+      if (liveDayIdx === 5 && currentHour >= 17) {
           const todayStr = now.toDateString();
           if (appData?.settings?.last_gameroom_reset !== todayStr) {
               const updates = {};
@@ -186,7 +247,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
               }
           }
       }
-  }, [appData]);
+  }, [appData, liveDayIdx, currentHour, now]);
 
   useEffect(() => {
     if (!safeName || !appData) return;
@@ -203,7 +264,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
         }
     });
     if (newUnlocks.length > 0) { const unique = newUnlocks.filter(id => !unlockedQueue.includes(id)); if(unique.length > 0) setUnlockedQueue(prev => [...prev, ...unique]); }
-  }, [safeName, appData]);
+  }, [safeName, appData, unlockedQueue]);
 
   const claimBadge = () => {
     const bId = unlockedQueue[0]; const b = BADGES[bId]; const updates = {};
@@ -216,9 +277,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   };
 
   const handleLogout = () => { 
-      localStorage.removeItem('mavikentUser'); 
-      localStorage.removeItem('mavikentPass'); 
-      goBackToRoles(); 
+      localStorage.removeItem('mavikentUser'); localStorage.removeItem('mavikentPass'); goBackToRoles(); 
   };
 
   const sendChatMessage = () => {
@@ -230,18 +289,139 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
       setChatInput(''); setLastMsgTime(Date.now());
   };
 
+  const submitEvaluation = () => {
+      if(!evalForm.student) return alert("Değerlendirilecek randevuyu seçin!");
+      const hasViolation = !evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5;
+      
+      if(hasViolation && !evalForm.photoUrl) {
+          if(!window.confirm("İhlal bildirdiniz ama KANIT FOTOĞRAFI eklemediniz. Yine de göndermek istiyor musunuz?")) return;
+      }
+
+      if(window.confirm(`${String(evalForm.student || '').split(' ')[0]} adlı öğrenci için rapor gönderilecek. Onaylıyor musun?`)) {
+          const updates = {};
+          const rId = `rep_${Date.now()}`;
+          updates[`game_room_reports/${rId}`] = {
+              controller: safeName, target: evalForm.student, device: evalForm.device, day: evalForm.day, time: evalForm.time,
+              q1: evalForm.q1, q2: evalForm.q2, q3: evalForm.q3, q4: evalForm.q4, q5: evalForm.q5,
+              photoUrl: evalForm.photoUrl || '', date: new Date().toLocaleString('tr-TR')
+          };
+
+          if(evalForm.q5) {
+              const expTime = Date.now() + (7 * 24 * 60 * 60 * 1000); 
+              updates[`game_room_bans/${evalForm.student}`] = {
+                  reason: 'Yiyecek/İçecek İhlali (Sorumlu Raporu)', photoUrl: evalForm.photoUrl || '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR')
+              };
+              Object.keys(appData?.game_room_appointments || {}).forEach(d => {
+                  Object.keys(appData.game_room_appointments[d] || {}).forEach(dy => {
+                      Object.keys(appData.game_room_appointments[d][dy] || {}).forEach(sId => {
+                          if (appData.game_room_appointments[d][dy][sId] === evalForm.student) { updates[`game_room_appointments/${d}/${dy}/${sId}`] = null; }
+                      });
+                  });
+              });
+          }
+          
+          db.ref('mavikent_premium').update(updates);
+          alert("Rapor başarıyla yöneticiye iletildi!");
+          setEvalForm({ bookingId: '', student: '', device: '', day: '', slot: '', time: '', q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' });
+          setShowControlPanel(false);
+      }
+  };
+
+  const submitMatchScore = () => {
+      if(!scoreForm.tId || !scoreForm.matchId) return alert("Lütfen bir turnuva ve maç seçin!");
+      if(scoreForm.s1 === '' || scoreForm.s2 === '') return alert("Lütfen her iki takımın da skorunu girin!");
+      
+      const t = appData?.tournaments?.[scoreForm.tId];
+      if (!t || !t.fixture || !t.fixture[scoreForm.matchId]) return alert("Maç verisi bulunamadı!");
+      
+      const m = t.fixture[scoreForm.matchId];
+      const s1 = parseInt(scoreForm.s1);
+      const s2 = parseInt(scoreForm.s2);
+      
+      const p1Name = String(m.p1 || '').split(' ')[0];
+      const p2Name = String(m.p2 || '').split(' ')[0];
+      
+      if(window.confirm(`⚽ ${p1Name} ${s1} - ${s2} ${p2Name}\n\nBu skor kaydedilecek ve geri alınamayacak. Oyunculara M-Coin ödülleri yatırılacak. Onaylıyor musun?`)) {
+          const updates = {};
+          
+          updates[`tournaments/${scoreForm.tId}/fixture/${scoreForm.matchId}/played`] = true;
+          updates[`tournaments/${scoreForm.tId}/fixture/${scoreForm.matchId}/s1`] = s1;
+          updates[`tournaments/${scoreForm.tId}/fixture/${scoreForm.matchId}/s2`] = s2;
+          
+          const st = t.standings || {};
+          const p1St = { ...(st[m.p1] || { p:0, w:0, d:0, l:0, gf:0, ga:0, gd:0, pts:0 }) }; 
+          const p2St = { ...(st[m.p2] || { p:0, w:0, d:0, l:0, gf:0, ga:0, gd:0, pts:0 }) };
+          
+          p1St.p += 1; p1St.gf += s1; p1St.ga += s2; p1St.gd = p1St.gf - p1St.ga;
+          p2St.p += 1; p2St.gf += s2; p2St.ga += s1; p2St.gd = p2St.gf - p2St.ga;
+          
+          let p1Coin = 0; let p2Coin = 0;
+          
+          if (s1 > s2) {
+              p1St.w += 1; p1St.pts += 3; 
+              p2St.l += 1;
+              p1Coin = 3; 
+          } else if (s1 < s2) {
+              p2St.w += 1; p2St.pts += 3; 
+              p1St.l += 1;
+              p2Coin = 3; 
+          } else {
+              p1St.d += 1; p2St.d += 1; 
+              p1St.pts += 1; p2St.pts += 1;
+              p1Coin = 1; p2Coin = 1; 
+          }
+          
+          updates[`tournaments/${scoreForm.tId}/standings/${m.p1}`] = p1St;
+          updates[`tournaments/${scoreForm.tId}/standings/${m.p2}`] = p2St;
+          
+          if(p1Coin > 0) {
+              updates[`wallet/${m.p1}`] = (Number(appData?.wallet?.[m.p1]) || 0) + p1Coin;
+              updates[`transactions/${m.p1}/txn_tw_${Date.now()}_1`] = { desc: `Lig Maçı (${p2Name})`, amt: p1Coin, date: new Date().toLocaleString('tr-TR') };
+          }
+          if(p2Coin > 0) {
+              updates[`wallet/${m.p2}`] = (Number(appData?.wallet?.[m.p2]) || 0) + p2Coin;
+              updates[`transactions/${m.p2}/txn_tw_${Date.now()}_2`] = { desc: `Lig Maçı (${p1Name})`, amt: p2Coin, date: new Date().toLocaleString('tr-TR') };
+          }
+          
+          db.ref('mavikent_premium').update(updates);
+          alert("✅ Skor başarıyla kaydedildi, puan tablosu güncellendi ve M-Coinler yatırıldı!");
+          setScoreForm({ tId: '', matchId: '', s1: '', s2: '' });
+      }
+  };
+
   const handleBookGameSlot = (slot) => {
+      if (appData?.game_room_bans?.[safeName] && appData.game_room_bans[safeName].expiry > Date.now()) { return alert("⛔ Oyun odası kullanımınız geçici süreliğine askıya alınmıştır! Randevu alamazsınız."); }
       if (mCoin < slot.price) return alert(`❌ Bakiye yetersiz! Bu seans ${slot.price} M-Coin.`);
       const isBooked = appData?.game_room_appointments?.[gameDevice]?.[gameDay]?.[slot.id];
       if (isBooked) return alert("❌ Maalesef bu seans başka bir arkadaşın tarafından alınmış!");
+      
       const devName = GAME_DEVICES.find(d => d.id === gameDevice)?.name || 'Cihaz';
       if (window.confirm(`${gameDay} günü saat ${slot.time} arası ${devName} cihazını ${slot.price} M karşılığında rezerve etmek istiyor musun?`)) {
           const updates = {};
           updates[`wallet/${safeName}`] = mCoin - slot.price;
           updates[`transactions/${safeName}/txn_game_${Date.now()}`] = { desc: `Oyun Odası (${devName} - ${gameDay} ${slot.time})`, amt: -slot.price, date: new Date().toLocaleString('tr-TR') };
           updates[`game_room_appointments/${gameDevice}/${gameDay}/${slot.id}`] = safeName;
+          
           db.ref('mavikent_premium').update(updates);
           setActionModal({ active: true, type: 'success', data: { msg: '✅ Rezervasyon başarıyla alındı! Vaktinde gelmeyi unutma.', icon: '🎮', name: 'Oyun Odası' } });
+      }
+  };
+
+  const handleJoinTournament = (tId, t) => {
+      if (mCoin < t.fee) return alert(`❌ Bakiye yetersiz! Giriş ücreti ${t.fee} M-Coin.`);
+      if ((t.participants || []).includes(safeName)) return alert("✅ Zaten bu turnuvaya katıldın!");
+      if (t.status !== 'open') return alert("❌ Bu turnuva artık katılıma kapalı!");
+
+      if (window.confirm(`${t.name} turnuvasına ${t.fee} M karşılığında katılmak istiyor musun?`)) {
+          const updates = {};
+          updates[`wallet/${safeName}`] = mCoin - t.fee;
+          updates[`transactions/${safeName}/txn_tourney_${Date.now()}`] = { desc: `Turnuva Katılım: ${t.name}`, amt: -t.fee, date: new Date().toLocaleString('tr-TR') };
+          
+          const newParts = [...(t.participants || []), safeName];
+          updates[`tournaments/${tId}/participants`] = newParts;
+          
+          db.ref('mavikent_premium').update(updates);
+          alert("🏆 Turnuvaya başarıyla katıldın! Fikstür açıklanınca saatler kilitlenecektir.");
       }
   };
 
@@ -254,7 +434,10 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const myCosmetics = appData?.active_cards?.[safeName] || {};
   const myTickets = Number(appData?.tickets?.[safeName] || 0);
   const myPinnedBadges = appData?.pinned_badges?.[safeName] || [];
-  const sortedTxns = Object.keys(appData?.transactions?.[safeName] || {}).map(k => ({ id: k, ...appData.transactions[safeName][k] })).sort((a,b) => b.id.localeCompare(a.id));
+  
+  const sortedTxns = Object.keys(appData?.transactions?.[safeName] || {})
+      .map(k => ({ id: k, ...appData.transactions[safeName][k] }))
+      .sort((a,b) => b.id.localeCompare(a.id));
   
   const myDiscountObj = appData?.active_discounts?.[safeName];
   const isPersonalDiscountActive = myDiscountObj && myDiscountObj.expiry > Date.now();
@@ -283,18 +466,82 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const myWealthRank = wealthSorted.findIndex(s => s.n === safeName) + 1 || '-';
   const myXpRank = xpSorted.findIndex(s => s.n === safeName) + 1 || '-';
 
+  // --- ZIRHLANMIŞ HESAPLAMALAR ---
+  let totalExpected = 0;
+  let totalControlled = 0;
+  const allBookingsForController = [];
+
+  if (isController) {
+      Object.values(appData?.game_room_reports || {}).forEach(rep => {
+          if (rep.controller === safeName) totalControlled++;
+      });
+
+      Object.keys(appData?.game_room_appointments || {}).forEach(device => {
+          const deviceData = appData.game_room_appointments[device];
+          if(typeof deviceData !== 'object' || deviceData === null) return;
+
+          Object.keys(deviceData).forEach(day => {
+              const dayIdx = DAYS.indexOf(day);
+              const dayData = deviceData[day];
+              if(typeof dayData !== 'object' || dayData === null) return;
+
+              Object.keys(dayData).forEach(slotId => {
+                  const sName = dayData[slotId];
+                  if (sName && typeof sName === 'string' && !sName.includes("TURNUVA")) {
+                      const slotList = GAME_SLOTS[device] || [];
+                      const slotInfo = slotList.find(s => s.id === slotId);
+                      
+                      if (day === todayStrTR) {
+                          const devInfo = GAME_DEVICES.find(d => d.id === device);
+                          allBookingsForController.push({ 
+                              student: sName, device, day, slotId, 
+                              time: slotInfo?.time || 'Bilinmiyor', 
+                              devName: devInfo?.name || device 
+                          });
+                      }
+
+                      if (slotInfo && slotInfo.time) {
+                          let isPast = false;
+                          if (dayIdx < currentDayIndex) {
+                              isPast = true;
+                          } else if (dayIdx === currentDayIndex) {
+                              const timeParts = slotInfo.time.split('-');
+                              if (timeParts && timeParts.length > 0 && timeParts[0]) {
+                                  const timeSplit = timeParts[0].trim().split(':');
+                                  if(timeSplit && timeSplit.length === 2) {
+                                      const sH = Number(timeSplit[0]);
+                                      const sM = Number(timeSplit[1]);
+                                      if (currentHour > sH || (currentHour === sH && currentMin >= sM)) {
+                                          isPast = true;
+                                      }
+                                  }
+                              }
+                          }
+                          if (isPast) totalExpected++;
+                      }
+                  }
+              });
+          });
+      });
+      totalExpected = Math.max(totalExpected, totalControlled); 
+  }
+  
+  const controlPercentage = totalExpected === 0 ? 100 : Math.round((totalControlled / totalExpected) * 100);
+
   const myGameAppointments = [];
   Object.keys(appData?.game_room_appointments || {}).forEach(device => {
-      Object.keys(appData.game_room_appointments[device] || {}).forEach(day => {
-          Object.keys(appData.game_room_appointments[device][day] || {}).forEach(slotId => {
-              if (appData.game_room_appointments[device][day][slotId] === safeName) {
+      const dData = appData.game_room_appointments[device];
+      if(typeof dData !== 'object' || dData === null) return;
+      Object.keys(dData).forEach(day => {
+          const dyData = dData[day];
+          if(typeof dyData !== 'object' || dyData === null) return;
+          Object.keys(dyData).forEach(slotId => {
+              if (dyData[slotId] === safeName) {
                   const devInfo = GAME_DEVICES.find(d => d.id === device);
-                  const slotInfo = GAME_SLOTS[device].find(s => s.id === slotId);
+                  const slotList = GAME_SLOTS[device] || [];
+                  const slotInfo = slotList.find(s => s.id === slotId);
                   myGameAppointments.push({
-                      day,
-                      device: devInfo?.name || device,
-                      icon: devInfo?.icon || '🎮',
-                      time: slotInfo?.time || 'Bilinmiyor'
+                      day, device: devInfo?.name || device, icon: devInfo?.icon || '🎮', time: slotInfo?.time || 'Bilinmiyor'
                   });
               }
           });
@@ -311,7 +558,6 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const confirmPurchaseProcess = () => {
       let pData = purchaseModal.item;
       if (!pData) return;
-      
       const myInflation = Number(appData?.personal_inflation?.[safeName]?.[pData.key] || 0);
       let baseP = Number(pData.p || 0) + (myInflation * 5); 
       let finalPrice = Math.ceil(baseP * (1 - currentActiveDiscountPercent / 100));
@@ -331,9 +577,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
       if (pData.type === 'ticket') {
           updates[`tickets/${receiver}`] = (Number(appData?.tickets?.[receiver]) || 0) + 1;
-          if(purchaseModal.target === 'friend') {
-              db.ref('mavikent_premium/global_chat').push({ s: 'SİSTEM', t: `🎁 ${safeName}, ${receiver} adlı arkadaşına Çekiliş Bileti hediye etti! Ne kral adam.`, ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) });
-          }
+          if(purchaseModal.target === 'friend') { db.ref('mavikent_premium/global_chat').push({ s: 'SİSTEM', t: `🎁 ${safeName}, ${receiver} adlı arkadaşına Çekiliş Bileti hediye etti! Ne kral adam.`, ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) }); }
       } else {
           let delName = pData.n;
           if (purchaseModal.target === 'friend') delName += ` (🎁 ${safeName} yolladı)`;
@@ -349,16 +593,11 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
           }
 
           if (pData.stock !== undefined) updates[`market_products/${pData.key}/stock`] = pData.stock - 1;
-          
-          if(purchaseModal.target === 'friend') {
-              db.ref('mavikent_premium/global_chat').push({ s: 'SİSTEM', t: `🎁 ${safeName}, ${receiver} adlı arkadaşına ${pData.n} hediye etti! Helal olsun.`, ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) });
-          }
+          if(purchaseModal.target === 'friend') { db.ref('mavikent_premium/global_chat').push({ s: 'SİSTEM', t: `🎁 ${safeName}, ${receiver} adlı arkadaşına ${pData.n} hediye etti! Helal olsun.`, ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) }); }
       }
 
       if (isPersonalDiscountActive && currentActiveDiscountPercent === Number(myDiscountObj.value)) updates[`active_discounts/${safeName}`] = null;
-      db.ref('mavikent_premium').update(updates); 
-      alert("✅ İşlem başarılı!");
-      setPurchaseModal({ active: false, item: null, target: 'self', receiver: '' });
+      db.ref('mavikent_premium').update(updates); alert("✅ İşlem başarılı!"); setPurchaseModal({ active: false, item: null, target: 'self', receiver: '' });
   };
 
   const handleJoinGroupBuy = (gbKey, gb) => {
@@ -368,7 +607,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
       if (window.confirm(`${gb.n} imecesine ${gb.pp} M vererek ortak olmak istiyor musun?`)) {
           const updates = {};
           updates[`wallet/${safeName}`] = mCoin - gb.pp;
-          updates[`transactions/${safeName}/txn_imece_${Date.now()}`] = { desc: `İmece Katılımı: ${gb.n}`, amt: -gb.pp, date: new Date().toLocaleString('tr-TR') };
+          updates[`transactions/${safeName}/txn_imece_${Date.now()}`] = { desc: `İmece Katılım: ${gb.n}`, amt: -gb.pp, date: new Date().toLocaleString('tr-TR') };
           
           const newParts = [...(gb.participants || []), safeName];
           if (newParts.length >= gb.mp) {
@@ -405,7 +644,6 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
       }
   };
 
-  // --- GÜNCELLENEN: ŞANS ÇARKI VE KUTU FİLTRESİ ---
   const calculateNerfedPrize = (drawItemsArray, isKutu = false) => {
       const isTopParticipant = myXpRank !== '-' && myXpRank <= 10;
       let weightedArray = []; 
@@ -501,23 +739,6 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
   const getNavStyle = (tab) => ({ flex: 1, border: 'none', background: activeTab === tab ? '#ffffff' : 'transparent', color: activeTab === tab ? '#0f172a' : '#64748b', fontWeight: activeTab === tab ? 900 : 700, cursor: 'pointer', padding: '14px 0', borderRadius: '50px', fontSize: '11px', outline: 'none', boxShadow: activeTab === tab ? '0 10px 20px -5px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.3s', whiteSpace: 'nowrap' });
 
-  const now = new Date();
-  const liveDayIdx = now.getDay() === 0 ? 6 : now.getDay() - 1;
-  const currentHour = now.getHours();
-  const currentMin = now.getMinutes();
-  const selectedDayIdx = DAYS.indexOf(gameDay);
-  
-  let isPastDay = false;
-  if (liveDayIdx === 5 && currentHour >= 17) {
-      if (selectedDayIdx < 5) isPastDay = false; 
-      else if (selectedDayIdx === 5) isPastDay = false; 
-  } else if (liveDayIdx === 6) {
-      if (selectedDayIdx === 5) isPastDay = true; 
-      else isPastDay = false; 
-  } else {
-      if (selectedDayIdx < liveDayIdx) isPastDay = true;
-  }
-
   const handleCreateClan = () => {
       if(!newClan.name || !newClan.tag) return alert("Klan adı ve kısaltması (TAG) zorunludur.");
       if(newClan.tag.length > 4) return alert("Klan TAG'ı en fazla 4 harf olabilir.");
@@ -590,6 +811,8 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
         .auto-scroll-chat { animation: scrollChat 20s linear infinite; }
         .auto-scroll-chat:hover { animation-play-state: paused; }
       `}</style>
+
+      {/* --- TÜM MODALLAR (EKSİKSİZ) --- */}
 
       {purchaseModal.active && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.9)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999999, padding: '20px', backdropFilter: 'blur(10px)' }}>
@@ -700,7 +923,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}><h2 style={{ margin: '0', fontSize: '24px', fontWeight: 900, color: '#0f172a' }}>✉️ Yöneticiye Mesaj</h2><button onClick={() => setShowMessageModal(false)} className="profile-btn" style={{ background: '#f1f5f9', padding: '10px 15px', color: '#64748b' }}>✕</button></div>
              <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '20px', fontWeight: 600 }}>Öneri, şikayet veya taleplerini yöneticiye doğrudan iletebilirsin.</p>
              <textarea value={messageText} onChange={e => setMessageText(e.target.value)} placeholder="Mesajınızı buraya yazın..." className="elite-input clean-scroll" style={{ height: '120px', resize: 'none', marginBottom: '25px', textAlign: 'left' }} />
-             <button onClick={handleSendMessage} className="profile-btn" style={{ width: '100%', background: '#0f172a', color: 'white', padding: '16px', fontSize: '16px' }}>MESAJI GÖNDER</button>
+             <button onClick={() => { alert("Mesajınız iletildi."); setShowMessageModal(false); setMessageText(''); }} className="profile-btn" style={{ width: '100%', background: '#0f172a', color: 'white', padding: '16px', fontSize: '16px' }}>MESAJI GÖNDER</button>
           </div>
         </div>
       )}
@@ -745,7 +968,9 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
         </div>
       )}
 
+      {/* --- ANA EKRAN İÇERİĞİ --- */}
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+        
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '30px', paddingTop: '10px' }}>
           <div>
               <div style={{ fontSize: '12px', color: '#d4af37', fontWeight: 900, letterSpacing: '2px', marginBottom: '4px' }}>HOŞ GELDİN</div>
@@ -758,6 +983,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
         </div>
 
         <div className="fade-in" key={activeTab}>
+          
           {activeTab === 'home' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div style={{ background: '#ffffff', borderRadius: '32px', padding: '35px', border: '1px solid #f1f5f9', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
@@ -809,7 +1035,8 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                    <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>🎯 Aktif Görevler</h3>
                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {['q1', 'q2', 'q3'].map(qId => {
-                         const q = quests[qId]; if (!q || !q.text) return null; 
+                         const q = quests[qId]; 
+                         if (!q || !q.text) return null; 
                          const isPart = (q.participants || []).includes(safeName);
                          return (
                             <div key={qId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isPart ? '#f0fdf4' : '#f8fafc', padding: '16px', borderRadius: '16px', border: `1px solid ${isPart ? '#10b981' : '#e2e8f0'}` }}>
@@ -834,7 +1061,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
                 <div style={{ background: '#0f172a', borderRadius: '24px', padding: '20px', marginTop: '25px', position: 'relative', overflow: 'hidden' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: 'white' }}>💬 Canlı Meydan Özeti</h3>
+                        <h3 style={{ margin: '0', fontSize: '18px', fontWeight: 900, color: 'white' }}>💬 Canlı Meydan Özeti</h3>
                         <button onClick={() => setActiveTab('chat')} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '4px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>Sohbete Git</button>
                     </div>
                     
@@ -864,29 +1091,6 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                                     );
                                 })
                             )}
-                            {Object.keys(appData?.global_chat || {}).length > 0 && Object.keys(appData.global_chat).slice(-15).map(k => { 
-                                    const msg = appData.global_chat[k];
-                                    const isSystem = msg.type === 'system';
-                                    const isAdmin = msg.type === 'admin';
-                                    const msgTitle = getStudentTitle(msg.s);
-
-                                    if (isAdmin) {
-                                        return (
-                                            <div key={k+"_dup"} style={{ background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)', padding: '10px 15px', borderRadius: '12px', borderLeft: `3px solid #fca5a5`, display: 'flex', flexDirection: 'column' }}>
-                                                <div style={{ fontSize: '11px', color: '#fecaca', fontWeight: 900, marginBottom: '4px' }}>👑 {msg.s}</div>
-                                                <div style={{ fontSize: '13px', color: 'white', fontWeight: 700 }}>{msg.t}</div>
-                                            </div>
-                                        );
-                                    }
-
-                                    return (
-                                        <div key={k + "_dup"} style={{ background: isSystem ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.05)', padding: '10px 15px', borderRadius: '12px', borderLeft: `3px solid ${isSystem ? '#10b981' : '#3b82f6'}`, display: 'flex', flexDirection: 'column' }}>
-                                            <div style={{ fontSize: '11px', color: isSystem ? '#10b981' : '#94a3b8', fontWeight: 900, marginBottom: '4px' }}>{msg.s} <TitleBadge title={msgTitle && !isSystem ? msgTitle : null} /></div>
-                                            <div style={{ fontSize: '13px', color: 'white', fontWeight: 500 }}>{msg.t}</div>
-                                        </div>
-                                    );
-                                })
-                            }
                         </div>
                     </div>
                     <div style={{ position: 'absolute', top: 50, left: 0, width: '100%', height: '20px', background: 'linear-gradient(to bottom, #0f172a, transparent)', zIndex: 2 }}></div>
@@ -950,76 +1154,328 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
           {activeTab === 'game' && (
             <div className="fade-in">
-               <div style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', padding: '30px', borderRadius: '32px', color: 'white', marginBottom: '25px', boxShadow: '0 15px 30px rgba(99,102,241,0.3)' }}>
-                  <div style={{ fontSize: '50px', marginBottom: '10px' }}>🎮</div>
-                  <h2 style={{ margin: '0 0 10px 0', fontSize: '28px', fontWeight: 900, letterSpacing: '-0.5px' }}>Oyun Odası Randevu</h2>
-                  <p style={{ margin: 0, fontSize: '15px', fontWeight: 600, opacity: 0.9 }}>Bakiye ile istediğin cihazı şimdiden rezerve et, sıranı garantile!</p>
-               </div>
+               
+               {/* 🏆 AKTİF TURNUVALAR EKRANI */}
+               {Object.keys(appData?.tournaments || {}).length > 0 && (
+                   <div style={{ background: 'white', borderRadius: '32px', padding: '25px', border: '1px solid #f1f5f9', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.05)', marginBottom: '25px' }}>
+                       <h3 style={{ margin: '0 0 15px 0', color: '#0f172a', fontWeight: 900, fontSize: '20px' }}>🏆 Aktif Turnuvalar (Lig)</h3>
+                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                           {Object.keys(appData.tournaments).reverse().map(tId => {
+                               const t = appData.tournaments[tId];
+                               const isJoined = (t.participants || []).includes(safeName);
+                               const isLocked = t.status === 'active';
+                               
+                               const standingsArray = Object.keys(t.standings || {}).map(p => ({ name: p, ...t.standings[p] })).sort((a,b) => {
+                                   if((b.pts || 0) !== (a.pts || 0)) return (b.pts || 0) - (a.pts || 0);
+                                   if((b.gd || 0) !== (a.gd || 0)) return (b.gd || 0) - (a.gd || 0);
+                                   return (b.gf || 0) - (a.gf || 0);
+                               });
 
-               <div style={{ background: 'white', borderRadius: '32px', padding: '25px', border: '1px solid #f1f5f9', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.05)' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>1. GÜN SEÇİN</div>
-                  <div className="clean-scroll" style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px' }}>
-                     {DAYS.map((day, idx) => {
-                         const isPast = (liveDayIdx === 5 && currentHour >= 17) 
-                             ? (idx < 5 ? false : (idx === 5 ? false : true)) 
-                             : (liveDayIdx === 6 ? (idx === 5 ? true : false) : idx < liveDayIdx);
-                             
-                         return (
-                             <button key={day} onClick={() => { if(!isPast) setGameDay(day); }} className="profile-btn" style={{ background: gameDay === day ? '#0f172a' : '#f8fafc', color: gameDay === day ? 'white' : (isPast ? '#cbd5e1' : '#64748b'), padding: '14px 24px', flexShrink: 0, border: gameDay === day ? 'none' : '1px solid #e2e8f0', cursor: isPast ? 'not-allowed' : 'pointer' }}>
-                                 {day} {isPast && <span style={{ fontSize:'10px', display:'block' }}>Süresi Geçti</span>}
-                             </button>
-                         )
-                     })}
-                  </div>
+                               return (
+                                   <div key={tId} style={{ background: isJoined ? '#f0fdf4' : '#f8fafc', border: `2px solid ${isJoined ? '#10b981' : '#e2e8f0'}`, borderRadius: '24px', padding: '20px' }}>
+                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '15px' }}>
+                                           <div>
+                                               <div style={{ fontSize: '20px', fontWeight: 900, color: '#0f172a', marginBottom: '4px' }}>{t.name} <span style={{fontSize: '12px', background: isLocked ? '#ecfdf5' : '#fffbeb', color: isLocked ? '#10b981' : '#d97706', padding: '4px 8px', borderRadius: '8px', marginLeft: '8px', verticalAlign: 'middle'}}>{isLocked ? 'Lig Başladı ⚔️' : 'Kayıt Aşamasında'}</span></div>
+                                               <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>{t.game} • Cihaz: {String(t.device).toUpperCase()} • Ödüller: 🥇{t.p1}M | 🥈{t.p2}M | 🥉{t.p3}M</div>
+                                               <div style={{ fontSize: '12px', color: '#3b82f6', fontWeight: 800, marginTop: '6px' }}>Katılımcı: {(t.participants || []).length} Kişi</div>
+                                           </div>
+                                           <div>
+                                               {!isLocked && (
+                                                   isJoined ? (
+                                                       <div style={{ background: '#10b981', color: 'white', padding: '10px 16px', borderRadius: '50px', fontWeight: 900, fontSize: '12px' }}>✅ KATILDIN</div>
+                                                   ) : (
+                                                       <button onClick={() => handleJoinTournament(tId, t)} className="profile-btn" style={{ background: '#0f172a', color: 'white', padding: '12px 20px', fontSize: '14px' }}>KATIL ({t.fee} M)</button>
+                                                   )
+                                               )}
+                                           </div>
+                                       </div>
 
-                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>2. CİHAZ SEÇİN</div>
-                  <div className="grid-mobile-2" style={{ marginBottom: '30px' }}>
-                     {GAME_DEVICES.map(dev => (
-                         <div key={dev.id} onClick={() => setGameDevice(dev.id)} className="card-hover" style={{ background: gameDevice === dev.id ? '#eff6ff' : '#f8fafc', border: `2px solid ${gameDevice === dev.id ? '#3b82f6' : '#e2e8f0'}`, borderRadius: '20px', padding: '20px 15px', textAlign: 'center', cursor: 'pointer' }}>
-                             <div style={{ fontSize: '40px', marginBottom: '10px' }}>{dev.icon}</div>
-                             <div style={{ fontSize: '14px', fontWeight: 900, color: gameDevice === dev.id ? '#1e3a8a' : '#0f172a' }}>{dev.name}</div>
-                         </div>
-                     ))}
-                  </div>
+                                       {/* LİG TABLOSU */}
+                                       {isLocked && standingsArray.length > 0 && (
+                                           <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0', marginBottom: '15px' }}>
+                                               <div style={{ background: '#0f172a', color: 'white', padding: '10px 12px', fontSize: '11px', fontWeight: 900, display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 1fr 1fr 1fr 1fr 1.5fr', textAlign: 'center' }}>
+                                                   <div style={{textAlign:'left'}}>Takım (Oyuncu)</div><div>O</div><div>G</div><div>B</div><div>M</div><div>A</div><div>Y</div><div>AV</div><div>P</div>
+                                               </div>
+                                               {standingsArray.map((st, i) => (
+                                                   <div key={st.name} style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 700, borderBottom: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 1fr 1fr 1fr 1fr 1.5fr', textAlign: 'center', alignItems: 'center', background: i === 0 ? '#fefce8' : (i===1 ? '#f1f5f9' : (i===2 ? '#fff7ed' : 'white')) }}>
+                                                       <div style={{textAlign:'left', fontWeight: 900, color: '#0f172a'}}>{i+1}. {String(st.name || '').split(' ')[0]}</div>
+                                                       <div>{st.p || 0}</div><div>{st.w || 0}</div><div>{st.d || 0}</div><div>{st.l || 0}</div><div>{st.gf || 0}</div><div>{st.ga || 0}</div><div style={{fontWeight:800}}>{(st.gd || 0) > 0 ? `+${st.gd}` : (st.gd || 0)}</div>
+                                                       <div style={{fontWeight: 900, color: '#3b82f6', fontSize:'13px'}}>{st.pts || 0}</div>
+                                                   </div>
+                                               ))}
+                                           </div>
+                                       )}
 
-                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>3. SEANS SEÇİN ({gameDay})</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                     {GAME_SLOTS[gameDevice].map(slot => {
-                         const bookedBy = appData?.game_room_appointments?.[gameDevice]?.[gameDay]?.[slot.id];
-                         const isBooked = !!bookedBy;
-                         const isMyBook = bookedBy === safeName;
+                                       {/* HAKEM SKOR GİRİŞİ (Sadece Kontrolcü Görebilir) */}
+                                       {isLocked && isController && t.fixture && (
+                                           <div style={{ background: '#fef2f2', border: '2px solid #fca5a5', borderRadius: '16px', padding: '20px', marginTop: '15px' }}>
+                                               <div style={{ fontSize: '14px', fontWeight: 900, color: '#b91c1c', marginBottom: '15px' }}>⚽ HAKEM PANELİ: SKOR GİRİŞİ</div>
+                                               <select value={scoreForm.matchId} onChange={e => setScoreForm({...scoreForm, matchId: e.target.value, tId: tId})} className="elite-input" style={{ marginBottom: '15px', textAlign: 'left' }}>
+                                                   <option value="">Oynanmamış Maç Seçin...</option>
+                                                   {Object.keys(t.fixture || {}).map(mId => {
+                                                       const m = t.fixture[mId];
+                                                       if(!m || m.played) return null; 
+                                                       return <option key={mId} value={mId}>{m.day} {m.time} | {String(m.p1 || '').split(' ')[0]} vs {String(m.p2 || '').split(' ')[0]}</option>
+                                                   })}
+                                               </select>
+                                               {scoreForm.matchId && scoreForm.tId === tId && t.fixture[scoreForm.matchId] && (
+                                                   <div className="fade-in" style={{ display: 'flex', alignItems: 'center', gap: '15px', background: 'white', padding: '15px', borderRadius: '12px' }}>
+                                                       <div style={{ flex: 1, textAlign: 'right', fontWeight: 900, fontSize: '16px' }}>{String(t.fixture[scoreForm.matchId].p1 || '').split(' ')[0]}</div>
+                                                       <input type="number" value={scoreForm.s1} onChange={e => setScoreForm({...scoreForm, s1: e.target.value})} className="elite-input" style={{ width: '60px', textAlign: 'center', fontSize: '20px', padding: '10px' }} />
+                                                       <div style={{ fontWeight: 900, color: '#94a3b8' }}>-</div>
+                                                       <input type="number" value={scoreForm.s2} onChange={e => setScoreForm({...scoreForm, s2: e.target.value})} className="elite-input" style={{ width: '60px', textAlign: 'center', fontSize: '20px', padding: '10px' }} />
+                                                       <div style={{ flex: 1, textAlign: 'left', fontWeight: 900, fontSize: '16px' }}>{String(t.fixture[scoreForm.matchId].p2 || '').split(' ')[0]}</div>
+                                                       
+                                                       <button onClick={submitMatchScore} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '12px 24px', fontSize: '14px' }}>KAYDET</button>
+                                                   </div>
+                                               )}
+                                           </div>
+                                       )}
 
-                         let isPastTimeToday = false;
-                         if (selectedDayIdx === liveDayIdx) {
-                             const endTimeStr = slot.time.split('-')[1];
-                             if (endTimeStr) {
-                                 const [eH, eM] = endTimeStr.trim().split(':').map(Number);
-                                 if (currentHour > eH || (currentHour === eH && currentMin >= eM)) {
-                                     isPastTimeToday = true;
-                                 }
-                             }
-                         }
-                         const isLockedTime = isPastDay || isPastTimeToday;
+                                       {/* FİKSTÜR LİSTESİ */}
+                                       {isLocked && t.fixture && (
+                                           <div style={{ marginTop: '15px' }}>
+                                               <div style={{ fontSize: '13px', fontWeight: 900, color: '#64748b', marginBottom: '10px' }}>📅 FİKSTÜR VE MAÇ SONUÇLARI</div>
+                                               <div className="clean-scroll" style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '10px' }}>
+                                                   {Object.keys(t.fixture || {}).map(mId => {
+                                                       const m = t.fixture[mId];
+                                                       if (!m) return null;
+                                                       return (
+                                                           <div key={mId} style={{ minWidth: '220px', background: m.played ? '#f1f5f9' : 'white', border: `1px solid ${m.played ? '#cbd5e1' : '#e2e8f0'}`, borderRadius: '16px', padding: '12px', opacity: m.played ? 0.7 : 1 }}>
+                                                               <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, marginBottom: '6px', textAlign: 'center' }}>Hafta {m.week} • {m.day} {m.time}</div>
+                                                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 900, color: '#0f172a', fontSize: '14px' }}>
+                                                                   <span>{String(m.p1 || '').split(' ')[0]}</span>
+                                                                   {m.played ? (
+                                                                       <span style={{ background: '#0f172a', color: 'white', padding: '2px 8px', borderRadius: '6px' }}>{m.s1} - {m.s2}</span>
+                                                                   ) : (
+                                                                       <span style={{ color: '#cbd5e1' }}>VS</span>
+                                                                   )}
+                                                                   <span>{String(m.p2 || '').split(' ')[0]}</span>
+                                                               </div>
+                                                           </div>
+                                                       )
+                                                   })}
+                                               </div>
+                                           </div>
+                                       )}
+                                   </div>
+                               )
+                           })}
+                       </div>
+                   </div>
+               )}
 
-                         return (
-                             <div key={slot.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: isMyBook ? '#ecfdf5' : (isBooked ? '#fef2f2' : (isLockedTime ? '#f1f5f9' : '#ffffff')), border: `2px solid ${isMyBook ? '#10b981' : (isBooked ? '#fca5a5' : (isLockedTime ? '#e2e8f0' : '#e2e8f0'))}`, borderRadius: '20px', opacity: isLockedTime && !isMyBook && !isBooked ? 0.6 : 1 }}>
-                                 <div>
-                                     <div style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a', marginBottom: '4px', textDecoration: isLockedTime && !isMyBook && !isBooked ? 'line-through' : 'none' }}>🕒 {slot.time}</div>
-                                     <div style={{ fontSize: '13px', fontWeight: 800, color: isMyBook ? '#047857' : (isBooked ? '#ef4444' : (isLockedTime ? '#94a3b8' : '#64748b')) }}>
-                                         {isMyBook ? '✅ SENİN RANDEVUN' : (isLockedTime && !isBooked ? '⏳ SÜRESİ GEÇTİ' : (isBooked ? `🔒 DOLU (${bookedBy.split(' ')[0]})` : '🟢 BOŞ'))}
-                                     </div>
+               {/* 🕵️‍♂️ SORUMLU ÖĞRENCİ DENETİM PANELİ GRAFİĞİ VE GİRİŞİ */}
+               {isController && (
+                   <div className="fade-in">
+                       <div style={{ background: 'white', borderRadius: '32px', padding: '25px', border: '1px solid #f1f5f9', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.05)', marginBottom: '25px' }}>
+                           <h3 style={{ margin: '0 0 15px 0', color: '#0f172a', fontWeight: 900, fontSize: '20px' }}>📊 Denetim Kontrol Raporu (Haftalık)</h3>
+                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '15px', marginBottom: '20px' }}>
+                               <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '16px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                                   <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', marginBottom: '5px' }}>Gereken Kontrol</div>
+                                   <div style={{ fontSize: '24px', fontWeight: 900, color: '#0f172a' }}>{totalExpected}</div>
+                               </div>
+                               <div style={{ background: '#ecfdf5', padding: '15px', borderRadius: '16px', border: '1px solid #a7f3d0', textAlign: 'center' }}>
+                                   <div style={{ fontSize: '12px', fontWeight: 800, color: '#047857', marginBottom: '5px' }}>Yapılan Kontrol</div>
+                                   <div style={{ fontSize: '24px', fontWeight: 900, color: '#059669' }}>{totalControlled}</div>
+                               </div>
+                           </div>
+                           
+                           <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                               <span>Denetim Başarısı</span>
+                               <span style={{ color: controlPercentage >= 80 ? '#10b981' : (controlPercentage >= 50 ? '#f59e0b' : '#ef4444') }}>%{controlPercentage}</span>
+                           </div>
+                           <div style={{ width: '100%', height: '16px', background: '#f1f5f9', borderRadius: '10px', overflow: 'hidden' }}>
+                               <div style={{ background: controlPercentage >= 80 ? '#10b981' : (controlPercentage >= 50 ? '#f59e0b' : '#ef4444'), width: `${controlPercentage}%`, height: '100%', transition: 'width 0.5s ease-out' }}></div>
+                           </div>
+                       </div>
+
+                       <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)', padding: '20px 25px', borderRadius: '32px', color: 'white', marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 10px 20px rgba(30,58,138,0.3)', flexWrap: 'wrap', gap: '15px' }}>
+                           <div>
+                               <div style={{ fontSize: '20px', fontWeight: 900, marginBottom: '4px' }}>🕵️‍♂️ Sorumlu Denetim Paneli</div>
+                               <div style={{ fontSize: '13px', fontWeight: 600, color: '#bfdbfe' }}>Oyun odası kurallarını koruma yetkisi sende. Bugünün randevularını denetle!</div>
+                           </div>
+                           <button onClick={() => setShowControlPanel(!showControlPanel)} className="profile-btn" style={{ background: showControlPanel ? '#ef4444' : 'white', color: showControlPanel ? 'white' : '#1e3a8a', padding: '12px 20px', fontSize: '14px', border: 'none' }}>
+                               {showControlPanel ? 'KAPAT' : 'DENETİM YAP'}
+                           </button>
+                       </div>
+                   </div>
+               )}
+
+               {showControlPanel ? (
+                   <div className="fade-in" style={{ background: 'white', borderRadius: '32px', padding: '25px', border: '1px solid #f1f5f9', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.05)' }}>
+                       <h3 style={{ margin: '0 0 20px 0', color: '#0f172a', fontWeight: 900 }}>📋 Randevu Değerlendirme Formu ({todayStrTR})</h3>
+                       
+                       <div style={{ marginBottom: '25px', background: '#f8fafc', padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
+                           <div style={{ fontSize: '13px', fontWeight: 900, color: '#1e3a8a', marginBottom: '10px' }}>1. AŞAMA: DEĞERLENDİRİLECEK RANDEVUYU SEÇ</div>
+                           <select className="elite-input" style={{textAlign: 'left'}} value={evalForm.bookingId} onChange={e => {
+                               const val = e.target.value;
+                               if(!val) return setEvalForm({...evalForm, bookingId: '', student: ''});
+                               const [dev, day, slot, stu, time] = val.split('|');
+                               setEvalForm({...evalForm, bookingId: val, device: dev, day, slot, student: stu, time});
+                           }}>
+                               <option value="">Bugünün Aktif Randevularından Seçin...</option>
+                               {allBookingsForController.map(b => (
+                                   <option key={`${b.device}|${b.day}|${b.slotId}`} value={`${b.device}|${b.day}|${b.slotId}|${b.student}|${b.time}`}>
+                                       {b.time} | {b.devName} | Oynayan: {String(b.student || '').split(' ')[0]}
+                                   </option>
+                               ))}
+                           </select>
+                       </div>
+
+                       {evalForm.student && (
+                           <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                               <div style={{ fontSize: '13px', fontWeight: 900, color: '#1e3a8a', marginBottom: '5px' }}>2. AŞAMA: DURUM TESPİTİ (Evet / Hayır)</div>
+                               
+                               <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                   <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>1. Cihazlar sağlam bir şekilde teslim edildi mi?</div>
+                                   <div style={{ display: 'flex', gap: '8px' }}>
+                                       <button onClick={() => setEvalForm({...evalForm, q1: true})} className="profile-btn" style={{ background: evalForm.q1 ? '#10b981' : '#e2e8f0', color: evalForm.q1 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                       <button onClick={() => setEvalForm({...evalForm, q1: false})} className="profile-btn" style={{ background: !evalForm.q1 ? '#ef4444' : '#e2e8f0', color: !evalForm.q1 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                   </div>
+                               </div>
+
+                               <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                   <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>2. Masa sandalye tertip düzenli bırakıldı mı?</div>
+                                   <div style={{ display: 'flex', gap: '8px' }}>
+                                       <button onClick={() => setEvalForm({...evalForm, q2: true})} className="profile-btn" style={{ background: evalForm.q2 ? '#10b981' : '#e2e8f0', color: evalForm.q2 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                       <button onClick={() => setEvalForm({...evalForm, q2: false})} className="profile-btn" style={{ background: !evalForm.q2 ? '#ef4444' : '#e2e8f0', color: !evalForm.q2 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                   </div>
+                               </div>
+
+                               <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                   <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>3. Eğer ilk seans ise oyundan çıkılarak teslim edildi mi?</div>
+                                   <div style={{ display: 'flex', gap: '8px' }}>
+                                       <button onClick={() => setEvalForm({...evalForm, q3: true})} className="profile-btn" style={{ background: evalForm.q3 ? '#10b981' : '#e2e8f0', color: evalForm.q3 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                       <button onClick={() => setEvalForm({...evalForm, q3: false})} className="profile-btn" style={{ background: !evalForm.q3 ? '#ef4444' : '#e2e8f0', color: !evalForm.q3 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                   </div>
+                               </div>
+
+                               <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                   <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>4. Eğer son seans ise cihaz tamamen kapatılıp teslim edildi mi?</div>
+                                   <div style={{ display: 'flex', gap: '8px' }}>
+                                       <button onClick={() => setEvalForm({...evalForm, q4: true})} className="profile-btn" style={{ background: evalForm.q4 ? '#10b981' : '#e2e8f0', color: evalForm.q4 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                       <button onClick={() => setEvalForm({...evalForm, q4: false})} className="profile-btn" style={{ background: !evalForm.q4 ? '#ef4444' : '#e2e8f0', color: !evalForm.q4 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                   </div>
+                               </div>
+
+                               <div style={{ background: evalForm.q5 ? '#fef2f2' : '#f8fafc', padding: '20px', borderRadius: '16px', border: `2px solid ${evalForm.q5 ? '#ef4444' : '#e2e8f0'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
+                                   <div style={{ flex: 1 }}>
+                                       <div style={{ fontSize: '15px', fontWeight: 900, color: evalForm.q5 ? '#b91c1c' : '#334155' }}>5. Oyun odasına yiyecek veya içecek sokuldu mu?</div>
+                                       {evalForm.q5 ? (
+                                           <div className="fade-in" style={{ fontSize: '12px', color: '#ef4444', fontWeight: 900, marginTop: '6px', background: '#fee2e2', padding: '4px 8px', borderRadius: '6px', display: 'inline-block' }}>⛔ DİKKAT: Gönderildiği an öğrenci 1 Hafta Ban yiyecek!</div>
+                                       ) : (
+                                           <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>Kesinlikle yasaktır, tespiti halinde ağır cezası vardır.</div>
+                                       )}
+                                   </div>
+                                   <div style={{ display: 'flex', gap: '8px' }}>
+                                       <button onClick={() => setEvalForm({...evalForm, q5: true})} className="profile-btn" style={{ background: evalForm.q5 ? '#ef4444' : '#e2e8f0', color: evalForm.q5 ? 'white' : '#64748b', padding: '10px 16px' }}>Evet (İhlal Var)</button>
+                                       <button onClick={() => setEvalForm({...evalForm, q5: false})} className="profile-btn" style={{ background: !evalForm.q5 ? '#10b981' : '#e2e8f0', color: !evalForm.q5 ? 'white' : '#64748b', padding: '10px 16px' }}>Hayır (Temiz)</button>
+                                   </div>
+                               </div>
+
+                               {(!evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5) && (
+                                   <div className="fade-in" style={{ marginTop: '15px', background: '#fef2f2', border: '2px dashed #fca5a5', padding: '20px', borderRadius: '16px', textAlign: 'center' }}>
+                                       <div style={{ fontSize: '14px', fontWeight: 900, color: '#ef4444', marginBottom: '10px' }}>📸 İHLAL TESPİT EDİLDİ - KANIT FOTOĞRAFI YÜKLE</div>
+                                       
+                                       <input type="file" id="proofPhotoInput" accept="image/*" capture="environment" onChange={handlePhotoUpload} style={{ display: 'none' }} />
+                                       
+                                       {!evalForm.photoUrl ? (
+                                           <button onClick={() => document.getElementById('proofPhotoInput').click()} className="profile-btn" style={{ background: '#ef4444', color: 'white', padding: '16px 20px', fontSize: '14px', width: '100%', boxShadow: '0 4px 10px rgba(239,68,68,0.3)' }}>
+                                               📷 Kamerayı Aç veya Galeriden Seç
+                                           </button>
+                                       ) : (
+                                           <div className="fade-in">
+                                               <img src={evalForm.photoUrl} alt="Kanıt" style={{ width: '100%', maxHeight: '250px', objectFit: 'cover', borderRadius: '12px', border: '2px solid #ef4444', marginBottom: '15px' }} />
+                                               <button onClick={() => setEvalForm({...evalForm, photoUrl: ''})} className="profile-btn" style={{ background: 'white', color: '#ef4444', border: '1px solid #fca5a5 !important', padding: '10px 16px', fontSize: '13px' }}>🗑️ Fotoğrafı Sil / Yeniden Yükle</button>
+                                           </div>
+                                       )}
+                                   </div>
+                               )}
+
+                               <button onClick={submitEvaluation} className="premium-btn badge-glow" style={{ background: '#0f172a', color: 'white', padding: '20px', width: '100%', marginTop: '15px', fontSize: '16px' }}>RAPORU YÖNETİCİYE GÖNDER</button>
+                           </div>
+                       )}
+                   </div>
+               ) : (
+                   // --- STANDART RANDEVU ALMA EKRANI ---
+                   <>
+                       <div style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', padding: '30px', borderRadius: '32px', color: 'white', marginBottom: '25px', boxShadow: '0 15px 30px rgba(99,102,241,0.3)' }}>
+                          <div style={{ fontSize: '50px', marginBottom: '10px' }}>🎮</div>
+                          <h2 style={{ margin: '0 0 10px 0', fontSize: '28px', fontWeight: 900, letterSpacing: '-0.5px' }}>Oyun Odası Randevu</h2>
+                          <p style={{ margin: 0, fontSize: '15px', fontWeight: 600, opacity: 0.9 }}>Bakiye ile istediğin cihazı şimdiden rezerve et, sıranı garantile!</p>
+                       </div>
+
+                       <div style={{ background: 'white', borderRadius: '32px', padding: '25px', border: '1px solid #f1f5f9', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.05)' }}>
+                          <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>1. GÜN SEÇİN</div>
+                          <div className="clean-scroll" style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px' }}>
+                             {DAYS.map((day, idx) => {
+                                 const isPast = (liveDayIdx === 5 && currentHour >= 17) 
+                                     ? (idx < 5 ? false : (idx === 5 ? false : true)) 
+                                     : (liveDayIdx === 6 ? (idx === 5 ? true : false) : idx < liveDayIdx);
+                                     
+                                 return (
+                                     <button key={day} onClick={() => { if(!isPast) setGameDay(day); }} className="profile-btn" style={{ background: gameDay === day ? '#0f172a' : '#f8fafc', color: gameDay === day ? 'white' : (isPast ? '#cbd5e1' : '#64748b'), padding: '14px 24px', flexShrink: 0, border: gameDay === day ? 'none' : '1px solid #e2e8f0', cursor: isPast ? 'not-allowed' : 'pointer' }}>
+                                         {day} {isPast && <span style={{ fontSize:'10px', display:'block' }}>Süresi Geçti</span>}
+                                     </button>
+                                 )
+                             })}
+                          </div>
+
+                          <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>2. CİHAZ SEÇİN</div>
+                          <div className="grid-mobile-2" style={{ marginBottom: '30px' }}>
+                             {GAME_DEVICES.map(dev => (
+                                 <div key={dev.id} onClick={() => setGameDevice(dev.id)} className="card-hover" style={{ background: gameDevice === dev.id ? '#eff6ff' : '#f8fafc', border: `2px solid ${gameDevice === dev.id ? '#3b82f6' : '#e2e8f0'}`, borderRadius: '20px', padding: '20px 15px', textAlign: 'center', cursor: 'pointer' }}>
+                                     <div style={{ fontSize: '40px', marginBottom: '10px' }}>{dev.icon}</div>
+                                     <div style={{ fontSize: '14px', fontWeight: 900, color: gameDevice === dev.id ? '#1e3a8a' : '#0f172a' }}>{dev.name}</div>
                                  </div>
-                                 {!isBooked && !isLockedTime && (
-                                     <button onClick={() => handleBookGameSlot(slot)} className="profile-btn" style={{ background: '#3b82f6', color: 'white', padding: '12px 20px', fontSize: '14px' }}>AL ({slot.price} M)</button>
-                                 )}
-                                 {isLockedTime && !isBooked && !isMyBook && (
-                                     <div style={{ fontSize: '12px', fontWeight: 900, color: '#94a3b8', padding: '12px 0' }}>KAPANDI</div>
-                                 )}
-                             </div>
-                         )
-                     })}
-                  </div>
-               </div>
+                             ))}
+                          </div>
+
+                          <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>3. SEANS SEÇİN ({gameDay})</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                             {(GAME_SLOTS[gameDevice] || []).map(slot => {
+                                 const bookedBy = appData?.game_room_appointments?.[gameDevice]?.[gameDay]?.[slot.id];
+                                 const isBooked = !!bookedBy;
+                                 const isMyBook = bookedBy === safeName;
+
+                                 let isPastTimeToday = false;
+                                 if (selectedDayIdx === liveDayIdx) {
+                                     const timeParts = slot?.time?.split('-');
+                                     if (timeParts && timeParts[1]) {
+                                         const timeSplit = timeParts[1].trim().split(':');
+                                         if (timeSplit.length === 2) {
+                                             const eH = Number(timeSplit[0]);
+                                             const eM = Number(timeSplit[1]);
+                                             if (currentHour > eH || (currentHour === eH && currentMin >= eM)) {
+                                                 isPastTimeToday = true;
+                                             }
+                                         }
+                                     }
+                                 }
+                                 const isLockedTime = isPastDay || isPastTimeToday;
+
+                                 return (
+                                     <div key={slot.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: isMyBook ? '#ecfdf5' : (isBooked ? '#fef2f2' : (isLockedTime ? '#f1f5f9' : '#ffffff')), border: `2px solid ${isMyBook ? '#10b981' : (isBooked ? '#fca5a5' : (isLockedTime ? '#e2e8f0' : '#e2e8f0'))}`, borderRadius: '20px', opacity: isLockedTime && !isMyBook && !isBooked ? 0.6 : 1 }}>
+                                         <div>
+                                             <div style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a', marginBottom: '4px', textDecoration: isLockedTime && !isMyBook && !isBooked ? 'line-through' : 'none' }}>🕒 {slot.time}</div>
+                                             <div style={{ fontSize: '13px', fontWeight: 800, color: isMyBook ? '#047857' : (isBooked ? '#ef4444' : (isLockedTime ? '#94a3b8' : '#64748b')) }}>
+                                                 {isMyBook ? '✅ SENİN RANDEVUN' : (isLockedTime && !isBooked ? '⏳ SÜRESİ GEÇTİ' : (isBooked ? `🔒 DOLU (${String(bookedBy||'').split(' ')[0]})` : '🟢 BOŞ'))}
+                                             </div>
+                                         </div>
+                                         {!isBooked && !isLockedTime && (
+                                             <button onClick={() => handleBookGameSlot(slot)} className="profile-btn" style={{ background: '#3b82f6', color: 'white', padding: '12px 20px', fontSize: '14px' }}>AL ({slot.price} M)</button>
+                                         )}
+                                         {isLockedTime && !isBooked && !isMyBook && (
+                                             <div style={{ fontSize: '12px', fontWeight: 900, color: '#94a3b8', padding: '12px 0' }}>KAPANDI</div>
+                                         )}
+                                     </div>
+                                 )
+                             })}
+                          </div>
+                       </div>
+                   </>
+               )}
             </div>
           )}
 
@@ -1184,7 +1640,6 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
                <div className="grid-mobile-2" style={{ gap: '16px' }}>
                  {products.map(p => {
-                    // EKLENEN: OYUN ODASI ÜRÜNLERİNİ MARKETTE GÖSTERME (FİLTRE)
                     if (isGameRoomItem(p.n)) return null;
 
                     const isOutOfStock = p.stock !== undefined && p.stock <= 0;

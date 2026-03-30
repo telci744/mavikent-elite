@@ -14,12 +14,8 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const [deliveryTab, setDeliveryTab] = useState('wait'); 
 
   const [settingsInputs, setSettingsInputs] = useState({ 
-      news_ticker: appData?.settings?.news_ticker || '', 
-      ann1: appData?.settings?.ann1 || '', 
-      ann2: appData?.settings?.ann2 || '', 
-      active_theme: appData?.settings?.active_theme || 'default', 
-      admin_pin: appData?.settings?.admin_pin || '1507', 
-      staff_pin: appData?.settings?.staff_pin || '1234' 
+      news_ticker: appData?.settings?.news_ticker || '', ann1: appData?.settings?.ann1 || '', ann2: appData?.settings?.ann2 || '', 
+      active_theme: appData?.settings?.active_theme || 'default', admin_pin: appData?.settings?.admin_pin || '1507', staff_pin: appData?.settings?.staff_pin || '1234' 
   });
   
   const [questInputs, setQuestInputs] = useState({ 
@@ -35,12 +31,14 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   
   const [newAdminClan, setNewAdminClan] = useState({ name: '', tag: '', icon: '🛡️', leader: '' });
   const [newGiftCode, setNewGiftCode] = useState({ code: '', type: 'mcoin', val: '', uses: '1' });
-  
   const [newGroupBuy, setNewGroupBuy] = useState({ name: '', totalCost: '', maxP: '', icon: '🤝' });
   const [adminChatInput, setAdminChatInput] = useState(''); 
 
-  const csvDenemeRef = useRef(null);
-  const csvYaziliRef = useRef(null);
+  const [banInput, setBanInput] = useState({ student: '', duration: '1', reason: '', photoUrl: '' });
+  const [newTourney, setNewTourney] = useState({ name: '', game: 'FIFA 24', fee: '', p1: '', p2: '', p3: '', device: 'ps5' });
+  const [tourneyDaysMap, setTourneyDaysMap] = useState({}); 
+
+  const csvDenemeRef = useRef(null); const csvYaziliRef = useRef(null);
 
   const classList = ["5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf"];
   const eduClassList = ["5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf", "ELİT", "STANDART"];
@@ -51,27 +49,36 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const roster = Array.isArray(rawRoster) ? rawRoster : Object.values(rawRoster || {});
   const isElite = (name) => appData?.student_tiers?.[name] === 'elite';
 
-  const mebLessons = { 
-      "5. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Bilişim", "Beden", "🚫 YOK"], 
-      "6. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Bilişim", "Beden", "🚫 YOK"], 
-      "7. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Teknoloji", "Beden", "🚫 YOK"], 
-      "8. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "İnkılap Tarihi", "İngilizce", "Din", "Teknoloji", "Beden", "🚫 YOK"], 
-      "ELİT": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"], 
-      "STANDART": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"] 
-  };
+  const mebLessons = { "5. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Bilişim", "Beden", "🚫 YOK"], "6. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Bilişim", "Beden", "🚫 YOK"], "7. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Teknoloji", "Beden", "🚫 YOK"], "8. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "İnkılap Tarihi", "İngilizce", "Din", "Teknoloji", "Beden", "🚫 YOK"], "ELİT": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"], "STANDART": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"] };
   const valuesSubjectsList = ["K.Kerim", "İlmihal", "Siyer-i Nebi", "Adabı Muaşeret", "Tecvid"];
-
-  const collectionTypes = [
-      { id: 'AKILLI SAAT', label: 'Akıllı Saat', icon: '⌚' }, 
-      { id: 'FORMA', label: 'Forma', icon: '👕' },
-      { id: 'KRAMPON', label: 'Krampon', icon: '👟' }, 
-      { id: 'ÇİKOLATA EVİM', label: 'Çikolata Evim', icon: '🍫' },
-      { id: 'KÜNEFE', label: 'Künefe', icon: '🍮' }, 
-      { id: 'NEŞELİ BALIK', label: 'Neşeli Balık', icon: '🐟' },
-      { id: 'PİZZA', label: 'Pizza', icon: '🍕' }, 
-      { id: 'FUTBOL TOPU', label: 'Futbol Topu', icon: '⚽' }
-  ];
+  const collectionTypes = [{ id: 'AKILLI SAAT', label: 'Akıllı Saat', icon: '⌚' }, { id: 'FORMA', label: 'Forma', icon: '👕' }, { id: 'KRAMPON', label: 'Krampon', icon: '👟' }, { id: 'ÇİKOLATA EVİM', label: 'Çikolata Evim', icon: '🍫' }, { id: 'KÜNEFE', label: 'Künefe', icon: '🍮' }, { id: 'NEŞELİ BALIK', label: 'Neşeli Balık', icon: '🐟' }, { id: 'PİZZA', label: 'Pizza', icon: '🍕' }, { id: 'FUTBOL TOPU', label: 'Futbol Topu', icon: '⚽' }];
   const exactCollections = collectionTypes.map(c => c.id);
+
+  const GAME_DEVICES = [{ id: 'ps4', name: 'PS4' }, { id: 'ps5', name: 'PS5' }, { id: 'vr', name: 'VR' }, { id: 'pc', name: 'Bilgisayar' }];
+  const GAME_SLOTS = {
+      'ps4': [{ id: 'ps4_1', time: '15:45 - 16:15' }, { id: 'ps4_2', time: '16:15 - 16:45' }, { id: 'ps4_3', time: '21:00 - 21:30' }, { id: 'ps4_4', time: '21:30 - 22:15' }],
+      'ps5': [{ id: 'ps5_1', time: '21:00 - 21:30' }, { id: 'ps5_2', time: '21:30 - 22:15' }],
+      'vr':  [{ id: 'vr_1', time: '21:00 - 21:30' }, { id: 'vr_2', time: '21:30 - 22:15' }],
+      'pc':  [{ id: 'pc_1', time: '21:00 - 21:30' }, { id: 'pc_2', time: '21:30 - 22:15' }]
+  };
+  const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+
+  const handleAdminPhotoUpload = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+          const img = new Image(); img.src = event.target.result;
+          img.onload = () => {
+              const canvas = document.createElement('canvas');
+              let scaleSize = 800 / img.width; if (img.height > img.width) scaleSize = 800 / img.height; 
+              canvas.width = img.width * scaleSize; canvas.height = img.height * scaleSize;
+              canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+              setBanInput({ ...banInput, photoUrl: canvas.toDataURL('image/jpeg', 0.6) });
+          };
+      };
+  };
 
   useEffect(() => {
       if (!appData || !roster.length) return;
@@ -79,11 +86,8 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       if (now.getDay() === 1 && now.getHours() >= 19) {
           const todayStr = now.toDateString();
           if (appData?.settings?.last_ticket_dist !== todayStr) {
-              const updates = {};
-              roster.forEach(n => { updates[`tickets/${n}`] = (Number(appData?.tickets?.[n]) || 0) + 1; });
-              updates[`settings/last_ticket_dist`] = todayStr;
-              db.ref('mavikent_premium').update(updates);
-              alert("⏰ SİSTEM BİLDİRİMİ: Pazartesi 19:00 Çekiliş Hakları dağıtıldı!");
+              const updates = {}; roster.forEach(n => { updates[`tickets/${n}`] = (Number(appData?.tickets?.[n]) || 0) + 1; });
+              updates[`settings/last_ticket_dist`] = todayStr; db.ref('mavikent_premium').update(updates);
           }
       }
   }, [appData, roster]);
@@ -98,11 +102,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     if (currentModule && (modalType || selectedStudent)) { setModalType(null); setSelectedStudent(null); return; }
     if (currentModule === 'yoklama' && selectedSession) { setSelectedSession(''); return; }
     if (currentModule) { setCurrentModule(null); setSelectedSession(''); return; } 
-    if (dashboardView !== 'main') { 
-        if (dashboardView.startsWith('egitim_')) setDashboardView('egitim'); 
-        else setDashboardView('main'); 
-        return; 
-    }
+    if (dashboardView !== 'main') { if (dashboardView.startsWith('egitim_')) setDashboardView('egitim'); else setDashboardView('main'); return; }
     goBackToRoles();
   };
 
@@ -113,11 +113,9 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     let bns = lvl >= 15 ? 3 : lvl >= 10 ? 2 : lvl >= 5 ? 1 : 0;
     if (type === 'yatak') bns = Math.min(bns, 1);
     const eliteMulti = isElite(name) && basePts > 0 && type !== 'kanaat' ? 2 : 0;
-    const isGlobal2X = appData?.settings?.global_event === '2x_xp';
-    const activeMultiplier = appData?.active_cards?.[name]?.multiplier;
-    const isPersonal2X = activeMultiplier && activeMultiplier.date === new Date().toDateString();
+    const isPersonal2X = appData?.active_cards?.[name]?.multiplier?.date === new Date().toDateString();
     let total = basePts > 0 ? basePts + bns + eliteMulti : basePts;
-    if ((isPersonal2X || isGlobal2X) && total > 0 && type !== 'kanaat') total *= 2;
+    if ((isPersonal2X || appData?.settings?.global_event === '2x_xp') && total > 0 && type !== 'kanaat') total *= 2;
     return total;
   };
 
@@ -128,23 +126,17 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     const isFail = status === 'a' || status === 'l' || (type === 'yatak' && basePts === 0) || (type === 'telefon' && status === 'a');
     
     if (isFail) {
-        const streakData = appData?.active_cards?.[selectedStudent]?.streak;
-        const hasStreakSaver = streakData && (streakData.date === new Date().toDateString() || (streakData.end && streakData.end > Date.now()));
-        if (hasStreakSaver) { 
-            alert(`🛡️ ${selectedStudent} SERİ KORUMA KALKANI kullandı! Eksi aldı ama serisi bozulmadı.`); 
-            updates[`active_cards/${selectedStudent}/streak`] = null; 
-        } else { 
-            updates[`streaks/${selectedStudent}`] = 0; 
-            updates[`daily_flags/${selectedStudent}/broken`] = true; 
-        }
+        const strk = appData?.active_cards?.[selectedStudent]?.streak;
+        if (strk && (strk.date === new Date().toDateString() || (strk.end && strk.end > Date.now()))) { 
+            alert(`🛡️ ${selectedStudent} SERİ KORUMA KALKANI kullandı!`); updates[`active_cards/${selectedStudent}/streak`] = null; 
+        } else { updates[`streaks/${selectedStudent}`] = 0; updates[`daily_flags/${selectedStudent}/broken`] = true; }
     }
     
     if (finalPts !== 0) { 
         updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalPts; 
         updates[`xp/${selectedStudent}`] = Math.max(0, (Number(appData?.xp?.[selectedStudent]) || 0) + (basePts * 10)); 
         const tId = `txn_${Date.now()}_${Math.floor(Math.random()*1000)}`;
-        let descText = type === 'kanaat' ? 'Yönetici Kanaat Notu' : (type === 'yoklama' ? 'Yoklama Puanı' : (type === 'telefon' ? 'Telefon Teslim' : 'Yatak/Dolap Düzeni'));
-        updates[`transactions/${selectedStudent}/${tId}`] = { desc: descText, amt: finalPts, date: new Date().toLocaleString('tr-TR') };
+        updates[`transactions/${selectedStudent}/${tId}`] = { desc: type === 'kanaat' ? 'Yönetici Kanaat Notu' : (type === 'yoklama' ? 'Yoklama Puanı' : (type === 'telefon' ? 'Telefon Teslim' : 'Yatak/Dolap')), amt: finalPts, date: new Date().toLocaleString('tr-TR') };
     }
     
     if (type === 'yoklama') updates[`yoklama_d/${selectedStudent}/sessions/${selectedSession}`] = { st: status, pts: finalPts };
@@ -152,9 +144,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     else if (type === 'kanaat') updates[`kanaat_w/${selectedStudent}`] = (Number(appData?.kanaat_w?.[selectedStudent]) || 0) + finalPts;
     else if (type === 'yatak') updates[`yatak_d/${selectedStudent}/${status}_pts`] = finalPts; 
     
-    db.ref('mavikent_premium').update(updates); 
-    setSelectedStudent(null); 
-    setModalType(null);
+    db.ref('mavikent_premium').update(updates); setSelectedStudent(null); setModalType(null);
   };
 
   const saveEducationData = () => {
@@ -167,9 +157,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     if ((eduData.pages || 0) > (oldData.pages || 0)) earnedPoints += Math.floor((eduData.pages || 0) / 10) - Math.floor((oldData.pages || 0) / 10);
     if ((eduData.questions || 0) > (oldData.questions || 0)) earnedPoints += Math.floor((eduData.questions || 0) / 10) - Math.floor((oldData.questions || 0) / 10);
     
-    const updates = {}; 
-    updates[`education_d/${selectedStudent}`] = { ...eduData, date: new Date().toDateString() };
-    
+    const updates = {}; updates[`education_d/${selectedStudent}`] = { ...eduData, date: new Date().toDateString() };
     if (earnedPoints > 0) {
         const finalM = getCalculatedPoints(selectedStudent, earnedPoints, 'egitim');
         updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalM;
@@ -177,45 +165,27 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         updates[`xp/${selectedStudent}`] = (Number(appData?.xp?.[selectedStudent]) || 0) + (earnedPoints * 10);
         updates[`transactions/${selectedStudent}/txn_${Date.now()}`] = { desc: 'Günlük Eğitim Başarısı', amt: finalM, date: new Date().toLocaleString('tr-TR') };
     }
-    
-    db.ref('mavikent_premium').update(updates); 
-    setSelectedStudent(null); setModalType(null); alert("Eğitim Verileri Güncellendi!");
+    db.ref('mavikent_premium').update(updates); setSelectedStudent(null); setModalType(null); alert("Eğitim Verileri Güncellendi!");
   };
 
   const saveExamData = (type) => {
     const updates = {};
     if (type === 'deneme') {
-        let totalNet = 0;
-        let subjectsData = {};
+        let totalNet = 0; let subjectsData = {};
         for(let i=0; i<examSubjects.length; i++) { 
-            const d = parseFloat(examData[`d_${i}`]) || 0; 
-            const y = parseFloat(examData[`y_${i}`]) || 0; 
-            const b = parseFloat(examData[`b_${i}`]) || 0;
-            const net = d - (y/3); 
-            totalNet += net; 
-            subjectsData[i] = { d, y, b, net };
+            const d = parseFloat(examData[`d_${i}`]) || 0; const y = parseFloat(examData[`y_${i}`]) || 0; const b = parseFloat(examData[`b_${i}`]) || 0;
+            const net = d - (y/3); totalNet += net; subjectsData[i] = { d, y, b, net };
         }
-        updates[`exams/${selectedStudent}/deneme`] = { 
-            subjects: subjectsData, 
-            net: totalNet, 
-            target: parseFloat(examData.target) || 0,
-            date: new Date().toDateString() 
-        };
+        updates[`exams/${selectedStudent}/deneme`] = { subjects: subjectsData, net: totalNet, target: parseFloat(examData.target) || 0, date: new Date().toDateString() };
     } else if (type === 'yazili') {
         let total = 0; let count = 0; let writeData = {};
         for(let i=0; i<examSubjects.length; i++) { 
             const val = examData[`p_${i}`]; 
             if(val !== undefined && val !== '') { total += parseFloat(val); count++; writeData[`p_${i}`] = parseFloat(val); } 
         }
-        updates[`exams/${selectedStudent}/yazili`] = { 
-            ...writeData, 
-            avg: count > 0 ? (total / count) : 0, 
-            target: parseFloat(examData.target) || 0,
-            date: new Date().toDateString() 
-        };
+        updates[`exams/${selectedStudent}/yazili`] = { ...writeData, avg: count > 0 ? (total / count) : 0, target: parseFloat(examData.target) || 0, date: new Date().toDateString() };
     }
-    db.ref('mavikent_premium').update(updates); 
-    setSelectedStudent(null); setModalType(null); alert(`${type.toUpperCase()} Kaydedildi!`);
+    db.ref('mavikent_premium').update(updates); setSelectedStudent(null); setModalType(null); alert(`${type.toUpperCase()} Kaydedildi!`);
   };
 
   const downloadCSVTemplate = (type) => {
@@ -228,31 +198,21 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           getFilteredRoster(selectedSession).forEach(name => { csvContent += `${name},0,0,0,0,0,0,0\n`; });
       }
       const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `Mavikent_${selectedSession}_${type}_Sablon.csv`);
+      const link = document.createElement("a"); link.setAttribute("href", encodedUri); link.setAttribute("download", `Mavikent_${selectedSession}_${type}_Sablon.csv`);
       document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
   const handleCSVUpload = (e, type) => {
       const file = e.target.files[0];
       if (!file) return;
-      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-          alert("⚠️ Lütfen Excel'de dosyanızı doldurduktan sonra 'Farklı Kaydet' diyerek 'CSV (Virgülle ayrılmış)' formatında kaydedip sisteme yükleyin.");
-          e.target.value = null; return;
-      }
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) return alert("⚠️ Lütfen Excel'de dosyanızı doldurduktan sonra 'Farklı Kaydet' diyerek 'CSV (Virgülle ayrılmış)' formatında kaydedip sisteme yükleyin.");
       const reader = new FileReader();
       reader.onload = (evt) => {
-          const text = evt.target.result;
-          const rows = text.split(/\r?\n/).map(row => row.split(/[,;]/));
-          const updates = {}; let matchCount = 0;
-          const normalize = (str) => String(str).toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ').trim();
-          
+          const text = evt.target.result; const rows = text.split(/\r?\n/).map(row => row.split(/[,;]/));
+          const updates = {}; let matchCount = 0; const normalize = (str) => String(str).toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ').trim();
           for (let i = 1; i < rows.length; i++) { 
-              const cols = rows[i];
-              if (cols.length < 2) continue; 
-              const rawName = cols[0];
-              const matchedStudent = roster.find(n => normalize(n) === normalize(rawName));
+              const cols = rows[i]; if (cols.length < 2) continue; 
+              const matchedStudent = roster.find(n => normalize(n) === normalize(cols[0]));
               if (matchedStudent) {
                   matchCount++;
                   if (type === 'deneme') {
@@ -272,34 +232,80 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                   }
               }
           }
-          if (Object.keys(updates).length > 0) { db.ref('mavikent_premium').update(updates); alert(`✅ Başarılı! ${matchCount} öğrencinin sınav verisi aktarıldı.`); } 
-          else { alert('⚠️ Hata: İsimler eşleşmedi.'); }
+          if (Object.keys(updates).length > 0) { db.ref('mavikent_premium').update(updates); alert(`✅ Başarılı! ${matchCount} öğrencinin verisi aktarıldı.`); } else { alert('⚠️ Hata: İsimler eşleşmedi.'); }
           e.target.value = null; 
       };
       reader.readAsText(file, 'UTF-8');
   };
 
+  const loadHtml2Canvas = async () => {
+      if (window.html2canvas) return window.html2canvas;
+      return new Promise((resolve) => { const script = document.createElement('script'); script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; script.onload = () => resolve(window.html2canvas); document.head.appendChild(script); });
+  };
+
+  const downloadReportAsJPG = async (type, className) => {
+      const btnId = `btn-jpg-${type}`; const originalText = document.getElementById(btnId).innerText; document.getElementById(btnId).innerText = "⏳ Hazırlanıyor...";
+      const html2canvas = await loadHtml2Canvas(); const container = document.createElement('div');
+      container.style.cssText = "position:absolute;left:-9999px;top:0;width:1200px;background:#ffffff;padding:40px;font-family:'Plus Jakarta Sans',sans-serif;color:#0f172a;";
+      const studentsToMap = type === 'degerler' ? roster.filter(n => appData?.student_levels?.[n] === className) : getFilteredRoster(className);
+      let title = ''; let tableHTML = `<table style="width: 100%; border-collapse: collapse; text-align: center; margin-top: 20px;">`;
+      if (type === 'deneme') {
+          title = 'DENEME SINAVI SONUÇLARI (VELİ BİLGİLENDİRME)';
+          let dataArr = studentsToMap.map(n => {
+              const data = appData?.exams?.[n]?.deneme || {}; let totalNet = 0; let subsHTML = '';
+              examSubjects.forEach((s, i) => { const d = parseFloat(data?.subjects?.[i]?.d) || 0; const y = parseFloat(data?.subjects?.[i]?.y) || 0; const b = parseFloat(data?.subjects?.[i]?.b) || 0; const net = d - (y/3); totalNet += net; subsHTML += `<td style="padding:15px;border-bottom:1px solid #e2e8f0;"><div style="font-size:11px;color:#64748b;">${d}D ${y}Y ${b}B</div><div style="font-weight:900;font-size:15px;">${net.toFixed(2)} N</div></td>`; });
+              const target = parseFloat(data.target)||0; let statusHTML = '-';
+              if (target > 0) { statusHTML = totalNet >= target ? `<span style="background:#10b981;color:white;padding:6px 12px;border-radius:8px;font-weight:900;font-size:12px;letter-spacing:0.5px;">HEDEFİ GEÇTİ ✅</span>` : `<span style="background:#ef4444;color:white;padding:6px 12px;border-radius:8px;font-weight:900;font-size:12px;letter-spacing:0.5px;">HEDEFİN ALTINDA ❌</span>`; }
+              return { n, totalNet, target, subsHTML, statusHTML };
+          }).sort((a,b) => b.totalNet - a.totalNet);
+          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th>`;
+          examSubjects.forEach(s => tableHTML += `<th style="padding:15px;font-size:13px;">${s}</th>`);
+          tableHTML += `<th style="padding:15px;background:#3b82f6;">Toplam Net</th><th style="padding:15px;background:#d4af37;color:#0f172a;">Hedef</th><th style="padding:15px;border-radius:0 12px 0 0;">Durum</th></tr>`;
+          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:15px;border-bottom:1px solid #e2e8f0;">${d.n}</td>${d.subsHTML}<td style="padding:15px;font-weight:900;font-size:18px;color:#3b82f6;border-bottom:1px solid #e2e8f0;">${d.totalNet.toFixed(2)}</td><td style="padding:15px;font-weight:800;font-size:16px;color:#d4af37;border-bottom:1px solid #e2e8f0;">${d.target}</td><td style="padding:15px;border-bottom:1px solid #e2e8f0;">${d.statusHTML}</td></tr>`; });
+      } else if (type === 'yazili') {
+          title = 'HAFTALIK YAZILI DEĞERLENDİRME';
+          let dataArr = studentsToMap.map(n => {
+              const data = appData?.exams?.[n]?.yazili || {}; let total = 0; let count = 0; let subsHTML = '';
+              examSubjects.forEach((s, i) => { const val = data[`p_${i}`]; if (val!==undefined&&val!=='') { total+=parseFloat(val); count++; } subsHTML += `<td style="padding:15px;border-bottom:1px solid #e2e8f0;font-weight:800;font-size:16px;">${val||'-'}</td>`; });
+              const avg = count>0 ? (total/count) : 0; const target = parseFloat(data.target)||0; let statusHTML = '-';
+              if (target>0 && avg>0) { statusHTML = avg >= target ? `<span style="background:#10b981;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">HEDEFİ GEÇTİ ✅</span>` : `<span style="background:#ef4444;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">HEDEFİN ALTINDA ❌</span>`; }
+              return { n, avg, target, subsHTML, statusHTML };
+          }).sort((a,b) => b.avg - a.avg);
+          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th>`;
+          examSubjects.forEach(s => tableHTML += `<th style="padding:15px;">${s}</th>`);
+          tableHTML += `<th style="padding:15px;background:#3b82f6;">Ortalama</th><th style="padding:15px;background:#d4af37;color:#0f172a;">Hedef</th><th style="padding:15px;border-radius:0 12px 0 0;">Durum</th></tr>`;
+          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:16px;border-bottom:1px solid #e2e8f0;">${d.n}</td>${d.subsHTML}<td style="padding:15px;font-weight:900;font-size:20px;color:#3b82f6;border-bottom:1px solid #e2e8f0;">${d.avg.toFixed(1)}</td><td style="padding:15px;font-weight:800;font-size:18px;color:#d4af37;border-bottom:1px solid #e2e8f0;">${d.target}</td><td style="padding:15px;border-bottom:1px solid #e2e8f0;">${d.statusHTML}</td></tr>`; });
+      } else if (type === 'egitim') {
+          title = 'GÜNLÜK EĞİTİM VE ÖDEV TAKİBİ';
+          let dataArr = studentsToMap.map(n => { const d = appData?.education_d?.[n] || {}; return { n, lessons: (d.lessons||[]).join(', ')||'-', pages: d.pages||0, questions: d.questions||0 }; }).sort((a,b) => b.questions - a.questions);
+          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th><th style="padding:15px;">Ödevler</th><th style="padding:15px;">Kitap (S)</th><th style="padding:15px;border-radius:0 12px 0 0;background:#3b82f6;">Soru</th></tr>`;
+          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:16px;border-bottom:1px solid #e2e8f0;">${d.n}</td><td style="padding:15px;font-weight:700;color:#10b981;border-bottom:1px solid #e2e8f0;">${d.lessons}</td><td style="padding:15px;font-weight:800;font-size:16px;border-bottom:1px solid #e2e8f0;">${d.pages}</td><td style="padding:15px;font-weight:900;font-size:20px;color:#3b82f6;border-bottom:1px solid #e2e8f0;">${d.questions}</td></tr>`; });
+      } else if (type === 'degerler') {
+          const todayStr = new Date().toDateString();
+          const log = appData?.values_log?.[className]?.[todayStr] || { subject: 'Belirtilmedi', topic: '-' };
+          title = `DEĞERLER EĞİTİMİ (${log.subject} - ${log.topic})`;
+          let dataArr = studentsToMap.map(n => { const isDone = appData?.values_edu_d?.[n]?.[todayStr]?.done; return { n, statusHTML: isDone ? `<span style="background:#10b981;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">KATILDI ✓</span>` : `<span style="background:#ef4444;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">KATILMADI ✕</span>` }; });
+          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th><th style="padding:15px;border-radius:0 12px 0 0;">Günlük Katılım</th></tr>`;
+          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:16px;border-bottom:1px solid #e2e8f0;color:#0f172a;">${d.n}</td><td style="padding:15px;border-bottom:1px solid #e2e8f0;">${d.statusHTML}</td></tr>`; });
+      }
+      
+      tableHTML += `</table>`;
+      container.innerHTML = `<div style="background:linear-gradient(135deg, #0f172a, #1e293b);padding:30px;border-radius:24px;display:flex;justify-content:space-between;align-items:center;color:white;box-shadow:0 10px 30px rgba(0,0,0,0.1);"><div><h1 style="margin:0;font-size:42px;font-weight:900;letter-spacing:-1px;">MAVİKENT <span style="color:#d4af37;">ELITE</span></h1><h2 style="margin:5px 0 0 0;font-size:20px;color:#cbd5e1;font-weight:700;">${className} - ${title}</h2></div><div style="text-align:right;"><div style="font-size:16px;font-weight:600;color:#cbd5e1;">Tarih</div><div style="font-size:22px;font-weight:800;color:#d4af37;">${new Date().toLocaleDateString('tr-TR')}</div></div></div>${tableHTML}`;
+      document.body.appendChild(container);
+      
+      try { const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff', useCORS: true }); const link = document.createElement('a'); link.download = `Mavikent_${className}_${type}.jpg`; link.href = canvas.toDataURL('image/jpeg', 0.9); link.click(); } catch(e) { console.error(e); } finally { document.body.removeChild(container); document.getElementById(btnId).innerText = originalText; }
+  };
+
   const handleAddProduct = () => {
     if (!newProduct.name || !newProduct.price) return alert("İsim ve fiyat zorunludur!");
-    const productData = { 
-        n: newProduct.name, p: parseInt(newProduct.price), i: newProduct.icon, type: newProduct.type,
-        stock: newProduct.stock !== '' ? parseInt(newProduct.stock) : 999 
-    };
-
-    if (newProduct.type === 'bundle') {
-        if (bundleSelection.length === 0) return alert("Lütfen paket içine eklenecek ürünleri seçin!");
-        productData.bundleItems = bundleSelection;
-    }
-
+    const productData = { n: newProduct.name, p: parseInt(newProduct.price), i: newProduct.icon, type: newProduct.type, stock: newProduct.stock !== '' ? parseInt(newProduct.stock) : 999 };
+    if (newProduct.type === 'bundle') { if (bundleSelection.length === 0) return alert("Lütfen paket içine eklenecek ürünleri seçin!"); productData.bundleItems = bundleSelection; }
     if (editProductKey) { db.ref(`mavikent_premium/market_products/${editProductKey}`).update(productData); setEditProductKey(null); } 
     else { db.ref('mavikent_premium/market_products').push(productData); }
     setNewProduct({ name: '', price: '', icon: '📦', type: 'normal', stock: '' }); setBundleSelection([]);
   };
   
-  const editProduct = (key, prod) => { 
-      setNewProduct({ name: prod.n, price: prod.p, icon: prod.i, type: prod.type || 'normal', stock: prod.stock !== undefined ? prod.stock : '' }); 
-      setBundleSelection(prod.bundleItems || []); setEditProductKey(key); window.scrollTo(0,0); 
-  };
+  const editProduct = (key, prod) => { setNewProduct({ name: prod.n, price: prod.p, icon: prod.i, type: prod.type || 'normal', stock: prod.stock !== undefined ? prod.stock : '' }); setBundleSelection(prod.bundleItems || []); setEditProductKey(key); window.scrollTo(0,0); };
 
   const handleCreateGroupBuy = () => {
       const tc = parseInt(newGroupBuy.totalCost); const mp = parseInt(newGroupBuy.maxP);
@@ -312,17 +318,13 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       const item = document.getElementById('aucItem').value; const price = parseInt(document.getElementById('aucPrice').value);
       if(!item || !price) return alert("İhale ürünü ve başlangıç fiyatı zorunludur!");
       db.ref('mavikent_premium/auction').set({ item: item, minBid: price, currentBid: price, highestBidder: null, active: true });
-      alert("🔨 İhale başlatıldı! Öğrenciler artık teklif verebilir.");
-      document.getElementById('aucItem').value = ''; document.getElementById('aucPrice').value = '';
+      alert("🔨 İhale başlatıldı! Öğrenciler artık teklif verebilir."); document.getElementById('aucItem').value = ''; document.getElementById('aucPrice').value = '';
   };
 
   const handleEndAuction = () => {
       if(!window.confirm("İhaleyi bitirmek istediğine emin misin?")) return;
       const auc = appData?.auction;
-      if (auc && auc.highestBidder) {
-          db.ref('mavikent_premium/deliveries').push({ s: auc.highestBidder, i: `${auc.item} (İhale Kazancı)`, st: 'wait', type: 'normal', val: auc.item, date: new Date().toLocaleDateString('tr-TR') });
-          alert(`🏆 İhale bitti! ${auc.highestBidder} kazandı.`);
-      } else { alert("İhaleye kimse teklif vermedi."); }
+      if (auc && auc.highestBidder) { db.ref('mavikent_premium/deliveries').push({ s: auc.highestBidder, i: `${auc.item} (İhale Kazancı)`, st: 'wait', type: 'normal', val: auc.item, date: new Date().toLocaleDateString('tr-TR') }); alert(`🏆 İhale bitti! ${auc.highestBidder} kazandı.`); } else { alert("İhaleye kimse teklif vermedi."); }
       db.ref('mavikent_premium/auction').set(null);
   };
 
@@ -336,11 +338,89 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const handleAdminDeleteClan = (cId) => {
       if(!window.confirm("Bu klanı silmek istediğine emin misin?")) return;
       const clan = appData?.clans?.[cId];
-      if(clan && clan.members) {
-          const updates = {}; updates[`clans/${cId}`] = null;
-          clan.members.forEach(m => { updates[`clan_war_participants/${m}`] = null; });
-          db.ref('mavikent_premium').update(updates); alert("Klan temizlendi.");
+      if(clan && clan.members) { const updates = {}; updates[`clans/${cId}`] = null; clan.members.forEach(m => { updates[`clan_war_participants/${m}`] = null; }); db.ref('mavikent_premium').update(updates); alert("Klan temizlendi."); }
+  };
+
+  // EKSİK 1: KLAN SAVAŞINI BİTİRME VE ÖDÜL DAĞITIMI
+  const handleEndClanWar = () => {
+      if (!window.confirm("Klan savaşını bitirip kazanan klana 60'ar M-Coin ödül dağıtmak istiyor musunuz?")) return;
+      let highestScore = -1; let winnerClanId = null;
+      Object.keys(appData?.clans || {}).forEach(cId => {
+          const clan = appData.clans[cId]; let warScore = 0;
+          (clan.members || []).forEach(m => { if (appData?.clan_war_participants?.[m]) { warScore += Number(appData?.season_score?.[m] || 0); } });
+          if (warScore > highestScore) { highestScore = warScore; winnerClanId = cId; }
+      });
+      if (!winnerClanId || highestScore === 0) return alert("Savaşa katılan klan veya puan yok.");
+      
+      const winnerClan = appData.clans[winnerClanId]; const updates = {};
+      (winnerClan.members || []).forEach(m => {
+          if (appData?.clan_war_participants?.[m]) { updates[`wallet/${m}`] = (Number(appData?.wallet?.[m]) || 0) + 60; updates[`transactions/${m}/txn_cw_${Date.now()}`] = { desc: '🏆 Klan Savaşı Şampiyonluğu', amt: 60, date: new Date().toLocaleString('tr-TR') }; }
+      });
+      updates['clan_war_participants'] = null;
+      db.ref('mavikent_premium/global_chat').push({ s: 'SİSTEM', t: `🏆 HAFTANIN KLAN SAVAŞI ŞAMPİYONU: ${winnerClan.name}! Katılan üyelere 60 M-Coin yatırıldı.`, ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) });
+      db.ref('mavikent_premium').update(updates); alert(`✅ Savaş bitti! Şampiyon: ${winnerClan.name} (${highestScore} Puan)`);
+  };
+
+  // EKSİK 2: GÖREV TAMAMLAMA VE ÖDÜL DAĞITIMI
+  const completeQuest = (qId) => {
+      const quest = appData?.quests?.[qId]; if (!quest) return;
+      const parts = quest.participants || []; if (parts.length === 0) return alert("Bu görevde katılımcı yok!");
+      if (!window.confirm(`${parts.length} öğrenciye ödülleri dağıtılsın mı?`)) return;
+      
+      const updates = {};
+      parts.forEach(p => {
+          if (quest.type === 'M') { updates[`wallet/${p}`] = (Number(appData?.wallet?.[p]) || 0) + Number(quest.amt); updates[`transactions/${p}/txn_q_${Date.now()}`] = { desc: `Görev Ödülü: ${quest.text}`, amt: Number(quest.amt), date: new Date().toLocaleString('tr-TR') }; } 
+          else if (quest.type === 'RP') { updates[`season_score/${p}`] = (Number(appData?.season_score?.[p]) || 0) + Number(quest.amt); }
+          updates[`xp/${p}`] = (Number(appData?.xp?.[p]) || 0) + 50; 
+      });
+      updates[`quests/${qId}/participants`] = null; db.ref('mavikent_premium').update(updates); alert("✅ Ödüller dağıtıldı ve liste temizlendi.");
+  };
+
+  // EKSİK 3: YÖNETİCİ SOHBET MESAJI GÖNDERİMİ
+  const sendAdminChat = () => {
+      if (!adminChatInput.trim()) return;
+      db.ref('mavikent_premium/global_chat').push({ s: 'YÖNETİCİ', t: adminChatInput, ts: Date.now(), type: 'admin', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) });
+      setAdminChatInput('');
+  };
+
+  // EKSİK 4: TESLİMAT ONAYLARI VE KOLEKSİYON YÖNETİMİ
+  const handleApproveDelivery = (k, item) => {
+      if (!window.confirm(`${item.n || item.i} teslimatını onaylıyor musun?`)) return;
+      const updates = {}; const iName = String(item.n || item.i || '').toUpperCase();
+      const isDigital = item.type === 'multiplier' || item.type === 'streak' || item.type === 'avatar' || item.type === 'title' || item.type === 'frame' || item.type === 'ticket' || iName.includes("BİLET") || iName.includes("ÇEKİLİŞ");
+      if (isDigital) {
+          if (item.type === 'ticket' || iName.includes("BİLET") || iName.includes("ÇEKİLİŞ")) { updates[`tickets/${item.s}`] = (Number(appData?.tickets?.[item.s]) || 0) + 1; }
+          else if (item.type === 'multiplier') { updates[`active_cards/${item.s}/multiplier`] = { date: new Date().toDateString(), val: "2X" }; }
+          else if (item.type === 'streak') { const today = new Date(); let nextSat = new Date(); nextSat.setDate(today.getDate() + 6); nextSat.setHours(15, 0, 0, 0); updates[`active_cards/${item.s}/streak`] = { val: "aktif", date: new Date().toDateString(), end: nextSat.getTime() }; }
       }
+      updates[`deliveries/${k}/st`] = 'done'; db.ref('mavikent_premium').update(updates); alert("✅ Onaylandı!");
+  };
+
+  const handleDeliverCollection = (student, cName, keys) => {
+      if (!window.confirm(`${student} için ${cName} koleksiyon ödülünü (500 M-Coin) vermek istiyor musunuz?`)) return;
+      const updates = {}; keys.forEach(k => { updates[`deliveries/${k}/st`] = 'done'; });
+      updates[`wallet/${student}`] = (Number(appData?.wallet?.[student]) || 0) + 500;
+      updates[`transactions/${student}/txn_col_${Date.now()}`] = { desc: `🏆 Koleksiyon Ödülü (${cName})`, amt: 500, date: new Date().toLocaleString('tr-TR') };
+      db.ref('mavikent_premium').update(updates); alert("✅ Ödül yatırıldı!");
+  };
+
+  const handleCancelCollection = (student, keys, items, withRefund) => {
+      if (!window.confirm(withRefund ? "Bu koleksiyon parçalarını iptal edip iade yapmak istiyor musunuz?" : "İADESİZ silmek istiyor musunuz?")) return;
+      const updates = {}; let totalRefund = 0;
+      keys.forEach((k, idx) => {
+          updates[`deliveries/${k}`] = null;
+          if (withRefund) {
+              const it = items[idx]; const iName = String(it.n || it.i || ''); let refundAmt = 0;
+              if (iName.includes('(Çekiliş)')) refundAmt = 20; else if (iName.includes('(Kazı Kazan)')) refundAmt = 15;
+              else { const prod = Object.values(appData?.market_products || {}).find(p => p.n === iName); if (prod && prod.p) refundAmt = Number(prod.p); }
+              totalRefund += refundAmt;
+          }
+      });
+      if (withRefund && totalRefund > 0) {
+          updates[`wallet/${student}`] = (Number(appData?.wallet?.[student]) || 0) + totalRefund;
+          updates[`transactions/${student}/txn_ref_col_${Date.now()}`] = { desc: `Toplu İade (Koleksiyon)`, amt: totalRefund, date: new Date().toLocaleString('tr-TR') };
+      }
+      db.ref('mavikent_premium').update(updates); alert(withRefund ? `✅ İade yapıldı: ${totalRefund} M` : "🗑️ Silindi.");
   };
 
   const handleBulkDeliveryAction = (action) => {
@@ -351,10 +431,8 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       if (action === 'approve') {
           if(!window.confirm(`Görünen tüm teslimatları onaylamak istediğine emin misin?`)) return;
           waitingKeys.forEach(k => {
-              const item = appData.deliveries[k];
-              const iName = String(item.n || item.i || '').toUpperCase();
+              const item = appData.deliveries[k]; const iName = String(item.n || item.i || '').toUpperCase();
               const isDigital = item.type === 'multiplier' || item.type === 'streak' || item.type === 'avatar' || item.type === 'title' || item.type === 'frame' || item.type === 'ticket' || iName.includes("BİLET") || iName.includes("ÇEKİLİŞ");
-
               if (isDigital) {
                   if (item.type === 'ticket' || iName.includes("BİLET") || iName.includes("ÇEKİLİŞ")) { updates[`tickets/${item.s}`] = (Number(appData?.tickets?.[item.s]) || 0) + 1; } 
                   else if (item.type === 'multiplier') { updates[`active_cards/${item.s}/multiplier`] = { date: new Date().toDateString(), val: "2X" }; } 
@@ -382,31 +460,8 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       }
       else if (action === 'delete') {
           if(!window.confirm(`Tüm bekleyen siparişleri İADESİZ olarak silmek istediğine emin misin?`)) return;
-          waitingKeys.forEach(k => updates[`deliveries/${k}`] = null);
-          db.ref('mavikent_premium').update(updates); alert(`🗑️ Teslimatlar silindi.`);
+          waitingKeys.forEach(k => updates[`deliveries/${k}`] = null); db.ref('mavikent_premium').update(updates); alert(`🗑️ Teslimatlar silindi.`);
       }
-  };
-
-  const handleApproveDelivery = (key, item) => {
-      if (!window.confirm("Bu siparişi onaylamak (teslim etmek) istediğinize emin misiniz?")) return;
-      const updates = {};
-      const iName = String(item.n || item.i || '').toUpperCase();
-      const iType = String(item.type || '').toLowerCase();
-      
-      const isDigital = iType === 'multiplier' || iType === 'streak' || iType === 'avatar' || iType === 'title' || iType === 'frame' || iType === 'ticket' || iName.includes("BİLET") || iName.includes("ÇEKİLİŞ") || iName.includes("2X") || iName.includes("ÇARPAN") || iName.includes("KORUMA") || iName.includes("SERİ") || iName.includes("ÜNVAN");
-
-      if (isDigital) {
-          if (iType === 'ticket' || iName.includes("BİLET") || iName.includes("ÇEKİLİŞ")) { updates[`tickets/${item.s}`] = (Number(appData?.tickets?.[item.s]) || 0) + 1; } 
-          else if (iType === 'multiplier' || iName.includes("2X") || iName.includes("ÇARPAN")) { updates[`active_cards/${item.s}/multiplier`] = { date: new Date().toDateString(), val: "2X" }; } 
-          else if (iType === 'streak' || iName.includes("KORUMA") || iName.includes("SERİ")) { const today = new Date(); let nextSat = new Date(); nextSat.setDate(today.getDate() + 6); nextSat.setHours(15, 0, 0, 0); updates[`active_cards/${item.s}/streak`] = { val: "aktif", date: new Date().toDateString(), end: nextSat.getTime() }; } 
-          else if (iType === 'title' || iName.includes("ÜNVAN")) { updates[`active_cards/${item.s}/title`] = { val: item.n || item.i, exp: Date.now() + 14 * 24 * 60 * 60 * 1000 }; } 
-          else if (iType === 'avatar' || iType === 'frame') { updates[`active_cards/${item.s}/${iType}`] = { val: item.val || item.i || iName, exp: Date.now() + 30 * 24 * 60 * 60 * 1000 }; }
-          updates[`global_chat/sys_${Date.now()}`] = { s: 'SİSTEM', t: `✨ ${item.s} adlı öğrencinin dijital ürünü (${item.n || item.i}) yönetici tarafından onaylandı ve hesaba tanımlandı!`, type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) };
-      } else {
-          updates[`global_chat/sys_${Date.now()}`] = { s: 'SİSTEM', t: `📦 ${item.s} adlı öğrencinin siparişi (${item.n || item.i}) teslim edildi! Afiyet olsun.`, type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) };
-      }
-      updates[`deliveries/${key}/st`] = 'done';
-      db.ref('mavikent_premium').update(updates); alert(`✅ Onaylandı ve duyurusu yapıldı!`);
   };
 
   const handleCancelDelivery = (k, item, withRefund) => {
@@ -426,156 +481,140 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       db.ref('mavikent_premium').update(updates);
   };
 
-  const handleDeliverCollection = (student, collName, keysArray) => {
-      if(!window.confirm(`${student} adlı öğrenciye ${collName} ödülünü fiziki olarak verdiniz mi?`)) return;
+  const applyBan = () => {
+      if (!banInput.student || !banInput.reason) return alert("Öğrenci ve Ceza Sebebi zorunludur!");
+      let expTime = 0;
+      if (banInput.duration === '1') expTime = Date.now() + (1 * 24 * 60 * 60 * 1000);
+      else if (banInput.duration === '3') expTime = Date.now() + (3 * 24 * 60 * 60 * 1000);
+      else if (banInput.duration === '7') expTime = Date.now() + (7 * 24 * 60 * 60 * 1000);
+      else expTime = Date.now() + (365 * 24 * 60 * 60 * 1000); 
+
       const updates = {};
-      keysArray.slice(0, 3).forEach(k => { updates[`deliveries/${k}`] = null; });
-      const newKey = db.ref().push().key;
-      updates[`deliveries/${newKey}`] = { s: student, i: `${collName} (Ödül Teslim Edildi)`, st: 'done', type: 'reward', val: '🏆', date: new Date().toLocaleDateString('tr-TR') };
-      db.ref('mavikent_premium').update(updates); alert(`🏆 Ödül verildi!`);
-  };
+      updates[`game_room_bans/${banInput.student}`] = { reason: banInput.reason, photoUrl: banInput.photoUrl || '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR') };
 
-  const handleCancelCollection = (student, keysArray, itemsArray, withRefund) => {
-      if (!window.confirm(withRefund ? `Parçaları iptal edip iade yapmak istiyor musun?` : `İadesiz silmek istiyor musun?`)) return;
-      const updates = {}; let totalRefund = 0;
-      keysArray.forEach((k, idx) => {
-          updates[`deliveries/${k}`] = null;
-          if (withRefund) {
-              const iName = String(itemsArray[idx].n || itemsArray[idx].i || '').toUpperCase();
-              if (iName.includes('(ÇEKİLİŞ)')) totalRefund += 20; else if (iName.includes('(KAZI KAZAN)')) totalRefund += 15;
-          }
+      Object.keys(appData?.game_room_appointments || {}).forEach(device => {
+          Object.keys(appData.game_room_appointments[device] || {}).forEach(day => {
+              Object.keys(appData.game_room_appointments[device][day] || {}).forEach(slotId => {
+                  if (appData.game_room_appointments[device][day][slotId] === banInput.student) { updates[`game_room_appointments/${device}/${day}/${slotId}`] = null; }
+              });
+          });
       });
-      if (withRefund && totalRefund > 0) {
-          updates[`wallet/${student}`] = (Number(appData?.wallet?.[student]) || 0) + totalRefund;
-          updates[`transactions/${student}/txn_ref_${Date.now()}`] = { desc: `Parça İadesi`, amt: totalRefund, date: new Date().toLocaleString('tr-TR') };
-          alert(`✅ ${totalRefund} M iade edildi.`);
-      } else { alert("🗑️ Parçalar silindi."); }
-      db.ref('mavikent_premium').update(updates);
+      db.ref('mavikent_premium').update(updates); alert(`⛔ ${banInput.student} adlı öğrenciye başarıyla ceza kesildi ve aktif randevuları iptal edildi!`);
+      setBanInput({ student: '', duration: '1', reason: '', photoUrl: '' });
   };
 
-  const sendAdminChat = () => {
-      if(!adminChatInput.trim()) return;
-      db.ref('mavikent_premium/global_chat').push({ s: 'YÖNETİCİ', t: adminChatInput, ts: Date.now(), type: 'admin', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) });
-      setAdminChatInput('');
+  const removeBan = (student) => {
+      if(window.confirm(`${student} adlı öğrencinin yasağını kaldırmak istiyor musun?`)) { db.ref(`mavikent_premium/game_room_bans/${student}`).remove(); alert("Yasak kaldırıldı."); }
   };
 
-  const cleanString = (str) => {
-      if (!str) return '';
-      let clean = String(str).replace(/\(.*?\)/g, '').trim().toLocaleUpperCase('tr-TR');
-      clean = clean.replace(/[^\w\sÇĞİÖŞÜçğıöşü]/gi, '').trim(); 
-      if (clean.includes('SAAT')) return 'AKILLI SAAT';
-      if (clean.includes('FORMA')) return 'FORMA';
-      if (clean.includes('KRAMPON')) return 'KRAMPON';
-      if (clean.includes('EVİM') || clean.includes('KOLATA') || clean.includes('ÇIKOLATA')) return 'ÇİKOLATA EVİM';
-      if (clean.includes('KNEFE') || clean.includes('KÜNEFE')) return 'KÜNEFE';
-      if (clean.includes('BALIK') || clean.includes('NEŞELİ')) return 'NEŞELİ BALIK';
-      if (clean.includes('PZZA') || clean.includes('PİZZA') || clean.includes('PIZZA')) return 'PİZZA';
-      if (clean.includes('TOP') || clean.includes('FUTBOL')) return 'FUTBOL TOPU';
-      if (clean.includes('ÇEKİLİŞ') || clean.includes('CEKILIS')) return 'DİNAMİK ÇEKİLİŞ HAKKI';
-      return clean;
+  const toggleTourneyDay = (tId, day) => {
+      setTourneyDaysMap(prev => {
+          const current = prev[tId] || [];
+          if(current.includes(day)) return {...prev, [tId]: current.filter(d => d !== day)};
+          return {...prev, [tId]: [...current, day]};
+      });
   };
 
-  const loadHtml2Canvas = async () => {
-      if (window.html2canvas) return window.html2canvas;
-      return new Promise((resolve) => { const script = document.createElement('script'); script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; script.onload = () => resolve(window.html2canvas); document.head.appendChild(script); });
+  const generateFixture = (tId, tourneyData) => {
+      const selectedDays = tourneyDaysMap[tId] || [];
+      if (selectedDays.length === 0) return alert("Lütfen maçların oynanacağı günleri (Aşağıdaki Butonlardan) seçin!");
+      const players = [...(tourneyData.participants || [])];
+      if (players.length < 2) return alert("Fikstür oluşturmak için en az 2 kişi gerekli!");
+      if (!window.confirm(`Fikstür çekilecek ve seçtiğiniz günlerin (Akşam) seansları bu turnuva için kilitlenecektir. Onaylıyor musun?`)) return;
+
+      players.sort(() => Math.random() - 0.5);
+      let fixturePlayers = [...players];
+      if (fixturePlayers.length % 2 !== 0) fixturePlayers.push("BAY");
+
+      const numPlayers = fixturePlayers.length;
+      const numRounds = numPlayers - 1;
+      const matches = {}; let matchIdx = 0;
+
+      const devSlotsObj = GAME_SLOTS[tourneyData.device] || [];
+      const eveningSlots = devSlotsObj.filter(s => parseInt(s.time.split(':')[0]) >= 20);
+
+      if (eveningSlots.length === 0) return alert("Bu cihaz için akşam seansı bulunamadı!");
+
+      let currentWeek = 1; let currentDayIdx = 0; let currentSlotIdx = 0;
+      let updates = {}; let lockedCount = 0;
+
+      for (let round = 0; round < numRounds; round++) {
+          for (let i = 0; i < numPlayers / 2; i++) {
+              const home = fixturePlayers[i];
+              const away = fixturePlayers[numPlayers - 1 - i];
+
+              if (home !== "BAY" && away !== "BAY") {
+                  const targetDay = selectedDays[currentDayIdx];
+                  const targetSlot = eveningSlots[currentSlotIdx];
+
+                  matches[`m_${matchIdx}`] = { p1: home, p2: away, played: false, s1: 0, s2: 0, week: currentWeek, day: targetDay, slotId: targetSlot.id, time: targetSlot.time };
+                  updates[`game_room_appointments/${tourneyData.device}/${targetDay}/${targetSlot.id}`] = `🏆 TURNUVA: ${tourneyData.name}`;
+                  lockedCount++; matchIdx++; currentSlotIdx++;
+
+                  if (currentSlotIdx >= eveningSlots.length) {
+                      currentSlotIdx = 0; currentDayIdx++;
+                      if (currentDayIdx >= selectedDays.length) { currentDayIdx = 0; currentWeek++; }
+                  }
+              }
+          }
+          fixturePlayers.splice(1, 0, fixturePlayers.pop());
+      }
+
+      const standings = {}; players.forEach(p => { standings[p] = { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 }; });
+
+      updates[`tournaments/${tId}/status`] = 'active';
+      updates[`tournaments/${tId}/fixture`] = matches;
+      updates[`tournaments/${tId}/standings`] = standings;
+      db.ref('mavikent_premium').update(updates); alert(`✅ Fikstür başarıyla oluşturuldu! Toplam ${lockedCount} seans turnuva için kilitlendi.`);
   };
 
-  const downloadPanoAsJPG = async (type) => {
-      const btnId = `btn-pano-${type}`; const originalText = document.getElementById(btnId).innerText; document.getElementById(btnId).innerText = "⏳ Lüks Pano Hazırlanıyor...";
-      const html2canvas = await loadHtml2Canvas(); const container = document.createElement('div');
-      container.style.cssText = "position:absolute;left:-9999px;top:0;width:1200px;background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:60px;font-family:'Plus Jakarta Sans',sans-serif;color:white;border-radius:40px;";
-      
-      const renderTop3 = (title, data, unit, icon) => {
-          let html = `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);padding:35px;border-radius:30px;width:31%;box-shadow:0 20px 40px rgba(0,0,0,0.3);"><div style="font-size:60px;text-align:center;margin-bottom:20px;filter:drop-shadow(0 10px 10px rgba(0,0,0,0.5));">${icon}</div><h3 style="text-align:center;color:#d4af37;font-size:22px;font-weight:900;margin:0 0 30px 0;letter-spacing:1px;text-transform:uppercase;">${title}</h3>`;
-          const topData = data.slice(0, 3);
-          if(topData.length === 0 || topData[0].val === 0) { html += `<div style="text-align:center;color:#64748b;font-weight:700;font-size:18px;">Henüz Veri Yok</div>`; } else { topData.forEach((item, idx) => { const colors = ['#f59e0b', '#cbd5e1', '#b45309']; const bgColors = ['rgba(245,158,11,0.1)', 'rgba(203,213,225,0.1)', 'rgba(180,83,9,0.1)']; if(item.val > 0) { html += `<div style="display:flex;justify-content:space-between;align-items:center;background:${bgColors[idx]};padding:20px;border-radius:20px;margin-bottom:15px;border-left:4px solid ${colors[idx]};"><div style="display:flex;align-items:center;gap:15px;"><span style="font-size:24px;font-weight:900;color:${colors[idx]}">#${idx+1}</span><span style="font-size:18px;font-weight:800;color:white;">${String(item.n).split(' ')[0]}</span></div><div style="font-size:24px;font-weight:900;color:white;">${item.val} <span style="font-size:12px;color:#94a3b8;">${unit}</span></div></div>`; } }); }
-          html += `</div>`; return html;
+  const handleCreateTournament = () => {
+      if (!newTourney.name || !newTourney.fee || !newTourney.p1) return alert("Turnuva Adı, Giriş Ücreti ve 1. Ödülü zorunludur!");
+      const tId = `tourney_${Date.now()}`;
+      const updates = {};
+      updates[`tournaments/${tId}`] = {
+          name: newTourney.name, game: newTourney.game, device: newTourney.device, fee: parseInt(newTourney.fee),
+          p1: parseInt(newTourney.p1), p2: parseInt(newTourney.p2) || 0, p3: parseInt(newTourney.p3) || 0,
+          participants: [], status: 'open', date: new Date().toLocaleDateString('tr-TR')
       };
-      
-      let titleStr = ''; let contentHTML = '<div style="display:flex;justify-content:space-between;margin-top:50px;">';
-      if (type === 'egitim') {
-          titleStr = 'HAFTANIN EĞİTİM LİDERLERİ';
-          contentHTML += renderTop3('Soru Şampiyonu', roster.map(n => ({ n, val: Number(appData?.education_d?.[n]?.questions||0) })).sort((a,b)=>b.val-a.val), 'Soru', '🧠');
-          contentHTML += renderTop3('Kitap Kurdu', roster.map(n => ({ n, val: Number(appData?.education_d?.[n]?.pages||0) })).sort((a,b)=>b.val-a.val), 'Sayfa', '📖');
-          contentHTML += renderTop3('Deneme Fatihi', roster.map(n => ({ n, val: Number(appData?.exams?.[n]?.deneme?.net||0) })).sort((a,b)=>b.val-a.val), 'Net', '🎯');
-      } else if (type === 'isleyis') {
-          titleStr = 'YURT İŞLEYİŞ VE LİDERLİK PANOSU';
-          contentHTML += renderTop3('RP Kralları', roster.map(n => ({ n, val: Number(appData?.season_score?.[n]||0) })).sort((a,b)=>b.val-a.val), 'RP', '👑');
-          contentHTML += renderTop3('M-Coin Zenginleri', roster.map(n => ({ n, val: Number(appData?.wallet?.[n]||0) })).sort((a,b)=>b.val-a.val), 'M', '💳');
-          contentHTML += renderTop3('XP Liderleri', roster.map(n => ({ n, val: Number(appData?.xp?.[n]||0) })).sort((a,b)=>b.val-a.val), 'XP', '⭐');
-      } else if (type === 'degerler') {
-          titleStr = 'DEĞERLER EĞİTİMİ YILDIZLARI';
-          contentHTML += renderTop3('Katılım Liderleri', roster.map(n => { const counts = Object.values(appData?.values_edu_d?.[n] || {}).filter(v => v.done).length; return { n, val: counts }; }).sort((a,b)=>b.val-a.val), 'Ders', '🕌');
-          contentHTML += renderTop3('Takke Muhafızları', roster.map(n => { const sess = appData?.yoklama_d?.[n]?.sessions || {}; let tCount = Object.values(sess).filter(s => s.st === 't').length; return { n, val: tCount }; }).sort((a,b)=>b.val-a.val), 'Kez', '👳‍♂️');
-          contentHTML += renderTop3('Kanaat Liderleri', roster.map(n => ({ n, val: Number(appData?.kanaat_w?.[n]||0) })).sort((a,b)=>b.val-a.val), 'Puan', '✍️');
-      }
-      contentHTML += '</div>';
-      
-      container.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid rgba(255,255,255,0.1);padding-bottom:40px;"><div><h1 style="margin:0;font-size:60px;font-weight:900;letter-spacing:-2px;color:white;">MAVİKENT <span style="color:#d4af37;">ELITE</span></h1><h2 style="margin:10px 0 0 0;font-size:26px;color:#cbd5e1;font-weight:700;letter-spacing:1px;">${titleStr}</h2></div><div style="text-align:right;"><div style="font-size:20px;font-weight:600;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;letter-spacing:2px;">Tarih</div><div style="font-size:32px;font-weight:900;color:#d4af37;">${new Date().toLocaleDateString('tr-TR')}</div></div></div>${contentHTML}`;
-      document.body.appendChild(container);
-      
-      try { const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#0f172a', useCORS: true }); const link = document.createElement('a'); link.download = `Mavikent_${type}_Panosu.jpg`; link.href = canvas.toDataURL('image/jpeg', 0.9); link.click(); } catch(e) { console.error(e); } finally { document.body.removeChild(container); document.getElementById(btnId).innerText = originalText; }
+      db.ref('mavikent_premium').update(updates);
+      alert("🏆 Turnuva başarıyla oluşturuldu! Öğrenciler katılım sağlayabilir.");
+      setNewTourney({ name: '', game: 'FIFA 24', fee: '', p1: '', p2: '', p3: '', device: 'ps5' });
   };
 
-  const downloadReportAsJPG = async (type, className) => {
-      const btnId = `btn-jpg-${type}`; const originalText = document.getElementById(btnId).innerText; document.getElementById(btnId).innerText = "⏳ Hazırlanıyor...";
+  const handleEndTournament = (tId, tourneyData) => {
+      const parts = tourneyData.participants || [];
+      if (parts.length === 0) return alert("Turnuvada katılımcı yok!");
+      let msg = "🏆 ŞAMPİYONU SEÇİN:\n\n";
+      parts.forEach((p, i) => { msg += `${i + 1}- ${p}\n`; });
+      msg += "\nŞampiyonun numarasını girin:";
+      const res = prompt(msg);
+      if (!res) return;
+      const idx = parseInt(res) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= parts.length) return alert("Geçersiz bir numara girdiniz.");
       
-      const html2canvas = await loadHtml2Canvas(); const container = document.createElement('div');
-      container.style.cssText = "position:absolute;left:-9999px;top:0;width:1200px;background:#ffffff;padding:40px;font-family:'Plus Jakarta Sans',sans-serif;color:#0f172a;";
+      const winner = parts[idx];
+      const prize = parseInt(tourneyData.p1); 
       
-      const studentsToMap = type === 'degerler' ? roster.filter(n => appData?.student_levels?.[n] === className) : getFilteredRoster(className);
-      let title = ''; let tableHTML = `<table style="width: 100%; border-collapse: collapse; text-align: center; margin-top: 20px;">`;
-      
-      if (type === 'deneme') {
-          title = 'DENEME SINAVI SONUÇLARI (VELİ BİLGİLENDİRME)';
-          let dataArr = studentsToMap.map(n => {
-              const data = appData?.exams?.[n]?.deneme || {}; let totalNet = 0; let subsHTML = '';
-              examSubjects.forEach((s, i) => { const d = parseFloat(data?.subjects?.[i]?.d) || 0; const y = parseFloat(data?.subjects?.[i]?.y) || 0; const b = parseFloat(data?.subjects?.[i]?.b) || 0; const net = d - (y/3); totalNet += net; subsHTML += `<td style="padding:15px;border-bottom:1px solid #e2e8f0;"><div style="font-size:11px;color:#64748b;">${d}D ${y}Y ${b}B</div><div style="font-weight:900;font-size:15px;">${net.toFixed(2)} N</div></td>`; });
-              const target = parseFloat(data.target)||0; let statusHTML = '-';
-              if (target > 0) { statusHTML = totalNet >= target ? `<span style="background:#10b981;color:white;padding:6px 12px;border-radius:8px;font-weight:900;font-size:12px;letter-spacing:0.5px;">HEDEFİ GEÇTİ ✅</span>` : `<span style="background:#ef4444;color:white;padding:6px 12px;border-radius:8px;font-weight:900;font-size:12px;letter-spacing:0.5px;">HEDEFİN ALTINDA ❌</span>`; }
-              return { n, totalNet, target, subsHTML, statusHTML };
-          }).sort((a,b) => b.totalNet - a.totalNet);
+      if (window.confirm(`👑 ŞAMPİYON: ${winner}\n💰 KAZANCI: ${prize} M-Coin\n\nOnaylıyor musunuz?`)) {
+          const updates = {};
+          const currentWallet = Number(appData?.wallet?.[winner]) || 0;
+          updates[`wallet/${winner}`] = currentWallet + prize;
+          updates[`transactions/${winner}/txn_tourneywin_${Date.now()}`] = { desc: `🏆 Turnuva Şampiyonu: ${tourneyData.name}`, amt: prize, date: new Date().toLocaleString('tr-TR') };
+          updates[`tournaments/${tId}`] = null;
           
-          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th>`;
-          examSubjects.forEach(s => tableHTML += `<th style="padding:15px;font-size:13px;">${s}</th>`);
-          tableHTML += `<th style="padding:15px;background:#3b82f6;">Toplam Net</th><th style="padding:15px;background:#d4af37;color:#0f172a;">Hedef</th><th style="padding:15px;border-radius:0 12px 0 0;">Durum</th></tr>`;
-          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:15px;border-bottom:1px solid #e2e8f0;">${d.n}</td>${d.subsHTML}<td style="padding:15px;font-weight:900;font-size:18px;color:#3b82f6;border-bottom:1px solid #e2e8f0;">${d.totalNet.toFixed(2)}</td><td style="padding:15px;font-weight:800;font-size:16px;color:#d4af37;border-bottom:1px solid #e2e8f0;">${d.target}</td><td style="padding:15px;border-bottom:1px solid #e2e8f0;">${d.statusHTML}</td></tr>`; });
-      
-      } else if (type === 'yazili') {
-          title = 'HAFTALIK YAZILI DEĞERLENDİRME';
-          let dataArr = studentsToMap.map(n => {
-              const data = appData?.exams?.[n]?.yazili || {}; let total = 0; let count = 0; let subsHTML = '';
-              examSubjects.forEach((s, i) => { const val = data[`p_${i}`]; if (val!==undefined&&val!=='') { total+=parseFloat(val); count++; } subsHTML += `<td style="padding:15px;border-bottom:1px solid #e2e8f0;font-weight:800;font-size:16px;">${val||'-'}</td>`; });
-              const avg = count>0 ? (total/count) : 0; const target = parseFloat(data.target)||0; let statusHTML = '-';
-              if (target>0 && avg>0) { statusHTML = avg >= target ? `<span style="background:#10b981;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">HEDEFİ GEÇTİ ✅</span>` : `<span style="background:#ef4444;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">HEDEFİN ALTINDA ❌</span>`; }
-              return { n, avg, target, subsHTML, statusHTML };
-          }).sort((a,b) => b.avg - a.avg);
+          Object.keys(appData?.game_room_appointments || {}).forEach(device => {
+              Object.keys(appData.game_room_appointments[device] || {}).forEach(day => {
+                  Object.keys(appData.game_room_appointments[device][day] || {}).forEach(slotId => {
+                      const sName = appData.game_room_appointments[device][day][slotId];
+                      if (String(sName).includes(`TURNUVA: ${tourneyData.name}`)) { updates[`game_room_appointments/${device}/${day}/${slotId}`] = null; }
+                  });
+              });
+          });
           
-          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th>`;
-          examSubjects.forEach(s => tableHTML += `<th style="padding:15px;">${s}</th>`);
-          tableHTML += `<th style="padding:15px;background:#3b82f6;">Ortalama</th><th style="padding:15px;background:#d4af37;color:#0f172a;">Hedef</th><th style="padding:15px;border-radius:0 12px 0 0;">Durum</th></tr>`;
-          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:16px;border-bottom:1px solid #e2e8f0;">${d.n}</td>${d.subsHTML}<td style="padding:15px;font-weight:900;font-size:20px;color:#3b82f6;border-bottom:1px solid #e2e8f0;">${d.avg.toFixed(1)}</td><td style="padding:15px;font-weight:800;font-size:18px;color:#d4af37;border-bottom:1px solid #e2e8f0;">${d.target}</td><td style="padding:15px;border-bottom:1px solid #e2e8f0;">${d.statusHTML}</td></tr>`; });
-      
-      } else if (type === 'egitim') {
-          title = 'GÜNLÜK EĞİTİM VE ÖDEV TAKİBİ';
-          let dataArr = studentsToMap.map(n => { const d = appData?.education_d?.[n] || {}; return { n, lessons: (d.lessons||[]).join(', ')||'-', pages: d.pages||0, questions: d.questions||0 }; }).sort((a,b) => b.questions - a.questions);
-          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th><th style="padding:15px;">Ödevler</th><th style="padding:15px;">Kitap (S)</th><th style="padding:15px;border-radius:0 12px 0 0;background:#3b82f6;">Soru</th></tr>`;
-          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:16px;border-bottom:1px solid #e2e8f0;">${d.n}</td><td style="padding:15px;font-weight:700;color:#10b981;border-bottom:1px solid #e2e8f0;">${d.lessons}</td><td style="padding:15px;font-weight:800;font-size:16px;border-bottom:1px solid #e2e8f0;">${d.pages}</td><td style="padding:15px;font-weight:900;font-size:20px;color:#3b82f6;border-bottom:1px solid #e2e8f0;">${d.questions}</td></tr>`; });
-      
-      } else if (type === 'degerler') {
-          const todayStr = new Date().toDateString();
-          const log = appData?.values_log?.[className]?.[todayStr] || { subject: 'Belirtilmedi', topic: '-' };
-          title = `DEĞERLER EĞİTİMİ (${log.subject} - ${log.topic})`;
-          let dataArr = studentsToMap.map(n => { const isDone = appData?.values_edu_d?.[n]?.[todayStr]?.done; return { n, statusHTML: isDone ? `<span style="background:#10b981;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">KATILDI ✓</span>` : `<span style="background:#ef4444;color:white;padding:6px 12px;border-radius:8px;font-weight:800;font-size:13px;">KATILMADI ✕</span>` }; });
-          tableHTML += `<tr style="background:#0f172a;color:white;"><th style="padding:15px;border-radius:12px 0 0 0;">#</th><th style="padding:15px;text-align:left;">Öğrenci</th><th style="padding:15px;border-radius:0 12px 0 0;">Günlük Katılım</th></tr>`;
-          dataArr.forEach((d, i) => { tableHTML += `<tr style="background:${i%2===0?'#f8fafc':'#ffffff'};"><td style="padding:15px;font-weight:900;color:#86868b;border-bottom:1px solid #e2e8f0;">${i+1}</td><td style="padding:15px;font-weight:800;text-align:left;font-size:16px;border-bottom:1px solid #e2e8f0;color:#0f172a;">${d.n}</td><td style="padding:15px;border-bottom:1px solid #e2e8f0;">${d.statusHTML}</td></tr>`; });
+          db.ref('mavikent_premium/global_chat').push({ s: 'SİSTEM', t: `🏆 ${tourneyData.name} Turnuvasının Şampiyonu ${winner.split(' ')[0]} oldu ve ${prize} M-Coin kazandı! Tebrikler! 🎉`, ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) });
+          db.ref('mavikent_premium').update(updates); alert(`🎉 İşlem tamam! Şampiyon ilan edildi, oyun odası saatleri açıldı ve ödül yatırıldı.`);
       }
-      
-      tableHTML += `</table>`;
-      container.innerHTML = `<div style="background:linear-gradient(135deg, #0f172a, #1e293b);padding:30px;border-radius:24px;display:flex;justify-content:space-between;align-items:center;color:white;box-shadow:0 10px 30px rgba(0,0,0,0.1);"><div><h1 style="margin:0;font-size:42px;font-weight:900;letter-spacing:-1px;">MAVİKENT <span style="color:#d4af37;">ELITE</span></h1><h2 style="margin:5px 0 0 0;font-size:20px;color:#cbd5e1;font-weight:700;">${className} - ${title}</h2></div><div style="text-align:right;"><div style="font-size:16px;font-weight:600;color:#cbd5e1;">Tarih</div><div style="font-size:22px;font-weight:800;color:#d4af37;">${new Date().toLocaleDateString('tr-TR')}</div></div></div>${tableHTML}`;
-      document.body.appendChild(container);
-      
-      try { const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff', useCORS: true }); const link = document.createElement('a'); link.download = `Mavikent_${className}_${type}.jpg`; link.href = canvas.toDataURL('image/jpeg', 0.9); link.click(); } catch(e) { console.error(e); } finally { document.body.removeChild(container); document.getElementById(btnId).innerText = originalText; }
   };
 
   const renderStudentGrid = (students, type) => (
@@ -617,18 +656,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                 else if (type === 'egitim_ders') { setEduData({ lessons: appData?.education_d?.[name]?.lessons || [], pages: appData?.education_d?.[name]?.pages || 0, questions: appData?.education_d?.[name]?.questions || 0 }); setModalType('egitim'); }
                 else if (type === 'egitim_deneme') { setExamData(appData?.exams?.[name]?.deneme || {}); setModalType('deneme'); }
                 else if (type === 'egitim_yazili') { setExamData(appData?.exams?.[name]?.yazili || {}); setModalType('yazili'); }
-                else if (type === 'degerler') {
-                   const bugun = new Date().toDateString();
-                   if(!appData?.values_edu_d?.[name]?.[bugun]?.done) { 
-                       if(window.confirm(`${name} dersi verdi mi?`)) { 
-                           db.ref(`mavikent_premium/values_edu_d/${name}/${bugun}/done`).set(true); 
-                           db.ref(`mavikent_premium/wallet/${name}`).transaction(c => (Number(c)||0) + (isEliteStud?4:2)); 
-                           db.ref(`mavikent_premium/season_score/${name}`).transaction(c => (Number(c)||0) + (isEliteStud?4:2)); 
-                       } 
-                   } else { 
-                       if(window.confirm("Kaldırılsın mı?")) db.ref(`mavikent_premium/values_edu_d/${name}/${bugun}/done`).set(null); 
-                   }
-                }
              }} 
                className="card-hover" style={{ background: bgColor, border: isEliteStud ? '2px solid #d4af37' : 'none', padding: '24px 16px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', color: '#0f172a', cursor: 'pointer' }}>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
@@ -668,7 +695,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         .popIn-anim { animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       `}</style>
 
-      {/* CSV YÜKLEME GİZLİ INPUTLARI */}
       <input type="file" ref={csvDenemeRef} accept=".csv, .xlsx, .xls" style={{display: 'none'}} onChange={(e) => handleCSVUpload(e, 'deneme')} />
       <input type="file" ref={csvYaziliRef} accept=".csv, .xlsx, .xls" style={{display: 'none'}} onChange={(e) => handleCSVUpload(e, 'yazili')} />
 
@@ -685,10 +711,11 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
               { id: 'egitim', icon: '📚', label: 'EĞİTİM KONTROL' }, 
               { id: 'degerler', icon: '🕌', label: 'DAHİLİ DERS & DEĞERLER' },
               { id: 'isleyis', icon: '⚙️', label: 'YURT İŞLEYİŞ' }, 
-              { id: 'yonetim', icon: '👑', label: 'SİSTEM YÖNETİMİ', bg: '#f8fafc' }
+              { id: 'yonetim', icon: '👑', label: 'SİSTEM YÖNETİMİ', bg: '#f8fafc' },
+              { id: 'turnuva', icon: '🎮', label: 'OYUN ODASI & TURNUVA', bg: '#fef2f2' } 
             ].map(mod => (
               <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="premium-card card-hover" style={{ background: mod.bg || 'white' }}>
-                <div className="icon">{mod.icon}</div><div className="label">{mod.label}</div>
+                <div className="icon">{mod.icon}</div><div className="label" style={{ color: mod.id === 'turnuva' ? '#b91c1c' : '#0f172a' }}>{mod.label}</div>
               </div>
             ))}
             
@@ -698,6 +725,13 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
               { id: 'egitim_yazili', icon: '💯', label: 'YAZILI HAZIRLIK' } 
             ].map(mod => (
               <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
+            ))}
+
+            {dashboardView === 'turnuva' && [
+                { id: 'admin_ban', icon: '🕵️‍♂️', label: 'Oyun Odası Denetim Merkezi' },
+                { id: 'admin_turnuva', icon: '🏆', label: 'Turnuva Organizasyonu' }
+            ].map(mod => (
+                <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
             ))}
             
             {dashboardView === 'egitim_ders' && eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('class_view'); setSelectedSession(cls); }} className="premium-card card-hover"><div className="icon">📝</div><div className="label">{cls}</div></div>))}
@@ -736,6 +770,214 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           </div>
         )}
 
+        {/* --- OYUN ODASI DENETİM MERKEZİ --- */}
+        {currentModule === 'admin_ban' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+                <div style={{ background: '#eff6ff', padding: '30px', borderRadius: '24px', border: '1px solid #bfdbfe' }}>
+                    <h3 style={{ margin: '0 0 15px 0', color: '#1e3a8a', fontWeight: 900 }}>🕵️‍♂️ Oyun Odası Sorumlusu Ata</h3>
+                    <p style={{ fontSize: '13px', color: '#1e40af', marginBottom: '20px', fontWeight: 600 }}>Seçilen öğrenci, kendi panelinden oyun odası randevularını kontrol edebilir ve 5 maddelik denetim formunu doldurabilir.</p>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <select value={appData?.settings?.game_room_controller || ''} onChange={e => {
+                            db.ref('mavikent_premium/settings/game_room_controller').set(e.target.value);
+                            alert(`Oyun Odası Sorumlusu başarıyla atandı! (${e.target.value})`);
+                        }} className="elite-input" style={{ flex: 1 }}>
+                            <option value="">Sorumlu Seçin</option>
+                            {roster.map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                    </div>
+                </div>
+
+                <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                    <h3 style={{ margin: '0 0 15px 0', color: '#0f172a', fontWeight: 900 }}>📋 Gelen Kontrol Raporları</h3>
+                    <div className="clean-scroll" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                        {Object.keys(appData?.game_room_reports || {}).length === 0 ? <div style={{color:'#64748b', fontSize:'13px', fontWeight:600}}>Henüz rapor bulunmuyor.</div> : (
+                           Object.keys(appData.game_room_reports).reverse().map(k => {
+                               const rep = appData.game_room_reports[k];
+                               return (
+                                   <div key={k} style={{ background: '#f8fafc', padding: '15px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '10px' }}>
+                                       <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '15px', display: 'flex', justifyContent: 'space-between' }}>
+                                           <span>🎮 {rep.target}</span>
+                                           <span style={{fontSize:'11px', color:'#64748b'}}>{rep.date}</span>
+                                       </div>
+                                       <div style={{ fontSize: '12px', color: '#334155', marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+                                           <div>Sağlam Teslim: {rep.q1 ? '✅' : '❌'}</div>
+                                           <div>Tertip Düzen: {rep.q2 ? '✅' : '❌'}</div>
+                                           <div>Oyundan Çıkıldı: {rep.q3 ? '✅' : '❌'}</div>
+                                           <div>Cihaz Kapatıldı: {rep.q4 ? '✅' : '❌'}</div>
+                                       </div>
+                                       <div style={{ marginTop: '8px', fontSize: '12px', fontWeight: 800 }}>
+                                           Yiyecek/İçecek İhlali: {rep.q5 ? <span style={{color:'#ef4444'}}>EVET ⛔ (1 Hafta Ban)</span> : <span style={{color:'#10b981'}}>HAYIR ✅</span>}
+                                       </div>
+                                       {rep.photoUrl && (
+                                           <div style={{ marginTop: '10px' }}>
+                                              <img src={rep.photoUrl} alt="İhlal Kanıtı" style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px', border: '2px solid #ef4444', cursor: 'pointer' }} onClick={() => window.open(rep.photoUrl, '_blank')} />
+                                              <div style={{ fontSize: '10px', color: '#ef4444', fontWeight: 800 }}>📸 Kanıt Fotoğrafı</div>
+                                           </div>
+                                       )}
+                                       <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '8px', fontStyle: 'italic' }}>Denetleyen: {rep.controller}</div>
+                                   </div>
+                               )
+                           })
+                        )}
+                    </div>
+                </div>
+
+                <div style={{ background: '#fef2f2', padding: '30px', borderRadius: '24px', border: '1px solid #fca5a5' }}>
+                    <h3 style={{ margin: '0 0 15px 0', color: '#b91c1c', fontWeight: 900 }}>⛔ Manuel Ceza Ver</h3>
+                    <select value={banInput.student} onChange={e => setBanInput({...banInput, student: e.target.value})} className="elite-input" style={{ marginBottom: '12px' }}>
+                        <option value="">Öğrenci Seçin</option>
+                        {roster.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                    <select value={banInput.duration} onChange={e => setBanInput({...banInput, duration: e.target.value})} className="elite-input" style={{ marginBottom: '12px' }}>
+                        <option value="1">1 Gün Uzaklaştırma</option>
+                        <option value="3">3 Gün Uzaklaştırma</option>
+                        <option value="7">1 Hafta Uzaklaştırma</option>
+                        <option value="999">Süresiz Kapatma</option>
+                    </select>
+                    <input type="text" value={banInput.reason} onChange={e => setBanInput({...banInput, reason: e.target.value})} placeholder="Ceza Sebebi" className="elite-input" style={{ marginBottom: '15px' }} />
+                    
+                    <input type="file" id="adminPhotoInput" accept="image/*" capture="environment" onChange={handleAdminPhotoUpload} style={{ display: 'none' }} />
+                    
+                    {!banInput.photoUrl ? (
+                        <button onClick={() => document.getElementById('adminPhotoInput').click()} className="premium-btn" style={{ background: '#fca5a5', color: '#7f1d1d', padding: '12px', fontSize: '13px', width: '100%', marginBottom: '20px' }}>
+                            📷 İsteğe Bağlı: Kanıt Çek / Yükle
+                        </button>
+                    ) : (
+                        <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                            <img src={banInput.photoUrl} alt="Kanıt" style={{ width: '100%', maxHeight: '150px', objectFit: 'cover', borderRadius: '12px', border: '2px solid #ef4444', marginBottom: '10px' }} />
+                            <button onClick={() => setBanInput({...banInput, photoUrl: ''})} className="premium-btn" style={{ background: 'white', color: '#ef4444', border: '1px solid #fca5a5 !important', padding: '8px 16px', fontSize: '12px' }}>🗑️ Fotoğrafı Sil</button>
+                        </div>
+                    )}
+                    <button onClick={applyBan} className="premium-btn" style={{ width: '100%', background: '#ef4444', color: 'white', padding: '16px' }}>CEZAYI UYGULA</button>
+                </div>
+
+                <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                    <h3 style={{ margin: '0 0 15px 0', color: '#0f172a', fontWeight: 900 }}>🚫 Cezalı Öğrenciler</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {Object.keys(appData?.game_room_bans || {}).length === 0 && <div style={{ color: '#64748b', fontSize: '14px', fontWeight: 700 }}>Şu an cezalı öğrenci bulunmuyor.</div>}
+                        {Object.keys(appData?.game_room_bans || {}).map(student => {
+                            const ban = appData.game_room_bans[student];
+                            const isExpired = Date.now() > ban.expiry;
+                            if (isExpired) return null; 
+                            
+                            const remainingDays = Math.ceil((ban.expiry - Date.now()) / (1000 * 60 * 60 * 24));
+                            const banText = remainingDays > 300 ? 'SÜRESİZ' : `${remainingDays} Gün Kaldı`;
+
+                            return (
+                                <div key={student} style={{ background: '#f8fafc', padding: '16px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <div style={{ fontWeight: 900, color: '#ef4444', fontSize: '15px', marginBottom: '4px' }}>{student}</div>
+                                        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>Sebep: {ban.reason}</div>
+                                        {ban.photoUrl && (
+                                            <div style={{ marginTop: '8px', cursor: 'pointer' }} onClick={() => window.open(ban.photoUrl, '_blank')}>
+                                                <span style={{ fontSize: '11px', color: '#3b82f6', fontWeight: 800, background: '#eff6ff', padding: '4px 8px', borderRadius: '6px' }}>📸 Kanıtı Gör</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ fontSize: '12px', background: '#fef2f2', color: '#b91c1c', padding: '4px 8px', borderRadius: '6px', fontWeight: 900, marginBottom: '8px' }}>{banText}</div>
+                                        <button onClick={() => removeBan(student)} className="premium-btn" style={{ background: 'white', border: '1px solid #e2e8f0 !important', color: '#64748b', padding: '6px 12px', fontSize: '11px' }}>Kaldır</button>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* --- TURNUVA YÖNETİMİ --- */}
+        {currentModule === 'admin_turnuva' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                
+                <div style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', padding: '30px', borderRadius: '24px', color: 'white', boxShadow: '0 10px 20px rgba(59,130,246,0.3)' }}>
+                    <h3 style={{ margin: '0 0 5px 0', fontSize: '24px', fontWeight: 900 }}>🏆 Yeni Turnuva (Lig) Başlat</h3>
+                    <p style={{ margin: '0 0 20px 0', fontSize: '14px', fontWeight: 600, opacity: 0.9 }}>Turnuva başladığında sistem otomatik fikstür çeker ve maçları seçtiğiniz günlerin akşamlarına dağıtır.</p>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
+                        <input type="text" value={newTourney.name} onChange={e => setNewTourney({...newTourney, name: e.target.value})} placeholder="Turnuva Adı (Örn: FIFA Kış Ligi)" className="elite-input" style={{ gridColumn: '1 / -1' }} />
+                        
+                        <select value={newTourney.device} onChange={e => setNewTourney({...newTourney, device: e.target.value})} className="elite-input">
+                            <option value="ps5">Oynanacak Cihaz: PS5</option>
+                            <option value="ps4">Oynanacak Cihaz: PS4</option>
+                            <option value="pc">Oynanacak Cihaz: PC</option>
+                        </select>
+                        <input type="text" value={newTourney.game} onChange={e => setNewTourney({...newTourney, game: e.target.value})} placeholder="Oyun (Örn: FC 24)" className="elite-input" />
+                        <input type="number" value={newTourney.fee} onChange={e => setNewTourney({...newTourney, fee: e.target.value})} placeholder="Giriş Ücreti (M)" className="elite-input" />
+                        
+                        <input type="number" value={newTourney.p1} onChange={e => setNewTourney({...newTourney, p1: e.target.value})} placeholder="🥇 1. Ödülü (M)" className="elite-input" style={{ borderColor: '#fcd34d' }} />
+                        <input type="number" value={newTourney.p2} onChange={e => setNewTourney({...newTourney, p2: e.target.value})} placeholder="🥈 2. Ödülü (M)" className="elite-input" style={{ borderColor: '#cbd5e1' }} />
+                        <input type="number" value={newTourney.p3} onChange={e => setNewTourney({...newTourney, p3: e.target.value})} placeholder="🥉 3. Ödülü (M)" className="elite-input" style={{ borderColor: '#b45309' }} />
+                        
+                        <button onClick={handleCreateTournament} className="premium-btn badge-glow" style={{ background: '#d4af37', color: '#0f172a', gridColumn: '1 / -1', padding: '16px', marginTop: '10px' }}>TURNUVAYI İLANA AÇ</button>
+                    </div>
+                </div>
+
+                <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                    <h3 style={{ margin: '0 0 15px 0', color: '#0f172a', fontWeight: 900 }}>🎮 Aktif Turnuvalar ve Fikstür</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {Object.keys(appData?.tournaments || {}).length === 0 && <div style={{ color: '#64748b', fontWeight: 700 }}>Henüz oluşturulmuş turnuva yok.</div>}
+                        
+                        {Object.keys(appData?.tournaments || {}).reverse().map(tId => {
+                            const t = appData.tournaments[tId];
+                            const parts = t.participants || [];
+                            const isLocked = t.status === 'active';
+                            const selectedDaysArray = tourneyDaysMap[tId] || [];
+
+                            return (
+                                <div key={tId} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '20px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                                        <div>
+                                            <div style={{ fontSize: '20px', fontWeight: 900, color: '#0f172a', marginBottom: '4px' }}>{t.name} <span style={{fontSize: '12px', background: isLocked ? '#ecfdf5' : '#fffbeb', color: isLocked ? '#10b981' : '#d97706', padding: '4px 8px', borderRadius: '8px', marginLeft: '8px', verticalAlign: 'middle'}}>{isLocked ? 'Oynanıyor (Fikstür Çekildi)' : 'Kayıt Aşamasında'}</span></div>
+                                            <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>{t.game} • {String(t.device).toUpperCase()} • Ödüller: 🥇{t.p1}M | 🥈{t.p2}M | 🥉{t.p3}M</div>
+                                        </div>
+                                        <button onClick={() => { if(window.confirm('Bu turnuvayı tamamen iptal edip SİLMEK istediğine emin misin?')) db.ref(`mavikent_premium/tournaments/${tId}`).remove(); }} className="premium-btn" style={{ background: '#fef2f2', color: '#ef4444', padding: '8px 16px', fontSize: '12px' }}>İptal Et/Sil</button>
+                                    </div>
+
+                                    <div style={{ background: 'white', padding: '15px', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                                        <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', marginBottom: '10px' }}>Kayıtlı Oyuncular ({parts.length} Kişi)</div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '15px' }}>
+                                            {parts.length === 0 ? <div style={{ fontSize: '12px', color: '#94a3b8' }}>Kayıt yok.</div> : parts.map((p, i) => (
+                                                <div key={i} style={{ background: '#f1f5f9', color: '#334155', padding: '4px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 800 }}>{String(p).split(' ')[0]}</div>
+                                            ))}
+                                        </div>
+
+                                        {!isLocked && parts.length >= 2 && (
+                                            <div style={{ marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '15px' }}>
+                                                <div style={{ fontSize: '13px', fontWeight: 800, color: '#3b82f6', marginBottom: '10px' }}>📅 Maçların Oynanacağı Günleri Seçin:</div>
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '15px' }}>
+                                                    {DAYS.map(day => {
+                                                        const isSel = selectedDaysArray.includes(day);
+                                                        return (
+                                                            <button key={day} onClick={() => toggleTourneyDay(tId, day)} className="profile-btn" style={{ background: isSel ? '#3b82f6' : '#f1f5f9', color: isSel ? 'white' : '#64748b', padding: '8px 16px', fontSize: '12px', border: `1px solid ${isSel ? '#2563eb' : '#e2e8f0'}` }}>
+                                                                {day}
+                                                            </button>
+                                                        )
+                                                    })}
+                                                </div>
+                                                <button onClick={() => generateFixture(tId, t)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '12px 20px', width: '100%', fontSize: '14px' }}>
+                                                    ⚔️ SEÇİLİ GÜNLERE OTOMATİK FİKSTÜR ÇEK VE BAŞLAT
+                                                </button>
+                                            </div>
+                                        )}
+                                        
+                                        {isLocked && (
+                                            <div style={{ marginTop: '15px' }}>
+                                                <div style={{ textAlign: 'center', color: '#10b981', fontWeight: 800, fontSize: '13px', marginBottom: '10px' }}>✅ Lig fikstürü çekildi, maçlar oynanıyor. (Sorumlu skorları giriyor)</div>
+                                                <button onClick={() => handleEndTournament(tId, t)} className="premium-btn badge-glow" style={{ background: '#d4af37', color: '#0f172a', padding: '12px 20px', width: '100%', fontSize: '14px' }}>
+                                                    🏆 TURNUVAYI BİTİR VE ŞAMPİYONLARA ÖDÜLLERİ DAĞIT
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* SOHBET KONTROL MERKEZİ */}
         {currentModule === 'admin_chat' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -765,20 +1007,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                       <button onClick={sendAdminChat} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '0 20px', fontWeight: 900 }}>YÖNETİCİ MESAJI</button>
                   </div>
                </div>
-
-               <div style={{ background: '#fef2f2', padding: '30px', borderRadius: '24px', border: '1px solid #fca5a5' }}>
-                  <h4 style={{ marginTop: 0, color: '#b91c1c', fontWeight: 900, fontSize: '18px', marginBottom: '15px' }}>⛔ Sohbetten Banlananlar</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {Object.keys(appData?.banned_chat || {}).length === 0 ? <div style={{ color: '#991b1b', fontSize: '14px' }}>Banlı öğrenci yok.</div> : (
-                          Object.keys(appData.banned_chat).map(u => (
-                              <div key={u} style={{ background: 'white', padding: '12px 15px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ fontWeight: 800, color: '#0f172a' }}>{u}</div>
-                                  <button onClick={() => db.ref(`mavikent_premium/banned_chat/${u}`).remove()} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '6px 12px', fontSize: '12px' }}>Banı Kaldır</button>
-                              </div>
-                          ))
-                      )}
-                  </div>
-               </div>
             </div>
         )}
 
@@ -801,7 +1029,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         
         {((currentModule === 'yoklama' && selectedSession) || ['telefon', 'yatak', 'kanaat'].includes(currentModule)) && renderStudentGrid(roster, 'isleyis')}
         
-        {/* EĞİTİM VE DEĞERLER EKRANLARI (EKLENEN ÖZELLİK: CSV VE ŞABLON BUTONLARI) */}
+        {/* EĞİTİM VE DEĞERLER EKRANLARI */}
         {currentModule === 'class_view' && (
           <>
              {renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_ders')}
@@ -815,7 +1043,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           <>
              {renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_deneme')}
              <div style={{ display: 'flex', gap: '10px', marginTop: '20px', flexWrap: 'wrap' }}>
-                <button id="btn-jpg-deneme" onClick={() => downloadReportAsJPG('deneme', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#3b82f6', color: 'white', fontSize: '16px', minWidth: '200px' }}>📸 VELİ BİLGİLENDİRME (JPG İNDİR)</button>
+                <button id="btn-jpg-deneme" onClick={() => downloadReportAsJPG('deneme', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#0d9488', color: 'white', fontSize: '16px', minWidth: '200px' }}>📸 VELİ BİLGİLENDİRME (JPG İNDİR)</button>
                 <button onClick={() => downloadCSVTemplate('deneme')} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#10b981', color: 'white', fontSize: '16px', minWidth: '200px' }}>📥 ŞABLON İNDİR (CSV)</button>
                 <button onClick={() => csvDenemeRef.current.click()} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#0f172a', color: 'white', fontSize: '16px', minWidth: '200px' }}>📤 TOPLU SONUÇ YÜKLE</button>
              </div>
@@ -826,7 +1054,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           <>
              {renderStudentGrid(getFilteredRoster(selectedSession), 'egitim_yazili')}
              <div style={{ display: 'flex', gap: '10px', marginTop: '20px', flexWrap: 'wrap' }}>
-                <button id="btn-jpg-yazili" onClick={() => downloadReportAsJPG('yazili', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#10b981', color: 'white', fontSize: '16px', minWidth: '200px' }}>📸 VELİ BİLGİLENDİRME (JPG İNDİR)</button>
+                <button id="btn-jpg-yazili" onClick={() => downloadReportAsJPG('yazili', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#0d9488', color: 'white', fontSize: '16px', minWidth: '200px' }}>📸 VELİ BİLGİLENDİRME (JPG İNDİR)</button>
                 <button onClick={() => downloadCSVTemplate('yazili')} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#3b82f6', color: 'white', fontSize: '16px', minWidth: '200px' }}>📥 ŞABLON İNDİR (CSV)</button>
                 <button onClick={() => csvYaziliRef.current.click()} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#0f172a', color: 'white', fontSize: '16px', minWidth: '200px' }}>📤 TOPLU SONUÇ YÜKLE</button>
              </div>
@@ -845,7 +1073,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
             </div>
             {renderStudentGrid(roster.filter(n => appData?.student_levels?.[n] === selectedSession), 'degerler')}
             
-            {/* EKLENEN ÖZELLİK: DEĞERLER EĞİTİMİ VELİ BİLGİLENDİRME (JPG) BUTONU */}
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px', flexWrap: 'wrap' }}>
                 <button id="btn-jpg-degerler" onClick={() => downloadReportAsJPG('degerler', selectedSession)} className="premium-btn" style={{ flex: 1, padding: '18px', background: '#d4af37', color: 'white', fontSize: '16px', minWidth: '200px' }}>📸 VELİ BİLGİLENDİRME (JPG İNDİR)</button>
             </div>
@@ -866,7 +1093,13 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                     </select>
                     <input type="number" value={newGiftCode.val} onChange={e => setNewGiftCode({...newGiftCode, val: e.target.value})} placeholder="Miktar / Yüzde" className="elite-input" />
                     <input type="number" value={newGiftCode.uses} onChange={e => setNewGiftCode({...newGiftCode, uses: e.target.value})} placeholder="Kaç Kez Kullanılabilir?" className="elite-input" />
-                    <button onClick={handleAdminCreateGiftCode} className="premium-btn" style={{ background: '#0f172a', color: 'white', gridColumn: '1 / -1', padding: '16px' }}>KODU YAYINLA</button>
+                    <button onClick={() => {
+                        if (!newGiftCode.code || !newGiftCode.val) return alert("Tüm alanları doldurun!");
+                        db.ref(`mavikent_premium/gift_codes/${newGiftCode.code.toUpperCase().trim()}`).set({
+                            type: newGiftCode.type, val: parseInt(newGiftCode.val), uses: parseInt(newGiftCode.uses), usedBy: {}
+                        });
+                        alert("Kod başarıyla oluşturuldu!"); setNewGiftCode({ code: '', type: 'mcoin', val: '', uses: '1' });
+                    }} className="premium-btn" style={{ background: '#0f172a', color: 'white', gridColumn: '1 / -1', padding: '16px' }}>KODU YAYINLA</button>
                  </div>
              </div>
 
@@ -950,6 +1183,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         {currentModule === 'admin_market' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
              
+             {/* İHALE (AÇIK ARTIRMA) PANELİ */}
              <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
                 <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '20px' }}>🔨 HAFTALIK İHALE (AÇIK ARTIRMA)</h4>
                 {appData?.auction?.active ? (
@@ -967,6 +1201,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                 )}
              </div>
 
+             {/* İMECE (KİTLE FONLAMA) PANELİ */}
              <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
                 <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '20px' }}>🤝 İMECE (ORTAK ALIM) OLUŞTUR</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
@@ -1042,7 +1277,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           </div>
         )}
 
-        {/* TESLİMAT YÖNETİMİ */}
+        {/* TESLİMAT YÖNETİMİ (3'LÜ BİRİKTİRME DESTEKLİ) */}
         {currentModule === 'admin_teslimat' && (() => {
             const allDeliveries = Object.keys(appData?.deliveries || {}).map(k => ({ key: k, ...appData.deliveries[k] })).reverse();
             const waitDeliveries = allDeliveries.filter(d => d.st === 'wait');
@@ -1093,6 +1328,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                                              <span style={{ fontSize: '24px' }}>👤</span> {student}
                                          </div>
 
+                                         {/* ÖZEL KOLEKSİYON (3'LÜ) ÜRÜNLERİ */}
                                          {Object.keys(collections).map(cName => {
                                              const items = collections[cName];
                                              const count = items.length;
@@ -1119,6 +1355,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                                              )
                                          })}
 
+                                         {/* NORMAL ÜRÜNLER (TOST, İZİN VS) */}
                                          {normal.map(ord => {
                                              const isLottery = ord.i && ord.i.includes("(Çekiliş)");
                                              const isScratch = ord.i && ord.i.includes("(Kazı Kazan)");
@@ -1133,7 +1370,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                                                          <span style={{ background: badgeColor, color: 'white', padding: '2px 6px', borderRadius: '6px', fontSize: '10px', fontWeight: 800 }}>{badgeText}</span>
                                                      </div>
                                                      <div style={{ display: 'flex', gap: '5px' }}>
-                                                         <button onClick={() => db.ref(`mavikent_premium/deliveries/${ord.key}/st`).set('done')} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '6px 12px', fontSize: '12px' }}>✅ Ver</button>
+                                                         <button onClick={() => handleApproveDelivery(ord.key, ord)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '6px 12px', fontSize: '12px' }}>✅ Ver</button>
                                                          <button onClick={() => handleCancelDelivery(ord.key, ord, true)} className="premium-btn" style={{ background: '#f1f5f9', color: '#f59e0b', padding: '6px 12px', fontSize: '12px' }}>💰 İade</button>
                                                          <button onClick={() => handleCancelDelivery(ord.key, ord, false)} className="premium-btn" style={{ background: '#f1f5f9', color: '#ef4444', padding: '6px 12px', fontSize: '12px' }}>🗑️ Sil</button>
                                                      </div>
@@ -1309,7 +1546,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
       </div> 
 
-      {/* --- AÇILIR PENCERELER (MODALLAR) --- */}
+      {/* --- EKSİK KALAN MODALLAR (YOKLAMA, EĞİTİM, SINAV VB.) --- */}
       {selectedStudent && modalType === 'isleyis' && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', animation: 'fadeIn 0.3s ease-out' }}>
           <div style={{ backgroundColor: '#ffffff', padding: '40px', borderRadius: '32px', width: '100%', maxWidth: '420px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)', maxHeight: '90vh', overflowY: 'auto', animation: 'popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}>
@@ -1415,7 +1652,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
              }} style={{ position: 'absolute', top: '20px', right: '20px', background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5', padding: '8px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', transition: '0.2s' }}>🗑️ Geçmişi Sil</button>
 
              <h3 style={{ margin: '0 0 8px 0', color: '#0f172a', fontWeight: 900, fontSize: '28px', letterSpacing: '-0.5px' }}>{selectedStudent}</h3>
-             <div style={{ fontSize: '14px', color: '#3b82f6', fontWeight: 900, marginBottom: '30px', letterSpacing: '1px' }}>{modalType === 'deneme' ? 'DETAYLI DENEME SINAVI (OPTİK)' : 'YAZILI GİRİŞİ'}</div>
+             <div style={{ fontSize: '14px', color: '#0d9488', fontWeight: 900, marginBottom: '30px', letterSpacing: '1px' }}>{modalType === 'deneme' ? 'DETAYLI DENEME SINAVI (OPTİK)' : 'YAZILI GİRİŞİ'}</div>
              
              <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '24px', marginBottom: '24px', border: '1px solid #e2e8f0' }}>
                  {examSubjects.map((sub, idx) => {
@@ -1444,7 +1681,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
              </div>
 
              {modalType === 'deneme' && (
-                 <div style={{ background: '#eff6ff', border: '2px dashed #3b82f6', padding: '15px', borderRadius: '16px', marginBottom: '20px', color: '#1e3a8a', fontWeight: 900, fontSize: '20px' }}>
+                 <div style={{ background: '#f0fdfa', border: '2px dashed #0d9488', padding: '15px', borderRadius: '16px', marginBottom: '20px', color: '#0f766e', fontWeight: 900, fontSize: '20px' }}>
                      TOPLAM NET: {
                          examSubjects.reduce((total, _, i) => {
                              const d = parseFloat(examData[`d_${i}`]) || 0;
@@ -1460,7 +1697,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
              <div style={{ display: 'flex', gap: '16px' }}>
               <button onClick={() => { setSelectedStudent(null); setModalType(null); }} className="btn-iptal" style={{ flex: 1 }}>İPTAL</button>
-              <button onClick={() => saveExamData(modalType)} className="premium-btn" style={{ flex: 2, padding: '20px', background: '#3b82f6', color: 'white', fontSize: '16px' }}>KAYDET</button>
+              <button onClick={() => saveExamData(modalType)} className="premium-btn" style={{ flex: 2, padding: '20px', background: '#0d9488', color: 'white', fontSize: '16px' }}>KAYDET</button>
             </div>
           </div>
         </div>
