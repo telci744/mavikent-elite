@@ -86,7 +86,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const [activeTab, setActiveTab] = useState('home');
   const [rankTab, setRankTab] = useState('rp');
   
-  const [boxAnim, setBoxAnim] = useState({ active: false, type: '', step: 0, result: null });
+  const [boxAnim, setBoxAnim] = useState({ active: false, type: '', step: 0, result: null, count: 1 });
   const [actionModal, setActionModal] = useState({ active: false, type: '', data: null });
   
   const [unlockedQueue, setUnlockedQueue] = useState([]);
@@ -677,64 +677,122 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
       }
   };
 
-  const openLootBox = (boxType) => {
-      let cost = 0; let rng = Math.floor(Math.random() * 100) + 1;
-      let result = { type: '', val: 0, text: '', icon: '', dev: null };
-      
-      if (boxType === 'standart') {
-          cost = 20;
-          if (rng <= 40) result = { type: 'shard', dev: 'ps4', val: Math.floor(Math.random() * 2) + 1, icon: '🎮', text: 'PS4 Parçacığı' };
-          else if (rng <= 70) result = { type: 'shard', dev: 'pc', val: Math.floor(Math.random() * 2) + 1, icon: '💻', text: 'PC Parçacığı' };
-          else if (rng <= 90) result = { type: 'mcoin', val: 10, icon: '🪙', text: 'M-Coin (Teselli)' };
-          else result = { type: 'mcoin', val: 30, icon: '💰', text: 'M-Coin (Kâr!)' };
-      } else if (boxType === 'mega') {
-          cost = 40;
-          if (rng <= 30) result = { type: 'shard', dev: 'pc', val: Math.floor(Math.random() * 2) + 2, icon: '💻', text: 'PC Parçacığı' };
-          else if (rng <= 60) result = { type: 'shard', dev: 'ps5', val: Math.floor(Math.random() * 2) + 1, icon: '🕹️', text: 'PS5 Parçacığı' };
-          else if (rng <= 80) result = { type: 'mcoin', val: 20, icon: '🪙', text: 'M-Coin (Teselli)' };
-          else if (rng <= 95) result = { type: 'mcoin', val: 70, icon: '💰', text: 'M-Coin (Büyük Kâr!)' };
-          else result = { type: 'seans', devList: ['ps4', 'pc'], fallback: 60, icon: '🎫', text: 'Anında PS4/PC Seansı!' };
-      } else if (boxType === 'elit') {
-          cost = 50;
-          if (rng <= 30) result = { type: 'shard', dev: 'ps5', val: Math.floor(Math.random() * 2) + 2, icon: '🕹️', text: 'PS5 Parçacığı' };
-          else if (rng <= 60) result = { type: 'shard', dev: 'vr', val: Math.floor(Math.random() * 2) + 1, icon: '🥽', text: 'VR Parçacığı' };
-          else if (rng <= 75) result = { type: 'mcoin', val: 25, icon: '🪙', text: 'M-Coin (Teselli)' };
-          else if (rng <= 90) result = { type: 'mcoin', val: 90, icon: '💎', text: 'M-Coin (Efsane Kâr!)' };
-          else result = { type: 'seans', devList: ['ps5', 'vr'], fallback: 90, icon: '🎫', text: 'Anında PS5/VR Seansı!' };
-      }
+  const calculateNerfedPrize = (drawItemsArray, isKutu = false) => {
+      const isTopParticipant = myXpRank !== '-' && myXpRank <= 10;
+      let weightedArray = []; 
+      drawItemsArray.forEach(item => { 
+          let weight = 10000 / Math.pow(Number(item.p) || 10, 2); 
+          const itemName = String(item.n).toUpperCase();
+          if (itemName.includes('İZİN') || itemName.includes('PİZZA') || itemName.includes('BALIK') || itemName.includes('KÜNEFE') || itemName.includes('HAMBURGER') || Number(item.p) >= 200) {
+              if (isTopParticipant) weight = isKutu ? 0.5 : 0.0001; else weight = 0.00001; 
+          }
+          weightedArray.push({ ...item, weight }); 
+      });
+      let totalWeight = weightedArray.reduce((acc, curr) => acc + curr.weight, 0); 
+      let randomNum = Math.random() * totalWeight; 
+      let selected = weightedArray[0];
+      for (let item of weightedArray) { if (randomNum < item.weight) { selected = item; break; } randomNum -= item.weight; }
+      return selected;
+  };
 
-      if (mCoin < cost) return alert(`❌ Bu kutuyu açmak için ${cost} M-Coin gerekli!`);
+  const openLootBox = (boxType, count = 1) => {
+      let basePrice = boxType === 'standart' ? 7 : boxType === 'mega' ? 10 : 15;
+      let totalCost = count === 10 ? Math.ceil((basePrice * 10) * 0.9) : basePrice * count;
 
-      if (window.confirm(`${cost} M-Coin harcayarak ${boxType.toUpperCase()} kutuyu açmak istiyor musun?`)) {
-          setBoxAnim({ active: true, type: boxType, step: 1, result: null });
+      if (mCoin < totalCost) return alert(`❌ Bu işlem için ${totalCost} M-Coin gerekli!`);
+
+      if (window.confirm(`${totalCost} M-Coin harcayarak ${count} adet ${boxType.toUpperCase()} kutu açmak istiyor musun?`)) {
+          setBoxAnim({ active: true, type: boxType, step: 1, result: null, count });
+          
           setTimeout(() => {
-              const updates = {}; updates[`wallet/${safeName}`] = mCoin - cost;
-              let finalDesc = result.text; let finalIcon = result.icon;
+              let totalMcoinWon = 0;
+              let shardsWon = { ps4: 0, pc: 0, ps5: 0, vr: 0 };
+              let sessionsWon = []; 
+              let sessionRolled = false;
 
-              if (result.type === 'shard') {
-                  updates[`shards/${safeName}/${result.dev}`] = getShard(result.dev) + result.val;
-                  finalDesc = `+${result.val} ${result.text}`;
-              } else if (result.type === 'mcoin') {
-                  updates[`wallet/${safeName}`] = (mCoin - cost) + result.val;
-                  finalDesc = `+${result.val} ${result.text}`;
-              } else if (result.type === 'seans') {
+              for (let i = 0; i < count; i++) {
+                  let rng = Math.floor(Math.random() * 100) + 1;
+                  
+                  if (count === 10 && i === 9 && !sessionRolled) {
+                      rng = 99; 
+                  }
+
+                  if (boxType === 'standart') {
+                      if (rng <= 60) {
+                          let dev = Math.random() < 0.5 ? 'ps4' : 'pc';
+                          shardsWon[dev] += Math.floor(Math.random() * 2) + 1;
+                      } else if (rng <= 80) totalMcoinWon += 3;
+                      else if (rng <= 95) totalMcoinWon += 7;
+                      else { sessionsWon.push({ devs: ['ps4'], fallback: 5 }); sessionRolled = true; }
+                  } else if (boxType === 'mega') {
+                      if (rng <= 60) {
+                          let dev = Math.random() < 0.5 ? 'pc' : 'ps5';
+                          shardsWon[dev] += Math.floor(Math.random() * 2) + 2;
+                      } else if (rng <= 80) totalMcoinWon += 5;
+                      else if (rng <= 95) totalMcoinWon += 12;
+                      else { sessionsWon.push({ devs: ['ps5', 'pc'], fallback: 8 }); sessionRolled = true; }
+                  } else if (boxType === 'elit') {
+                      if (rng <= 60) {
+                          let dev = Math.random() < 0.5 ? 'ps5' : 'vr';
+                          shardsWon[dev] += Math.floor(Math.random() * 2) + 2;
+                      } else if (rng <= 80) totalMcoinWon += 7;
+                      else if (rng <= 95) totalMcoinWon += 18;
+                      else { sessionsWon.push({ devs: ['vr'], fallback: 10 }); sessionRolled = true; }
+                  }
+              }
+
+              let actualSessionsBooked = [];
+              let sessionFallbackMcoin = 0;
+              const updates = {};
+
+              sessionsWon.forEach(seansObj => {
                   let foundSlot = null;
-                  for (let d of result.devList) {
+                  for (let d of seansObj.devs) {
                       const slots = GAME_SLOTS[d] || [];
-                      for (let s of slots) { if (!appData?.game_room_appointments?.[d]?.[todayStrTR]?.[s.id]) { foundSlot = { d, s }; break; } }
+                      for (let s of slots) {
+                          if (!appData?.game_room_appointments?.[d]?.[todayStrTR]?.[s.id] && !updates[`game_room_appointments/${d}/${todayStrTR}/${s.id}`]) {
+                              foundSlot = { d, s }; break;
+                          }
+                      }
                       if (foundSlot) break;
                   }
                   if (foundSlot) {
                       updates[`game_room_appointments/${foundSlot.d}/${todayStrTR}/${foundSlot.s.id}`] = safeName;
-                      finalDesc = `🔥 İNANILMAZ! Bu akşam ${foundSlot.s.time} ${String(foundSlot.d).toUpperCase()} Seansını kaptın!`; finalIcon = '🎮';
+                      actualSessionsBooked.push(`${foundSlot.s.time} ${String(foundSlot.d).toUpperCase()}`);
                   } else {
-                      updates[`wallet/${safeName}`] = (mCoin - cost) + result.fallback;
-                      finalDesc = `Seanslar doluydu, teselli olarak ${result.fallback} M-Coin kazandın!`; finalIcon = '🪙';
+                      sessionFallbackMcoin += seansObj.fallback;
                   }
+              });
+
+              totalMcoinWon += sessionFallbackMcoin;
+
+              updates[`wallet/${safeName}`] = mCoin - totalCost + totalMcoinWon;
+              Object.keys(shardsWon).forEach(dev => {
+                  if (shardsWon[dev] > 0) updates[`shards/${safeName}/${dev}`] = getShard(dev) + shardsWon[dev];
+              });
+
+              let finalDesc = "";
+              let finalIcon = count === 10 ? '🎊' : '🎁';
+
+              if (count === 1) {
+                  if (actualSessionsBooked.length > 0) { finalDesc = `🔥 İNANILMAZ! Bu akşam ${actualSessionsBooked[0]} Seansını Kaptın!`; finalIcon = '🎮'; }
+                  else if (sessionFallbackMcoin > 0) { finalDesc = `Seanslar doluydu, teselli olarak ${sessionFallbackMcoin} M kazandın!`; finalIcon = '🪙'; }
+                  else if (totalMcoinWon > 0) { finalDesc = `+${totalMcoinWon} M-Coin Kazandın!`; finalIcon = '💰'; }
+                  else {
+                      let sText = [];
+                      Object.keys(shardsWon).forEach(d => { if(shardsWon[d]>0) sText.push(`+${shardsWon[d]} ${d.toUpperCase()}`) });
+                      finalDesc = sText.join(', ') + " Parçası!"; finalIcon = '🧩';
+                  }
+              } else {
+                  let sText = [];
+                  Object.keys(shardsWon).forEach(d => { if(shardsWon[d]>0) sText.push(`${shardsWon[d]} ${d.toUpperCase()}`) });
+                  finalDesc = `📦 10'LU KUTU ÖZETİ:\n\n${sText.length > 0 ? sText.join(' | ') + ' Parçası\n' : ''}${totalMcoinWon > 0 ? `💰 +${totalMcoinWon} M-Coin\n` : ''}${actualSessionsBooked.length > 0 ? `🎮 KAZANILAN SEANS: ${actualSessionsBooked.join(', ')}\n` : ''}${sessionFallbackMcoin > 0 ? `(Seans dolu tesellisi: +${sessionFallbackMcoin} M)` : ''}`;
               }
-              updates[`transactions/${safeName}/txn_box_${Date.now()}`] = { desc: `Kutu (${boxType.toUpperCase()}) -> ${finalDesc}`, amt: -cost, date: new Date().toLocaleString('tr-TR') };
+
+              updates[`transactions/${safeName}/txn_box_${Date.now()}`] = { desc: `${count}x Kutu (${boxType.toUpperCase()}) Açılımı`, amt: -totalCost + totalMcoinWon, date: new Date().toLocaleString('tr-TR') };
+              
               db.ref('mavikent_premium').update(updates);
-              setBoxAnim({ active: true, type: boxType, step: 2, result: { desc: finalDesc, icon: finalIcon } });
+              setBoxAnim({ active: true, type: boxType, step: 2, result: { desc: finalDesc, icon: finalIcon }, count });
           }, 1500);
       }
   };
@@ -942,9 +1000,9 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                     <div className="popIn-anim" style={{ background: '#ffffff', padding: '50px 30px', borderRadius: '40px', width: '100%', maxWidth: '380px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)', color: '#0f172a' }}>
                        <div style={{ fontSize: '14px', color: '#b45309', fontWeight: 900, letterSpacing: '2px', marginBottom: '15px' }}>TEBRİKLER!</div>
                        <div style={{ fontSize: '100px', marginBottom: '20px', filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.1))' }}>{boxAnim.result?.icon}</div>
-                       <h2 style={{ color: '#10b981', fontSize: '22px', margin: '0 0 10px 0', fontWeight: 900, lineHeight: '1.4' }}>{boxAnim.result?.desc}</h2>
+                       <h2 style={{ color: '#10b981', fontSize: '18px', margin: '0 0 15px 0', fontWeight: 900, lineHeight: '1.5', whiteSpace: 'pre-line' }}>{boxAnim.result?.desc}</h2>
                        <p style={{ color: '#64748b', fontSize: '14px', fontWeight: 600, marginBottom: '30px' }}>Ödül hesabına tanımlandı.</p>
-                       <button onClick={() => setBoxAnim({active:false, type:'', step:0, result:null})} className="profile-btn" style={{ background: '#0f172a', color: 'white', width: '100%', padding: '18px', fontSize: '16px' }}>HARİKA!</button>
+                       <button onClick={() => setBoxAnim({active:false, type:'', step:0, result:null, count: 1})} className="profile-btn" style={{ background: '#0f172a', color: 'white', width: '100%', padding: '18px', fontSize: '16px' }}>HARİKA!</button>
                     </div>
                 )}
             </div>
@@ -1052,7 +1110,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
                         <div>
                             <h3 style={{ margin: '0 0 5px 0', fontSize: '22px', fontWeight: 900, color: '#e0e7ff' }}>🎁 Ganimet Odası</h3>
-                            <div style={{ fontSize: '13px', color: '#a5b4fc', fontWeight: 600 }}>M-Coin ile sandık aç, cihaz parçalarını biriktir!</div>
+                            <div style={{ fontSize: '13px', color: '#a5b4fc', fontWeight: 600 }}>10'lu açılımlarda %10 indirim ve 1 GARANTİ SEANS!</div>
                         </div>
                     </div>
 
@@ -1075,21 +1133,30 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                         })}
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '15px' }}>
-                        <div onClick={() => openLootBox('standart')} className="card-hover" style={{ background: 'linear-gradient(135deg, #334155, #1e293b)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #475569', cursor: 'pointer' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '15px' }}>
+                        <div style={{ background: 'linear-gradient(135deg, #334155, #1e293b)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #475569' }}>
                             <div style={{ fontSize: '40px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>📦</div>
-                            <div style={{ fontSize: '14px', fontWeight: 900, color: 'white', marginBottom: '8px' }}>STANDART</div>
-                            <div style={{ background: '#0f172a', color: '#94a3b8', padding: '6px', borderRadius: '10px', fontSize: '12px', fontWeight: 900 }}>20 M</div>
+                            <div style={{ fontSize: '13px', fontWeight: 900, color: 'white', marginBottom: '15px' }}>STANDART KUTU</div>
+                            <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                                <button onClick={() => openLootBox('standart', 1)} className="profile-btn card-hover" style={{ background: '#0f172a', color: '#94a3b8', padding: '8px', fontSize: '11px', flex: 1 }}>1x<br/>(7 M)</button>
+                                <button onClick={() => openLootBox('standart', 10)} className="profile-btn card-hover" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '8px', fontSize: '11px', flex: 1, border: 'none', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' }}>10x<br/>(63 M)</button>
+                            </div>
                         </div>
-                        <div onClick={() => openLootBox('mega')} className="card-hover" style={{ background: 'linear-gradient(135deg, #d97706, #92400e)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #f59e0b', cursor: 'pointer' }}>
+                        <div style={{ background: 'linear-gradient(135deg, #d97706, #92400e)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #f59e0b' }}>
                             <div style={{ fontSize: '40px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>🧰</div>
-                            <div style={{ fontSize: '14px', fontWeight: 900, color: 'white', marginBottom: '8px' }}>MEGA</div>
-                            <div style={{ background: '#78350f', color: '#fde68a', padding: '6px', borderRadius: '10px', fontSize: '12px', fontWeight: 900 }}>40 M</div>
+                            <div style={{ fontSize: '13px', fontWeight: 900, color: 'white', marginBottom: '15px' }}>MEGA KUTU</div>
+                            <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                                <button onClick={() => openLootBox('mega', 1)} className="profile-btn card-hover" style={{ background: '#78350f', color: '#fde68a', padding: '8px', fontSize: '11px', flex: 1 }}>1x<br/>(10 M)</button>
+                                <button onClick={() => openLootBox('mega', 10)} className="profile-btn card-hover" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '8px', fontSize: '11px', flex: 1, border: 'none', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' }}>10x<br/>(90 M)</button>
+                            </div>
                         </div>
-                        <div onClick={() => openLootBox('elit')} className="card-hover" style={{ background: 'linear-gradient(135deg, #0284c7, #0369a1)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #38bdf8', cursor: 'pointer' }}>
+                        <div style={{ background: 'linear-gradient(135deg, #0284c7, #0369a1)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #38bdf8' }}>
                             <div style={{ fontSize: '40px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>💎</div>
-                            <div style={{ fontSize: '14px', fontWeight: 900, color: 'white', marginBottom: '8px' }}>ELİT SANDIK</div>
-                            <div style={{ background: '#075985', color: '#bae6fd', padding: '6px', borderRadius: '10px', fontSize: '12px', fontWeight: 900 }}>50 M</div>
+                            <div style={{ fontSize: '13px', fontWeight: 900, color: 'white', marginBottom: '15px' }}>ELİT SANDIK</div>
+                            <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                                <button onClick={() => openLootBox('elit', 1)} className="profile-btn card-hover" style={{ background: '#075985', color: '#bae6fd', padding: '8px', fontSize: '11px', flex: 1 }}>1x<br/>(15 M)</button>
+                                <button onClick={() => openLootBox('elit', 10)} className="profile-btn card-hover" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '8px', fontSize: '11px', flex: 1, border: 'none', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' }}>10x<br/>(135 M)</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1445,9 +1512,9 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                                   const jCount = getJoker(st.id);
                                   if (jCount > 0) {
                                       return (
-                                          <div key={st.id} className="badge-glow" style={{ background: 'rgba(255,255,255,0.2)', padding: '8px 12px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px', border: `1px solid ${st.color}` }}>
-                                              <span style={{ fontSize: '18px' }}>{st.icon}</span>
-                                              <span style={{ fontSize: '13px', fontWeight: 900, color: 'white' }}>{jCount}x BEDAVA {st.name}</span>
+                                          <div key={st.id} style={{ background: `linear-gradient(135deg, ${st.color}, #0f172a)`, padding: '8px 14px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px', border: `2px solid ${st.bg}`, boxShadow: `0 4px 15px ${st.color}80` }}>
+                                              <span style={{ fontSize: '20px', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))' }}>{st.icon}</span>
+                                              <span style={{ fontSize: '14px', fontWeight: 900, color: 'white', letterSpacing: '0.5px' }}>{jCount}x BEDAVA {st.name}</span>
                                           </div>
                                       );
                                   }
