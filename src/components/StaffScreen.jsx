@@ -12,6 +12,12 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   const [examData, setExamData] = useState({}); 
   const [valuesTopic, setValuesTopic] = useState({ subject: '', topic: '' });
 
+  // OYUN ODASI KONTROL İÇİN YENİ EKLENEN STATELER
+  const [evalForm, setEvalForm] = useState({ 
+      bookingId: '', student: '', device: '', day: '', slot: '', time: '', 
+      q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' 
+  });
+
   const csvDenemeRef = useRef(null);
   const csvYaziliRef = useRef(null);
 
@@ -33,6 +39,103 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
       "STANDART": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"] 
   };
   const valuesSubjectsList = ["K.Kerim", "İlmihal", "Siyer-i Nebi", "Adabı Muaşeret", "Tecvid"];
+
+  // OYUN ODASI SABİTLERİ
+  const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+  const GAME_DEVICES = [{ id: 'ps4', name: 'PS4' }, { id: 'ps5', name: 'PS5' }, { id: 'vr', name: 'VR' }, { id: 'pc', name: 'Bilgisayar' }];
+  const GAME_SLOTS = {
+      'ps4': [{ id: 'ps4_1', time: '15:45 - 16:15' }, { id: 'ps4_2', time: '16:15 - 16:45' }, { id: 'ps4_3', time: '21:00 - 21:30' }, { id: 'ps4_4', time: '21:30 - 22:15' }],
+      'ps5': [{ id: 'ps5_1', time: '21:00 - 21:30' }, { id: 'ps5_2', time: '21:30 - 22:15' }],
+      'vr':  [{ id: 'vr_1', time: '21:00 - 21:30' }, { id: 'vr_2', time: '21:30 - 22:15' }],
+      'pc':  [{ id: 'pc_1', time: '21:00 - 21:30' }, { id: 'pc_2', time: '21:30 - 22:15' }]
+  };
+
+  const now = new Date();
+  const liveDayIdx = now.getDay() === 0 ? 6 : now.getDay() - 1;
+  const todayStrTR = DAYS[liveDayIdx] || 'Pazartesi';
+
+  // BUGÜNÜN RANDEVULARINI ÇEKME MANTIĞI
+  const allBookingsForController = [];
+  Object.keys(appData?.game_room_appointments || {}).forEach(device => {
+      const deviceData = appData?.game_room_appointments?.[device];
+      if(typeof deviceData !== 'object' || deviceData === null) return;
+      Object.keys(deviceData).forEach(day => {
+          if (day !== todayStrTR) return; // Sadece bugünün randevuları gösterilsin
+          const dayData = deviceData[day];
+          if(typeof dayData !== 'object' || dayData === null) return;
+          Object.keys(dayData).forEach(slotId => {
+              const sName = dayData[slotId];
+              if (sName && typeof sName === 'string' && !sName.includes("TURNUVA")) {
+                  const slotList = GAME_SLOTS[device] || [];
+                  const slotInfo = slotList.find(s => s.id === slotId);
+                  const devInfo = GAME_DEVICES.find(d => d.id === device);
+                  allBookingsForController.push({ 
+                      student: sName, device, day, slotId, 
+                      time: slotInfo?.time || 'Bilinmiyor', devName: devInfo?.name || device 
+                  });
+              }
+          });
+      });
+  });
+
+  const handlePhotoUpload = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+          const img = new Image(); 
+          img.src = event.target.result;
+          img.onload = () => {
+              const canvas = document.createElement('canvas');
+              let scaleSize = 800 / img.width; 
+              if (img.height > img.width) scaleSize = 800 / img.height; 
+              canvas.width = img.width * scaleSize; canvas.height = img.height * scaleSize;
+              canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+              setEvalForm({ ...evalForm, photoUrl: canvas.toDataURL('image/jpeg', 0.6) });
+          };
+      };
+  };
+
+  const submitEvaluation = () => {
+      if(!evalForm.student) return alert("Değerlendirilecek randevuyu seçin!");
+      const hasViolation = !evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5;
+      
+      if(hasViolation && !evalForm.photoUrl) {
+          if(!window.confirm("İhlal bildirdiniz ama KANIT FOTOĞRAFI eklemediniz. Yine de kaydetmek istiyor musunuz?")) return;
+      }
+
+      if(window.confirm(`${String(evalForm.student || '').split(',')[0]} (ve diğer sorumlular) için rapor sisteme işlenecek. Onaylıyor musun?`)) {
+          const updates = {};
+          const rId = `rep_${Date.now()}`;
+          updates[`game_room_reports/${rId}`] = {
+              controller: 'PERSONEL', // Personel tarafından yapıldığını belirtiyoruz
+              target: evalForm.student, device: evalForm.device, day: evalForm.day, time: evalForm.time,
+              q1: evalForm.q1, q2: evalForm.q2, q3: evalForm.q3, q4: evalForm.q4, q5: evalForm.q5,
+              photoUrl: evalForm.photoUrl || '', date: new Date().toLocaleString('tr-TR')
+          };
+
+          if(evalForm.q5) {
+              const expTime = Date.now() + (7 * 24 * 60 * 60 * 1000); 
+              const studentArray = String(evalForm.student || '').split(', ');
+              studentArray.forEach(stu => {
+                  if(stu.trim()) {
+                      updates[`game_room_bans/${stu.trim()}`] = {
+                          reason: 'Yiyecek/İçecek İhlali (Personel Tespiti)', photoUrl: evalForm.photoUrl || '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR')
+                      };
+                  }
+              });
+              
+              if (evalForm.device && evalForm.day && evalForm.slot) {
+                  updates[`game_room_appointments/${evalForm.device}/${evalForm.day}/${evalForm.slot}`] = null;
+              }
+          }
+          
+          db.ref('mavikent_premium').update(updates);
+          alert("Denetim raporu başarıyla kaydedildi!");
+          setEvalForm({ bookingId: '', student: '', device: '', day: '', slot: '', time: '', q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' });
+      }
+  };
 
   const getFilteredRoster = (session) => { 
       if(session === 'ELİT') return roster.filter(n => isElite(n)); 
@@ -292,16 +395,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
       container.innerHTML = `<div style="background:linear-gradient(135deg, #0f172a, #1e293b);padding:30px;border-radius:24px;display:flex;justify-content:space-between;align-items:center;color:white;box-shadow:0 10px 30px rgba(0,0,0,0.1);"><div><h1 style="margin:0;font-size:42px;font-weight:900;letter-spacing:-1px;">MAVİKENT <span style="color:#d4af37;">ELITE</span></h1><h2 style="margin:5px 0 0 0;font-size:20px;color:#cbd5e1;font-weight:700;">${className} - ${title}</h2></div><div style="text-align:right;"><div style="font-size:16px;font-weight:600;color:#cbd5e1;">Tarih</div><div style="font-size:22px;font-weight:800;color:#d4af37;">${new Date().toLocaleDateString('tr-TR')}</div></div></div>${tableHTML}`;
       document.body.appendChild(container);
       
-      try { 
-          const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff', useCORS: true }); 
-          const link = document.createElement('a'); 
-          link.download = `Mavikent_${className}_${type}.jpg`; 
-          link.href = canvas.toDataURL('image/jpeg', 0.9); 
-          link.click(); 
-      } catch(e) { console.error(e); } finally { 
-          document.body.removeChild(container); 
-          document.getElementById(btnId).innerText = originalText; 
-      }
+      try { const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff', useCORS: true }); const link = document.createElement('a'); link.download = `Mavikent_${className}_${type}.jpg`; link.href = canvas.toDataURL('image/jpeg', 0.9); link.click(); } catch(e) { console.error(e); } finally { document.body.removeChild(container); document.getElementById(btnId).innerText = originalText; }
   };
 
   const renderStudentGrid = (students, type) => (
@@ -343,18 +437,6 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                 else if (type === 'egitim_ders') { setEduData({ lessons: appData?.education_d?.[name]?.lessons || [], pages: appData?.education_d?.[name]?.pages || 0, questions: appData?.education_d?.[name]?.questions || 0 }); setModalType('egitim'); }
                 else if (type === 'egitim_deneme') { setExamData(appData?.exams?.[name]?.deneme || {}); setModalType('deneme'); }
                 else if (type === 'egitim_yazili') { setExamData(appData?.exams?.[name]?.yazili || {}); setModalType('yazili'); }
-                else if (type === 'degerler') {
-                   const bugun = new Date().toDateString();
-                   if(!appData?.values_edu_d?.[name]?.[bugun]?.done) { 
-                       if(window.confirm(`${name} derse katıldı mı?`)) { 
-                           db.ref(`mavikent_premium/values_edu_d/${name}/${bugun}/done`).set(true); 
-                           db.ref(`mavikent_premium/wallet/${name}`).transaction(c => (Number(c)||0) + (isEliteStud?4:2)); 
-                           db.ref(`mavikent_premium/season_score/${name}`).transaction(c => (Number(c)||0) + (isEliteStud?4:2)); 
-                       } 
-                   } else { 
-                       if(window.confirm("Kaldırılsın mı?")) db.ref(`mavikent_premium/values_edu_d/${name}/${bugun}/done`).set(null); 
-                   }
-                }
              }} 
                className="card-hover" style={{ background: bgColor, border: isEliteStud ? '2px solid #d4af37' : 'none', padding: '24px 16px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', color: '#0f172a', cursor: 'pointer' }}>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
@@ -392,9 +474,10 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
         @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
         .fade-in { animation: fadeIn 0.4s ease-out; }
         .popIn-anim { animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes badgePulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); } 70% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(212, 175, 55, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); } }
+        .badge-glow { animation: badgePulse 2s infinite; border: 2px solid #d4af37 !important; background: #fffbeb !important; }
       `}</style>
 
-      {/* CSV YÜKLEME GİZLİ INPUTLARI */}
       <input type="file" ref={csvDenemeRef} accept=".csv, .xlsx, .xls" style={{display: 'none'}} onChange={(e) => handleCSVUpload(e, 'deneme')} />
       <input type="file" ref={csvYaziliRef} accept=".csv, .xlsx, .xls" style={{display: 'none'}} onChange={(e) => handleCSVUpload(e, 'yazili')} />
 
@@ -410,9 +493,13 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
             {dashboardView === 'main' && [
               { id: 'egitim', icon: '📚', label: 'EĞİTİM KONTROL' }, 
               { id: 'degerler', icon: '🕌', label: 'DAHİLİ DERS & DEĞERLER' },
-              { id: 'isleyis', icon: '⚙️', label: 'YURT İŞLEYİŞ' }
+              { id: 'isleyis', icon: '⚙️', label: 'YURT İŞLEYİŞ' },
+              { id: 'staff_gameroom', icon: '🎮', label: 'OYUN ODASI DENETİM', bg: '#fef2f2' }
             ].map(mod => (
-              <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="premium-card card-hover" style={{ background: 'white' }}>
+              <div key={mod.id} onClick={() => {
+                  if (mod.id === 'staff_gameroom') setCurrentModule('staff_gameroom');
+                  else setDashboardView(mod.id);
+              }} className="premium-card card-hover" style={{ background: mod.bg || 'white' }}>
                 <div className="icon">{mod.icon}</div><div className="label">{mod.label}</div>
               </div>
             ))}
@@ -445,6 +532,158 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
               <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
             ))}
           </div>
+        )}
+
+        {/* --- OYUN ODASI DENETİM MERKEZİ (PERSONEL) --- */}
+        {currentModule === 'staff_gameroom' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div style={{ background: '#eff6ff', padding: '30px', borderRadius: '24px', border: '1px solid #bfdbfe' }}>
+                    <h3 style={{ margin: '0 0 15px 0', color: '#1e3a8a', fontWeight: 900 }}>🕵️‍♂️ Oyun Odası Sorumlusu Ata</h3>
+                    <p style={{ fontSize: '13px', color: '#1e40af', marginBottom: '20px', fontWeight: 600 }}>Seçilen öğrenci, kendi panelinden oyun odası randevularını kontrol edebilir ve denetim formunu doldurabilir.</p>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <select value={appData?.settings?.game_room_controller || ''} onChange={e => {
+                            db.ref('mavikent_premium/settings/game_room_controller').set(e.target.value);
+                            alert(`Oyun Odası Sorumlusu başarıyla atandı! (${e.target.value})`);
+                        }} className="elite-input" style={{ flex: 1 }}>
+                            <option value="">Sorumlu Seçin</option>
+                            {roster.map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                    </div>
+                </div>
+
+                <div style={{ background: 'white', padding: '30px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                    <h3 style={{ margin: '0 0 20px 0', color: '#0f172a', fontWeight: 900 }}>📋 Canlı Denetim Formu ({todayStrTR})</h3>
+                    <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', fontWeight: 600 }}>Personel olarak oyun odasını bizzat denetleyip raporu sisteme işleyebilirsiniz.</p>
+                    
+                    <div style={{ marginBottom: '25px', background: '#f8fafc', padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#1e3a8a', marginBottom: '10px' }}>1. AŞAMA: DEĞERLENDİRİLECEK RANDEVUYU SEÇ</div>
+                        <select className="elite-input" style={{textAlign: 'left'}} value={evalForm.bookingId} onChange={e => {
+                            const val = e.target.value;
+                            if(!val) return setEvalForm({...evalForm, bookingId: '', student: ''});
+                            const [dev, day, slot, stu, time] = val.split('|');
+                            setEvalForm({...evalForm, bookingId: val, device: dev, day, slot, student: stu, time});
+                        }}>
+                            <option value="">Bugünün Aktif Randevularından Seçin...</option>
+                            {allBookingsForController.map(b => (
+                                <option key={`${b.device}|${b.day}|${b.slotId}`} value={`${b.device}|${b.day}|${b.slotId}|${b.student}|${b.time}`}>
+                                    {b.time} | {b.devName} | Oynayan: {String(b.student || '').split(',')[0]}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {evalForm.student && (
+                        <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 900, color: '#1e3a8a', marginBottom: '5px' }}>2. AŞAMA: DURUM TESPİTİ (Evet / Hayır)</div>
+                            
+                            <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>1. Cihazlar sağlam bir şekilde teslim edildi mi?</div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button onClick={() => setEvalForm({...evalForm, q1: true})} className="premium-btn" style={{ background: evalForm.q1 ? '#10b981' : '#e2e8f0', color: evalForm.q1 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                    <button onClick={() => setEvalForm({...evalForm, q1: false})} className="premium-btn" style={{ background: !evalForm.q1 ? '#ef4444' : '#e2e8f0', color: !evalForm.q1 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                </div>
+                            </div>
+
+                            <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>2. Masa sandalye tertip düzenli bırakıldı mı?</div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button onClick={() => setEvalForm({...evalForm, q2: true})} className="premium-btn" style={{ background: evalForm.q2 ? '#10b981' : '#e2e8f0', color: evalForm.q2 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                    <button onClick={() => setEvalForm({...evalForm, q2: false})} className="premium-btn" style={{ background: !evalForm.q2 ? '#ef4444' : '#e2e8f0', color: !evalForm.q2 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                </div>
+                            </div>
+
+                            <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>3. Eğer ilk seans ise oyundan çıkılarak teslim edildi mi?</div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button onClick={() => setEvalForm({...evalForm, q3: true})} className="premium-btn" style={{ background: evalForm.q3 ? '#10b981' : '#e2e8f0', color: evalForm.q3 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                    <button onClick={() => setEvalForm({...evalForm, q3: false})} className="premium-btn" style={{ background: !evalForm.q3 ? '#ef4444' : '#e2e8f0', color: !evalForm.q3 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                </div>
+                            </div>
+
+                            <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>4. Eğer son seans ise cihaz tamamen kapatılıp teslim edildi mi?</div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button onClick={() => setEvalForm({...evalForm, q4: true})} className="premium-btn" style={{ background: evalForm.q4 ? '#10b981' : '#e2e8f0', color: evalForm.q4 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                    <button onClick={() => setEvalForm({...evalForm, q4: false})} className="premium-btn" style={{ background: !evalForm.q4 ? '#ef4444' : '#e2e8f0', color: !evalForm.q4 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                </div>
+                            </div>
+
+                            <div style={{ background: evalForm.q5 ? '#fef2f2' : '#f8fafc', padding: '20px', borderRadius: '16px', border: `2px solid ${evalForm.q5 ? '#ef4444' : '#e2e8f0'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: '15px', fontWeight: 900, color: evalForm.q5 ? '#b91c1c' : '#334155' }}>5. Oyun odasına yiyecek veya içecek sokuldu mu?</div>
+                                    {evalForm.q5 ? (
+                                        <div className="fade-in" style={{ fontSize: '12px', color: '#ef4444', fontWeight: 900, marginTop: '6px', background: '#fee2e2', padding: '4px 8px', borderRadius: '6px', display: 'inline-block' }}>⛔ DİKKAT: Gönderildiği an öğrenci 1 Hafta Ban yiyecek!</div>
+                                    ) : (
+                                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>Kesinlikle yasaktır, tespiti halinde ağır cezası vardır.</div>
+                                    )}
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button onClick={() => setEvalForm({...evalForm, q5: true})} className="premium-btn" style={{ background: evalForm.q5 ? '#ef4444' : '#e2e8f0', color: evalForm.q5 ? 'white' : '#64748b', padding: '10px 16px' }}>Evet (İhlal Var)</button>
+                                    <button onClick={() => setEvalForm({...evalForm, q5: false})} className="premium-btn" style={{ background: !evalForm.q5 ? '#10b981' : '#e2e8f0', color: !evalForm.q5 ? 'white' : '#64748b', padding: '10px 16px' }}>Hayır (Temiz)</button>
+                                </div>
+                            </div>
+
+                            {(!evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5) && (
+                                <div className="fade-in" style={{ marginTop: '15px', background: '#fef2f2', border: '2px dashed #fca5a5', padding: '20px', borderRadius: '16px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '14px', fontWeight: 900, color: '#ef4444', marginBottom: '10px' }}>📸 İHLAL TESPİT EDİLDİ - KANIT FOTOĞRAFI YÜKLE</div>
+                                    
+                                    <input type="file" id="proofPhotoInputStaff" accept="image/*" capture="environment" onChange={handlePhotoUpload} style={{ display: 'none' }} />
+                                    
+                                    {!evalForm.photoUrl ? (
+                                        <button onClick={() => document.getElementById('proofPhotoInputStaff').click()} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '16px 20px', fontSize: '14px', width: '100%', boxShadow: '0 4px 10px rgba(239,68,68,0.3)' }}>
+                                            📷 Kamerayı Aç veya Galeriden Seç
+                                        </button>
+                                    ) : (
+                                        <div className="fade-in">
+                                            <img src={evalForm.photoUrl} alt="Kanıt" style={{ width: '100%', maxHeight: '250px', objectFit: 'cover', borderRadius: '12px', border: '2px solid #ef4444', marginBottom: '15px' }} />
+                                            <button onClick={() => setEvalForm({...evalForm, photoUrl: ''})} className="premium-btn" style={{ background: 'white', color: '#ef4444', border: '1px solid #fca5a5 !important', padding: '10px 16px', fontSize: '13px' }}>🗑️ Fotoğrafı Sil / Yeniden Yükle</button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <button onClick={() => {
+                                if(!evalForm.student) return alert("Değerlendirilecek randevuyu seçin!");
+                                const hasViolation = !evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5;
+                                if(hasViolation && !evalForm.photoUrl) {
+                                    if(!window.confirm("İhlal bildirdiniz ama KANIT FOTOĞRAFI eklemediniz. Yine de kaydetmek istiyor musunuz?")) return;
+                                }
+
+                                if(window.confirm(`${String(evalForm.student || '').split(',')[0]} (ve diğer sorumlular) için rapor sisteme işlenecek. Onaylıyor musun?`)) {
+                                    const updates = {};
+                                    const rId = `rep_${Date.now()}`;
+                                    updates[`game_room_reports/${rId}`] = {
+                                        controller: 'PERSONEL',
+                                        target: evalForm.student, device: evalForm.device, day: evalForm.day, time: evalForm.time,
+                                        q1: evalForm.q1, q2: evalForm.q2, q3: evalForm.q3, q4: evalForm.q4, q5: evalForm.q5,
+                                        photoUrl: evalForm.photoUrl || '', date: new Date().toLocaleString('tr-TR')
+                                    };
+
+                                    if(evalForm.q5) {
+                                        const expTime = Date.now() + (7 * 24 * 60 * 60 * 1000); 
+                                        const studentArray = String(evalForm.student || '').split(', ');
+                                        studentArray.forEach(stu => {
+                                            if(stu.trim()) {
+                                                updates[`game_room_bans/${stu.trim()}`] = {
+                                                    reason: 'Yiyecek/İçecek İhlali (Personel Tespiti)', photoUrl: evalForm.photoUrl || '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR')
+                                                };
+                                            }
+                                        });
+                                        
+                                        if (evalForm.device && evalForm.day && evalForm.slot) {
+                                            updates[`game_room_appointments/${evalForm.device}/${evalForm.day}/${evalForm.slot}`] = null;
+                                        }
+                                    }
+                                    
+                                    db.ref('mavikent_premium').update(updates);
+                                    alert("Denetim raporu başarıyla kaydedildi!");
+                                    setEvalForm({ bookingId: '', student: '', device: '', day: '', slot: '', time: '', q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' });
+                                }
+                            }} className="premium-btn badge-glow" style={{ background: '#0f172a', color: 'white', padding: '20px', width: '100%', marginTop: '15px', fontSize: '16px' }}>RAPORU SİSTEME KAYDET</button>
+                        </div>
+                    )}
+                </div>
+            </div>
         )}
 
         {/* İŞLEYİŞ EKRANLARI */}

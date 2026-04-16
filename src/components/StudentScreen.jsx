@@ -38,12 +38,12 @@ const isGameRoomItem = (name) => {
 };
 
 const isDigitalItem = (type, name) => {
-    const t = String(type || '').toLowerCase();
-    const n = String(name || '').toUpperCase();
-    return t === 'multiplier' || t === 'streak' || t === 'avatar' || t === 'title' || t === 'frame' || 
-           n.includes("KUTU") || n.includes("GİZEMLİ") || n.includes("2X") || 
-           n.includes("ÇARPAN") || n.includes("KORUMA") || n.includes("SERİ") || 
-           n.includes("ÜNVAN");
+    const t = String(type || '').toLowerCase();
+    const n = String(name || '').toUpperCase();
+    return t === 'multiplier' || t === 'streak' || t === 'avatar' || t === 'title' || t === 'frame' || 
+           n.includes("KUTU") || n.includes("GİZEMLİ") || n.includes("2X") || 
+           n.includes("ÇARPAN") || n.includes("KORUMA") || n.includes("SERİ") || 
+           n.includes("ÜNVAN") || n.includes("JOKER");
 };
 
 const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
@@ -56,8 +56,6 @@ const GAME_DEVICES = [
 
 const GAME_SLOTS = {
     'ps4': [
-        { id: 'ps4_1', time: '15:45 - 16:15', price: 5 }, 
-        { id: 'ps4_2', time: '16:15 - 16:45', price: 5 }, 
         { id: 'ps4_3', time: '21:00 - 21:30', price: 5 }, 
         { id: 'ps4_4', time: '21:30 - 22:15', price: 8 }
     ],
@@ -81,8 +79,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const [activeTab, setActiveTab] = useState('home');
   const [rankTab, setRankTab] = useState('rp');
   
-  const [lotteryState, setLotteryState] = useState({ active: false, result: null, spinning: false, currentDisplay: '❓' });
-  const [scratchState, setScratchState] = useState({ active: false, result: null, isRevealed: false });
+  const [boxAnim, setBoxAnim] = useState({ active: false, type: '', step: 0, result: null });
   const [actionModal, setActionModal] = useState({ active: false, type: '', data: null });
   
   const [unlockedQueue, setUnlockedQueue] = useState([]);
@@ -389,21 +386,47 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
       }
   };
 
-  const handleBookGameSlot = (slot) => {
-      if (appData?.game_room_bans?.[safeName] && appData.game_room_bans[safeName].expiry > Date.now()) { return alert("⛔ Oyun odası kullanımınız geçici süreliğine askıya alınmıştır! Randevu alamazsınız."); }
-      if (mCoin < slot.price) return alert(`❌ Bakiye yetersiz! Bu seans ${slot.price} M-Coin.`);
-      const isBooked = appData?.game_room_appointments?.[gameDevice]?.[gameDay]?.[slot.id];
-      if (isBooked) return alert("❌ Maalesef bu seans başka bir arkadaşın tarafından alınmış!");
+const handleBookGameSlot = (slot, currentBookedStr, capacity) => {
+      if (appData?.game_room_bans?.[safeName] && appData.game_room_bans[safeName].expiry > Date.now()) return alert("⛔ Oyun odasından banlısınız!");
       
-      const devName = GAME_DEVICES.find(d => d.id === gameDevice)?.name || 'Cihaz';
-      if (window.confirm(`${gameDay} günü saat ${slot.time} arası ${devName} cihazını ${slot.price} M karşılığında rezerve etmek istiyor musun?`)) {
+      const bookedArray = currentBookedStr ? String(currentBookedStr).split(', ') : [];
+      if (bookedArray.includes(safeName)) return alert("Bu seansa zaten kayıtlısınız!");
+      if (bookedArray.length >= capacity) return alert("❌ Bu seans tamamen dolu!");
+
+      const slotPrice = parseInt(slot.price) || 0;
+      const myJokers = Number(appData?.joker_tickets?.[safeName] || 0);
+
+      let useJoker = false;
+      if (myJokers > 0) {
+          if (window.confirm(`🎟️ 1 Adet JOKER BİLETİN var! Bu seansı (${slotPrice} M) bedavaya almak için Joker'i kullanmak ister misin?`)) {
+              useJoker = true;
+          }
+      }
+
+      if (!useJoker && mCoin < slotPrice) return alert(`❌ Bakiyeniz yetersiz! (${slotPrice} M-Coin gerekli)`);
+
+      if (useJoker || window.confirm(`${gameDay} ${slot.time} seansını ${slotPrice} M-Coin karşılığında rezerve etmek istiyor musun?`)) {
           const updates = {};
-          updates[`wallet/${safeName}`] = mCoin - slot.price;
-          updates[`transactions/${safeName}/txn_game_${Date.now()}`] = { desc: `Oyun Odası (${devName} - ${gameDay} ${slot.time})`, amt: -slot.price, date: new Date().toLocaleString('tr-TR') };
-          updates[`game_room_appointments/${gameDevice}/${gameDay}/${slot.id}`] = safeName;
+          if (useJoker) {
+              updates[`joker_tickets/${safeName}`] = myJokers - 1;
+              updates[`transactions/${safeName}/txn_game_${Date.now()}`] = { 
+                  desc: `🎟️ Ücretsiz Rezervasyon (${gameDevice.toUpperCase()} - ${gameDay} ${slot.time})`, 
+                  amt: 0, date: new Date().toLocaleString('tr-TR') 
+              };
+          } else {
+              updates[`wallet/${safeName}`] = mCoin - slotPrice;
+              updates[`transactions/${safeName}/txn_game_${Date.now()}`] = { 
+                  desc: `Oyun Rezervasyonu (${gameDevice.toUpperCase()} - ${gameDay} ${slot.time})`, 
+                  amt: -slotPrice, date: new Date().toLocaleString('tr-TR') 
+              };
+          }
           
-          db.ref('mavikent_premium').update(updates);
-          setActionModal({ active: true, type: 'success', data: { msg: '✅ Rezervasyon başarıyla alındı! Vaktinde gelmeyi unutma.', icon: '🎮', name: 'Oyun Odası' } });
+          const newBooking = bookedArray.length > 0 ? `${currentBookedStr}, ${safeName}` : safeName;
+          updates[`game_room_appointments/${gameDevice}/${gameDay}/${slot.id}`] = newBooking;
+          
+          db.ref('mavikent_premium').update(updates)
+            .then(() => alert(useJoker ? "🎟️ Joker kullanıldı! Bedava seansın hayırlı olsun." : "🚀 Rezervasyon yapıldı ve M-Coin düştü! İyi eğlenceler."))
+            .catch(() => alert("❌ Bir hata oluştu, internetini kontrol et."));
       }
   };
 
@@ -661,50 +684,74 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
       for (let item of weightedArray) { if (randomNum < item.weight) { selected = item; break; } randomNum -= item.weight; }
       return selected;
   };
-  
-  const rollLottery = () => {
-      if (myTickets <= 0) return alert("Biletin yok!");
-      let drawItems = products.filter(p => p.type !== 'ticket' && p.type !== 'bundle' && p.type !== 'gift' && !['KULAKLIK', 'SAAT', 'FORMA', 'KRAMPON', 'ÇİKOLATA EVİM', 'PS4', 'PS5', 'VR', 'BİLGİSAYAR', 'PC', 'DK)'].some(kw => String(p.n).toUpperCase().includes(kw)));
-      if (appData?.limits?.shoe_won) drawItems = drawItems.filter(p => !String(p.n).toUpperCase().includes('AYAKKABI'));
-      if (drawItems.length === 0) return alert("Havuz boş.");
 
-      let selectedPrize = calculateNerfedPrize(drawItems);
-      const updates = {}; updates[`tickets/${safeName}`] = Math.max(0, myTickets - 1);
-      if (String(selectedPrize.n).toUpperCase().includes('AYAKKABI')) updates[`limits/shoe_won`] = true;
-      db.ref('mavikent_premium').update(updates);
+  const openLootBox = (boxType) => {
+      let cost = 0; let rng = Math.floor(Math.random() * 100) + 1;
+      let result = { type: '', val: 0, text: '', icon: '' };
+      
+      if (boxType === 'standart') {
+          cost = 20;
+          if (rng <= 70) result = { type: 'shard', val: Math.random() < 0.5 ? 1 : 2, icon: '🧩', text: 'Oyun Odası Parçası' };
+          else if (rng <= 90) result = { type: 'mcoin', val: 10, icon: '🪙', text: 'M-Coin (Teselli)' };
+          else result = { type: 'mcoin', val: 30, icon: '💰', text: 'M-Coin (Kâr!)' };
+      } else if (boxType === 'mega') {
+          cost = 40;
+          if (rng <= 60) result = { type: 'shard', val: Math.random() < 0.5 ? 3 : 4, icon: '🧩', text: 'Oyun Odası Parçası' };
+          else if (rng <= 80) result = { type: 'mcoin', val: 20, icon: '🪙', text: 'M-Coin (Teselli)' };
+          else if (rng <= 95) result = { type: 'mcoin', val: 70, icon: '💰', text: 'M-Coin (Büyük Kâr!)' };
+          else result = { type: 'seans', dev: ['ps5', 'pc'], fallback: 60, icon: '🕹️', text: 'PS5 veya PC Anında Seans!' };
+      } else if (boxType === 'elit') {
+          cost = 50;
+          if (rng <= 50) result = { type: 'shard', val: Math.random() < 0.5 ? 5 : 6, icon: '🧩', text: 'Oyun Odası Parçası' };
+          else if (rng <= 75) result = { type: 'mcoin', val: 25, icon: '🪙', text: 'M-Coin (Teselli)' };
+          else if (rng <= 90) result = { type: 'mcoin', val: 90, icon: '💎', text: 'M-Coin (Efsane Kâr!)' };
+          else result = { type: 'seans', dev: ['ps5', 'vr', 'pc'], fallback: 90, icon: '🥽', text: 'PS5, VR veya PC Anında Seans!' };
+      }
 
-      setLotteryState({ active: true, result: selectedPrize, spinning: true, currentDisplay: '❓' });
-      let spins = 0; let currentSpeed = 100;
-      const spinLoop = () => { 
-          setLotteryState(prev => ({ ...prev, currentDisplay: drawItems[Math.floor(Math.random() * drawItems.length)].i || '🎁' })); 
-          spins++; if (spins < 15) currentSpeed = Math.max(30, currentSpeed - 10); else if (spins > 25) currentSpeed += 20; 
-          if (spins < 40) { setTimeout(spinLoop, currentSpeed); } 
-          else { 
-              const isDig = isDigitalItem(selectedPrize.type, selectedPrize.n);
-              setLotteryState({ active: true, result: selectedPrize, spinning: false, currentDisplay: selectedPrize.i || '🎁' }); 
-              db.ref('mavikent_premium/deliveries').push({ s: safeName, i: selectedPrize.n + " (Çekiliş)", st: isDig ? 'done' : 'wait', type: selectedPrize.type || 'normal', val: selectedPrize.val || selectedPrize.i, date: new Date().toLocaleDateString('tr-TR') }); 
-          } 
-      }; setTimeout(spinLoop, currentSpeed);
+      if (mCoin < cost) return alert(`❌ Bu kutuyu açmak için ${cost} M-Coin gerekli!`);
+
+      if (window.confirm(`${cost} M-Coin harcayarak kutuyu açmak istiyor musun?`)) {
+          setBoxAnim({ active: true, type: boxType, step: 1, result: null });
+          setTimeout(() => {
+              const updates = {}; updates[`wallet/${safeName}`] = mCoin - cost;
+              let finalDesc = result.text; let finalIcon = result.icon;
+
+              if (result.type === 'shard') {
+                  updates[`shards/${safeName}`] = Number(appData?.shards?.[safeName] || 0) + result.val;
+                  finalDesc = `+${result.val} ${result.text}`;
+              } else if (result.type === 'mcoin') {
+                  updates[`wallet/${safeName}`] = (mCoin - cost) + result.val;
+                  finalDesc = `+${result.val} ${result.text}`;
+              } else if (result.type === 'seans') {
+                  let foundSlot = null;
+                  for (let d of result.dev) {
+                      const slots = GAME_SLOTS[d] || [];
+                      for (let s of slots) { if (!appData?.game_room_appointments?.[d]?.[todayStrTR]?.[s.id]) { foundSlot = { d, s }; break; } }
+                      if (foundSlot) break;
+                  }
+                  if (foundSlot) {
+                      updates[`game_room_appointments/${foundSlot.d}/${todayStrTR}/${foundSlot.s.id}`] = safeName;
+                      finalDesc = `🔥 İNANILMAZ! Bu akşam ${foundSlot.s.time} ${String(foundSlot.d).toUpperCase()} Seansını kaptın!`; finalIcon = '🎮';
+                  } else {
+                      updates[`wallet/${safeName}`] = (mCoin - cost) + result.fallback;
+                      finalDesc = `Seanslar doluydu, teselli olarak ${result.fallback} M-Coin kazandın!`; finalIcon = '🪙';
+                  }
+              }
+              updates[`transactions/${safeName}/txn_box_${Date.now()}`] = { desc: `Kutu (${boxType.toUpperCase()}) -> ${finalDesc}`, amt: -cost, date: new Date().toLocaleString('tr-TR') };
+              db.ref('mavikent_premium').update(updates);
+              setBoxAnim({ active: true, type: boxType, step: 2, result: { desc: finalDesc, icon: finalIcon } });
+          }, 1500);
+      }
   };
 
-  const playScratchcard = () => {
-      if (mCoin < 15) return alert("❌ 15 M gerekli.");
-      let drawItems = products.filter(p => p.type !== 'ticket' && p.type !== 'bundle' && p.type !== 'gift' && !['KULAKLIK', 'SAAT', 'FORMA', 'KRAMPON', 'ÇİKOLATA EVİM', 'PS4', 'PS5', 'VR', 'BİLGİSAYAR', 'PC', 'DK)'].some(kw => String(p.n).toUpperCase().includes(kw)));
-      if (appData?.limits?.shoe_won) drawItems = drawItems.filter(p => !String(p.n).toUpperCase().includes('AYAKKABI'));
-      if (drawItems.length === 0) return alert("Havuz boş.");
-
-      let selectedPrize = calculateNerfedPrize(drawItems);
-      const updates = {}; updates[`wallet/${safeName}`] = mCoin - 15; updates[`transactions/${safeName}/txn_scratch_${Date.now()}`] = { desc: 'Kazı Kazan Bedeli', amt: -15, date: new Date().toLocaleString('tr-TR') };
-      if (String(selectedPrize.n).toUpperCase().includes('AYAKKABI')) updates[`limits/shoe_won`] = true;
-      db.ref('mavikent_premium').update(updates);
-      setScratchState({ active: true, result: selectedPrize, isRevealed: false });
-  };
-
-  const revealScratch = () => {
-      if(scratchState.isRevealed) return;
-      setScratchState(prev => ({...prev, isRevealed: true}));
-      const isDig = isDigitalItem(scratchState.result.type, scratchState.result.n);
-      db.ref('mavikent_premium/deliveries').push({ s: safeName, i: scratchState.result.n + " (Kazı Kazan)", st: isDig ? 'done' : 'wait', type: scratchState.result.type || 'normal', val: scratchState.result.val || scratchState.result.i, date: new Date().toLocaleDateString('tr-TR') });
+  const redeemShards = () => {
+      const myShards = Number(appData?.shards?.[safeName] || 0);
+      if (myShards < 20) return alert("Henüz yeterli parçan yok! Kutu açarak 20 parçaya ulaşmalısın.");
+      if (window.confirm("20 Parçayı birleştirip 1 Adet JOKER OYUN SEANSI kartı almak istiyor musun?")) {
+          const updates = {}; updates[`shards/${safeName}`] = myShards - 20;
+          db.ref('mavikent_premium/deliveries').push({ s: safeName, i: "Joker Oyun Seansı (Parça Birleşimi)", st: 'done', type: 'normal', val: '🎟️', date: new Date().toLocaleDateString('tr-TR') });
+          db.ref('mavikent_premium').update(updates); alert("🎉 Tebrikler! 20 Parça birleşti ve Joker Kartın Envanterine eklendi!");
+      }
   };
 
   const activateItem = (delKey, item) => {
@@ -730,9 +777,14 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
           else if (iType === 'title' || itemName.includes("ÜNVAN")) {
               updates[`active_cards/${safeName}/title`] = { val: item.n || item.i, exp: Date.now() + 14 * 24 * 60 * 60 * 1000 }; msg = "🎖️ Yeni Ünvanın 14 gün boyunca profilinde sergilenecek!";
           }
-          else if (iType === 'avatar' || iType === 'frame') { 
+else if (iType === 'avatar' || iType === 'frame') { 
               updates[`active_cards/${safeName}/${iType}`] = { val: item.val || item.i || itemName, exp: Date.now() + 30 * 24 * 60 * 60 * 1000 }; msg = "✨ Kozmetik başarıyla profiline eklendi."; 
-          } else { msg = `✅ Eşya başarıyla kullanıldı.`; }
+          } 
+          else if (itemName.includes("JOKER")) {
+              updates[`joker_tickets/${safeName}`] = (Number(appData?.joker_tickets?.[safeName]) || 0) + 1;
+              msg = "🎟️ Joker Biletin aktifleşti! Oyun Odası sekmesinden istediğin bir seansı ÜCRETSİZ alabilirsin.";
+          }
+          else { msg = `✅ Eşya başarıyla kullanıldı.`; }
           db.ref('mavikent_premium').update(updates); setActionModal({ active: true, type: 'success', data: { msg, icon: '✅', name: itemName } });
       }
   };
@@ -881,19 +933,6 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
         </div>
       )}
 
-      {scratchState.active && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', backdropFilter: 'blur(8px)' }}>
-          <div style={{ background: '#ffffff', borderRadius: '40px', width: '100%', maxWidth: '350px', textAlign: 'center', padding: '40px', boxShadow: '0 25px 50px rgba(0,0,0,0.4)', animation: 'popIn 0.4s' }}>
-             <h2 style={{ margin: '0 0 10px 0', fontWeight: 900, fontSize: '26px', color: '#0f172a' }}>KAZI KAZAN</h2>
-             <p style={{ color: '#64748b', fontSize: '15px', margin: '0 0 30px 0', fontWeight: 600 }}>Ödülünü görmek için gri alana dokun!</p>
-             <div onClick={revealScratch} style={{ background: scratchState.isRevealed ? '#ecfdf5' : 'linear-gradient(135deg, #cbd5e1, #94a3b8)', border: `2px dashed ${scratchState.isRevealed ? '#10b981' : '#64748b'}`, borderRadius: '20px', height: '150px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: scratchState.isRevealed ? 'default' : 'pointer', transition: 'all 0.4s', marginBottom: '25px' }}>
-                {!scratchState.isRevealed ? ( <div style={{ fontSize: '30px', color: '#475569', fontWeight: 900, opacity: 0.7 }}>TIRNAKLA</div> ) : ( <div className="fade-in"><div style={{ fontSize: '50px', marginBottom: '10px' }}>{scratchState.result?.i || '🎁'}</div><div style={{ fontSize: '18px', fontWeight: 900, color: '#047857' }}>{scratchState.result?.n}</div></div> )}
-             </div>
-             {scratchState.isRevealed && ( <div className="fade-in"><div style={{ fontSize: '14px', color: '#64748b', marginBottom: '25px', fontWeight: 600 }}>Envanterine eklendi.</div><button onClick={() => setScratchState({active:false})} className="profile-btn" style={{ background: 'linear-gradient(135deg, #d4af37, #b45309)', color: 'white', width: '100%', padding: '16px', fontSize: '16px' }}>KAPAT</button></div> )}
-          </div>
-        </div>
-      )}
-
       {showTxnModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999999, padding: '20px', backdropFilter: 'blur(8px)' }}>
           <div style={{ background: '#ffffff', borderRadius: '32px', width: '100%', maxWidth: '450px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 60px rgba(0,0,0,0.4)', animation: 'popIn 0.3s forwards', overflow: 'hidden' }}>
@@ -941,13 +980,26 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
         </div>
       )}
 
-      {lotteryState.active && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', backdropFilter: 'blur(8px)' }}>
-          <div style={{ background: '#ffffff', borderRadius: '40px', width: '100%', maxWidth: '350px', textAlign: 'center', padding: '40px', boxShadow: '0 25px 50px rgba(0,0,0,0.4)', animation: 'popIn 0.4s forwards' }}>
-             <h2 style={{ margin: '0 0 10px 0', fontWeight: 900, fontSize: '26px', color: '#0f172a' }}>ŞANS ÇARKI</h2>
-             <div style={{ fontSize: '70px', margin: '30px auto', background: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '50%', width: '130px', height: '130px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: lotteryState.spinning ? '0 0 30px rgba(212,175,55,0.4)' : 'none' }}>{lotteryState.currentDisplay}</div>
-             {!lotteryState.spinning ? ( <div className="fade-in"><div style={{ fontSize: '22px', fontWeight: 900, color: '#0f172a', marginBottom: '8px' }}>{lotteryState.result?.n}</div><button onClick={() => setLotteryState({active:false})} className="profile-btn" style={{ background: 'linear-gradient(135deg, #d4af37, #b45309)', color: 'white', width: '100%', padding: '16px', marginTop: '20px' }}>KAPAT</button></div> ) : <div style={{ fontWeight: 800 }}>Bekleyin...</div>}
-          </div>
+      {boxAnim.active && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.9)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999999, padding: '20px', backdropFilter: 'blur(15px)' }}>
+            <div style={{ textAlign: 'center', color: 'white' }}>
+                {boxAnim.step === 1 ? (
+                    <div className="fade-in">
+                       <div className="shake-anim" style={{ fontSize: '150px', filter: 'drop-shadow(0 0 40px rgba(255,255,255,0.6))' }}>
+                           {boxAnim.type === 'standart' ? '📦' : boxAnim.type === 'mega' ? '🧰' : '💎'}
+                       </div>
+                       <h2 style={{ marginTop: '30px', fontSize: '28px', fontWeight: 900, color: '#e0e7ff', letterSpacing: '1px' }}>KUTU AÇILIYOR...</h2>
+                    </div>
+                ) : (
+                    <div className="popIn-anim" style={{ background: '#ffffff', padding: '50px 30px', borderRadius: '40px', width: '100%', maxWidth: '380px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)', color: '#0f172a' }}>
+                       <div style={{ fontSize: '14px', color: '#b45309', fontWeight: 900, letterSpacing: '2px', marginBottom: '15px' }}>TEBRİKLER!</div>
+                       <div style={{ fontSize: '100px', marginBottom: '20px', filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.1))' }}>{boxAnim.result?.icon}</div>
+                       <h2 style={{ color: '#10b981', fontSize: '22px', margin: '0 0 10px 0', fontWeight: 900, lineHeight: '1.4' }}>{boxAnim.result?.desc}</h2>
+                       <p style={{ color: '#64748b', fontSize: '14px', fontWeight: 600, marginBottom: '30px' }}>Ödül hesabına tanımlandı.</p>
+                       <button onClick={() => setBoxAnim({active:false, type:'', step:0, result:null})} className="profile-btn" style={{ background: '#0f172a', color: 'white', width: '100%', padding: '18px', fontSize: '16px' }}>HARİKA!</button>
+                    </div>
+                )}
+            </div>
         </div>
       )}
 
@@ -1048,15 +1100,36 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                    </div>
                 </div>
 
-                <div className="grid-mobile-2" style={{ marginTop: '25px' }}>
-                   <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderRadius: '24px', padding: '25px', textAlign: 'center', color: 'white' }}>
-                      <div style={{ fontSize: '50px', marginBottom: '10px' }}>🎰</div><h3 style={{ margin: '0 0 5px 0', fontSize: '20px', fontWeight: 900 }}>Şans Çarkı</h3>
-                      <button onClick={rollLottery} className="profile-btn badge-glow" style={{ background: '#d4af37', color: '#0f172a', padding: '14px', fontSize: '14px', fontWeight: 900, width: '100%', marginTop: '15px' }}>ÇEVİR ({myTickets} BİLET)</button>
-                   </div>
-                   <div style={{ background: 'linear-gradient(135deg, #059669 0%, #047857 100%)', borderRadius: '24px', padding: '25px', textAlign: 'center', color: 'white' }}>
-                      <div style={{ fontSize: '50px', marginBottom: '10px' }}>🪙</div><h3 style={{ margin: '0 0 5px 0', fontSize: '20px', fontWeight: 900 }}>Kazı Kazan</h3>
-                      <button onClick={playScratchcard} className="profile-btn" style={{ background: 'white', color: '#047857', padding: '14px', fontSize: '14px', fontWeight: 900, width: '100%', marginTop: '15px' }}>OYNA (15 M)</button>
-                   </div>
+                <div style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', borderRadius: '32px', padding: '30px', marginTop: '25px', color: 'white', boxShadow: '0 15px 30px rgba(49,46,129,0.3)', border: '1px solid #4338ca' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+                        <div>
+                            <h3 style={{ margin: '0 0 5px 0', fontSize: '22px', fontWeight: 900, color: '#e0e7ff' }}>🎁 Ganimet Odası</h3>
+                            <div style={{ fontSize: '13px', color: '#a5b4fc', fontWeight: 600 }}>M-Coin ile sandık aç, parçaları biriktir!</div>
+                        </div>
+                        <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px 20px', borderRadius: '20px', border: '1px solid #4f46e5', textAlign: 'center', cursor: (Number(appData?.shards?.[safeName] || 0) >= 20) ? 'pointer' : 'default' }} onClick={redeemShards}>
+                            <div style={{ fontSize: '12px', color: '#818cf8', fontWeight: 900, marginBottom: '4px', letterSpacing: '1px' }}>OYUN ODASI PARÇASI</div>
+                            <div style={{ fontSize: '20px', fontWeight: 900, color: (Number(appData?.shards?.[safeName] || 0) >= 20) ? '#10b981' : 'white' }}>🧩 {Number(appData?.shards?.[safeName] || 0)} / 20</div>
+                            {(Number(appData?.shards?.[safeName] || 0) >= 20) && <div className="badge-glow" style={{ fontSize: '10px', background: '#10b981', color: 'white', padding: '2px 6px', borderRadius: '6px', marginTop: '6px' }}>BİRLEŞTİR</div>}
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '15px' }}>
+                        <div onClick={() => openLootBox('standart')} className="card-hover" style={{ background: 'linear-gradient(135deg, #334155, #1e293b)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #475569', cursor: 'pointer' }}>
+                            <div style={{ fontSize: '40px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>📦</div>
+                            <div style={{ fontSize: '14px', fontWeight: 900, color: 'white', marginBottom: '8px' }}>STANDART</div>
+                            <div style={{ background: '#0f172a', color: '#94a3b8', padding: '6px', borderRadius: '10px', fontSize: '12px', fontWeight: 900 }}>20 M</div>
+                        </div>
+                        <div onClick={() => openLootBox('mega')} className="card-hover" style={{ background: 'linear-gradient(135deg, #d97706, #92400e)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #f59e0b', cursor: 'pointer' }}>
+                            <div style={{ fontSize: '40px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>🧰</div>
+                            <div style={{ fontSize: '14px', fontWeight: 900, color: 'white', marginBottom: '8px' }}>MEGA</div>
+                            <div style={{ background: '#78350f', color: '#fde68a', padding: '6px', borderRadius: '10px', fontSize: '12px', fontWeight: 900 }}>40 M</div>
+                        </div>
+                        <div onClick={() => openLootBox('elit')} className="card-hover" style={{ background: 'linear-gradient(135deg, #0284c7, #0369a1)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #38bdf8', cursor: 'pointer' }}>
+                            <div style={{ fontSize: '40px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>💎</div>
+                            <div style={{ fontSize: '14px', fontWeight: 900, color: 'white', marginBottom: '8px' }}>ELİT SANDIK</div>
+                            <div style={{ background: '#075985', color: '#bae6fd', padding: '6px', borderRadius: '10px', fontSize: '12px', fontWeight: 900 }}>50 M</div>
+                        </div>
+                    </div>
                 </div>
 
                 <div style={{ background: '#0f172a', borderRadius: '24px', padding: '20px', marginTop: '25px', position: 'relative', overflow: 'hidden' }}>
@@ -1405,7 +1478,11 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                           <h2 style={{ margin: '0 0 10px 0', fontSize: '28px', fontWeight: 900, letterSpacing: '-0.5px' }}>Oyun Odası Randevu</h2>
                           <p style={{ margin: 0, fontSize: '15px', fontWeight: 600, opacity: 0.9 }}>Bakiye ile istediğin cihazı şimdiden rezerve et, sıranı garantile!</p>
                        </div>
-
+{(Number(appData?.joker_tickets?.[safeName]) || 0) > 0 && (
+                              <div className="badge-glow" style={{ marginTop: '15px', background: 'rgba(255,255,255,0.2)', padding: '10px 15px', borderRadius: '12px', display: 'inline-block', fontWeight: 900, border: '1px solid #10b981' }}>
+                                  🎟️ Sende {appData.joker_tickets[safeName]} Adet BEDAVA Oyun Bileti Var!
+                              </div>
+                          )}
                        <div style={{ background: 'white', borderRadius: '32px', padding: '25px', border: '1px solid #f1f5f9', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.05)' }}>
                           <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>1. GÜN SEÇİN</div>
                           <div className="clean-scroll" style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px' }}>
@@ -1434,7 +1511,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
                           <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>3. SEANS SEÇİN ({gameDay})</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                             {(GAME_SLOTS[gameDevice] || []).map(slot => {
+{([...(GAME_SLOTS[gameDevice] || []), ...Object.keys(appData?.custom_game_slots?.[gameDevice]?.[gameDay] || {}).map(k => ({id: k, ...appData.custom_game_slots[gameDevice][gameDay][k]}))].sort((a,b) => a.time.localeCompare(b.time))).map(slot => {
                                  const bookedBy = appData?.game_room_appointments?.[gameDevice]?.[gameDay]?.[slot.id];
                                  const isBooked = !!bookedBy;
                                  const isMyBook = bookedBy === safeName;

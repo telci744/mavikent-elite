@@ -35,8 +35,9 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const [adminChatInput, setAdminChatInput] = useState(''); 
 
   const [banInput, setBanInput] = useState({ student: '', duration: '1', reason: '', photoUrl: '' });
-  const [newTourney, setNewTourney] = useState({ name: '', game: 'FIFA 24', fee: '', p1: '', p2: '', p3: '', device: 'ps5' });
+const [newTourney, setNewTourney] = useState({ name: '', game: 'FIFA 24', fee: '', p1: '', p2: '', p3: '', device: 'ps5' });
   const [tourneyDaysMap, setTourneyDaysMap] = useState({}); 
+  const [newCustomSlot, setNewCustomSlot] = useState({ device: 'ps4', day: 'Pazartesi', time: '', price: '' });
 
   const csvDenemeRef = useRef(null); const csvYaziliRef = useRef(null);
 
@@ -59,9 +60,20 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       'ps4': [{ id: 'ps4_1', time: '15:45 - 16:15' }, { id: 'ps4_2', time: '16:15 - 16:45' }, { id: 'ps4_3', time: '21:00 - 21:30' }, { id: 'ps4_4', time: '21:30 - 22:15' }],
       'ps5': [{ id: 'ps5_1', time: '21:00 - 21:30' }, { id: 'ps5_2', time: '21:30 - 22:15' }],
       'vr':  [{ id: 'vr_1', time: '21:00 - 21:30' }, { id: 'vr_2', time: '21:30 - 22:15' }],
-      'pc':  [{ id: 'pc_1', time: '21:00 - 21:30' }, { id: 'pc_2', time: '21:30 - 22:15' }]
+   'pc':  [{ id: 'pc_1', time: '21:00 - 21:30' }, { id: 'pc_2', time: '21:30 - 22:15' }]
   };
-  const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+
+const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+
+  const handleAddCustomSlot = () => {
+      if(!newCustomSlot.time || !newCustomSlot.price) return alert("Saat ve Fiyat girin!");
+      const slotId = `custom_${Date.now()}`;
+      db.ref(`mavikent_premium/custom_game_slots/${newCustomSlot.device}/${newCustomSlot.day}/${slotId}`).set({
+          time: newCustomSlot.time, price: parseInt(newCustomSlot.price)
+      });
+      alert("✅ Özel seans eklendi!");
+      setNewCustomSlot({...newCustomSlot, time: ''});
+  };
 
   const handleAdminPhotoUpload = (e) => {
       const file = e.target.files[0];
@@ -119,7 +131,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     return total;
   };
 
-  const saveData = (type, status, basePts) => {
+const saveData = (type, status, basePts) => {
     if (!selectedStudent) return;
     const finalPts = getCalculatedPoints(selectedStudent, basePts, type);
     const updates = {};
@@ -139,15 +151,17 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         updates[`transactions/${selectedStudent}/${tId}`] = { desc: type === 'kanaat' ? 'Yönetici Kanaat Notu' : (type === 'yoklama' ? 'Yoklama Puanı' : (type === 'telefon' ? 'Telefon Teslim' : 'Yatak/Dolap')), amt: finalPts, date: new Date().toLocaleString('tr-TR') };
     }
     
-    if (type === 'yoklama') updates[`yoklama_d/${selectedStudent}/sessions/${selectedSession}`] = { st: status, pts: finalPts };
-    else if (type === 'telefon') updates[`telefon_d/${selectedStudent}/sessions/gunluk`] = { st: status, pts: finalPts };
+    const todayStr = new Date().toDateString();
+    if (type === 'yoklama') updates[`yoklama_d/${todayStr}/${selectedStudent}/sessions/${selectedSession}`] = { st: status, pts: finalPts };
+    else if (type === 'telefon') updates[`telefon_d/${todayStr}/${selectedStudent}/sessions/gunluk`] = { st: status, pts: finalPts };
     else if (type === 'kanaat') updates[`kanaat_w/${selectedStudent}`] = (Number(appData?.kanaat_w?.[selectedStudent]) || 0) + finalPts;
-    else if (type === 'yatak') updates[`yatak_d/${selectedStudent}/${status}_pts`] = finalPts; 
+    else if (type === 'yatak') updates[`yatak_d/${todayStr}/${selectedStudent}/${status}_pts`] = finalPts; 
     
     db.ref('mavikent_premium').update(updates); setSelectedStudent(null); setModalType(null);
   };
 
-  const saveEducationData = () => {
+const saveEducationData = () => {
+    const todayStr = new Date().toDateString();
     const oldData = appData?.education_d?.[selectedStudent] || {}; 
     let earnedPoints = 0;
     const validNew = (eduData.lessons || []).filter(hw => !hw.includes("YOK")); 
@@ -157,7 +171,29 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     if ((eduData.pages || 0) > (oldData.pages || 0)) earnedPoints += Math.floor((eduData.pages || 0) / 10) - Math.floor((oldData.pages || 0) / 10);
     if ((eduData.questions || 0) > (oldData.questions || 0)) earnedPoints += Math.floor((eduData.questions || 0) / 10) - Math.floor((oldData.questions || 0) / 10);
     
-    const updates = {}; updates[`education_d/${selectedStudent}`] = { ...eduData, date: new Date().toDateString() };
+    // --- HAFTALIK BİRİKTİRME MOTORU (Cmt 16:00 Sıfırlamalı) ---
+    const now = new Date(); const pivot = new Date(now);
+    pivot.setDate(now.getDate() - (now.getDay() + 1) % 7); pivot.setHours(16, 0, 0, 0);
+    if (now < pivot) pivot.setDate(pivot.getDate() - 7);
+    const weekId = `week_${pivot.getTime()}`;
+
+    let qDelta = 0; let pDelta = 0;
+    if (oldData.date === todayStr) { // Eğer bugün içinde 2. kez düzeltme yapılıyorsa sadece farkı al
+        qDelta = (eduData.questions || 0) - (oldData.questions || 0);
+        pDelta = (eduData.pages || 0) - (oldData.pages || 0);
+    } else { // İlk defa giriliyorsa hepsini al
+        qDelta = (eduData.questions || 0);
+        pDelta = (eduData.pages || 0);
+    }
+
+    const currentWeeklyQ = appData?.weekly_stats?.[weekId]?.[selectedStudent]?.questions || 0;
+    const currentWeeklyP = appData?.weekly_stats?.[weekId]?.[selectedStudent]?.pages || 0;
+
+    const updates = {}; 
+    updates[`education_d/${selectedStudent}`] = { ...eduData, date: todayStr };
+    updates[`weekly_stats/${weekId}/${selectedStudent}/questions`] = Math.max(0, currentWeeklyQ + qDelta);
+    updates[`weekly_stats/${weekId}/${selectedStudent}/pages`] = Math.max(0, currentWeeklyP + pDelta);
+
     if (earnedPoints > 0) {
         const finalM = getCalculatedPoints(selectedStudent, earnedPoints, 'egitim');
         updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalM;
@@ -165,7 +201,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         updates[`xp/${selectedStudent}`] = (Number(appData?.xp?.[selectedStudent]) || 0) + (earnedPoints * 10);
         updates[`transactions/${selectedStudent}/txn_${Date.now()}`] = { desc: 'Günlük Eğitim Başarısı', amt: finalM, date: new Date().toLocaleString('tr-TR') };
     }
-    db.ref('mavikent_premium').update(updates); setSelectedStudent(null); setModalType(null); alert("Eğitim Verileri Güncellendi!");
+    db.ref('mavikent_premium').update(updates); setSelectedStudent(null); setModalType(null); alert("✅ Eğitim Kaydedildi ve Haftalık Panoya İşlendi!");
   };
 
   const saveExamData = (type) => {
@@ -617,19 +653,33 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       }
   };
 
-  const renderStudentGrid = (students, type) => (
+const renderStudentGrid = (students, type) => {
+    const todayStr = new Date().toDateString();
+    return (
     <div className="grid-mobile-2">
       {students.map(name => {
-        let bgColor = '#ffffff'; let subText = '';
+        let bgColor = '#ffffff'; let subText = ''; let isCompletedToday = false;
         
         if (currentModule === 'yoklama') { 
-            const st = appData?.yoklama_d?.[name]?.sessions?.[selectedSession]?.st; 
+            const st = appData?.yoklama_d?.[todayStr]?.[name]?.sessions?.[selectedSession]?.st; 
+            if (st) isCompletedToday = true;
             if (st === 'p' || st === 't') bgColor = '#ecfdf5'; 
             if (st === 'a') bgColor = '#fef2f2'; 
             if (st === 'l') bgColor = '#fffbeb'; 
         } 
+        else if (currentModule === 'telefon') {
+            const st = appData?.telefon_d?.[todayStr]?.[name]?.sessions?.gunluk?.st;
+            if (st) isCompletedToday = true;
+            if (st === 'p' || st === 'e') bgColor = '#ecfdf5';
+            if (st === 'a') bgColor = '#fef2f2';
+        }
+        else if (currentModule === 'yatak') {
+            const yt = appData?.yatak_d?.[todayStr]?.[name];
+            if (yt && yt.yatak_pts !== undefined && yt.dolap_pts !== undefined) isCompletedToday = true;
+            if (yt) bgColor = '#f0f9ff';
+        }
         else if (currentModule === 'values_view') { 
-            if (appData?.values_edu_d?.[name]?.[new Date().toDateString()]?.done) bgColor = '#ecfdf5'; 
+            if (appData?.values_edu_d?.[name]?.[todayStr]?.done) { bgColor = '#ecfdf5'; isCompletedToday = true; }
         } 
         else if (currentModule === 'class_view') { 
             const d = appData?.education_d?.[name]; 
@@ -645,31 +695,33 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
         }
         
         const isEliteStud = isElite(name);
-        const has2X = (appData?.active_cards?.[name]?.multiplier?.date === new Date().toDateString()) || (appData?.settings?.global_event === '2x_xp');
+        const has2X = (appData?.active_cards?.[name]?.multiplier?.date === todayStr) || (appData?.settings?.global_event === '2x_xp');
         const streakData = appData?.active_cards?.[name]?.streak;
-        const hasStreak = streakData && (streakData.date === new Date().toDateString() || (streakData.end && streakData.end > Date.now()));
+        const hasStreak = streakData && (streakData.date === todayStr || (streakData.end && streakData.end > Date.now()));
 
         return (
           <div key={name} onClick={() => { 
+                if (isCompletedToday) return; // İşlem yapıldıysa TIKLANMAYI İPTAL ET
                 setSelectedStudent(name); 
                 if (type === 'isleyis') setModalType('isleyis');
                 else if (type === 'egitim_ders') { setEduData({ lessons: appData?.education_d?.[name]?.lessons || [], pages: appData?.education_d?.[name]?.pages || 0, questions: appData?.education_d?.[name]?.questions || 0 }); setModalType('egitim'); }
                 else if (type === 'egitim_deneme') { setExamData(appData?.exams?.[name]?.deneme || {}); setModalType('deneme'); }
                 else if (type === 'egitim_yazili') { setExamData(appData?.exams?.[name]?.yazili || {}); setModalType('yazili'); }
              }} 
-               className="card-hover" style={{ background: bgColor, border: isEliteStud ? '2px solid #d4af37' : 'none', padding: '24px 16px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', color: '#0f172a', cursor: 'pointer' }}>
+               className="card-hover" style={{ background: bgColor, border: isEliteStud ? '2px solid #d4af37' : 'none', padding: '24px 16px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', color: '#0f172a', cursor: isCompletedToday ? 'not-allowed' : 'pointer', opacity: isCompletedToday ? 0.6 : 1 }}>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                {isEliteStud && <span style={{ fontSize: '18px' }} title="Elit Lig">👑</span>}
-                {has2X && <span style={{ background: 'linear-gradient(135deg, #f59e0b, #b45309)', color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900, boxShadow: '0 2px 4px rgba(245,158,11,0.3)' }}>⚡ 2X AKTİF</span>}
-                {hasStreak && <span style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900, boxShadow: '0 2px 4px rgba(59,130,246,0.3)' }}>🛡️ KORUMA</span>}
+                {isCompletedToday && <span style={{ fontSize: '18px' }} title="Tamamlandı">✅</span>}
+                {isEliteStud && !isCompletedToday && <span style={{ fontSize: '18px' }} title="Elit Lig">👑</span>}
+                {has2X && <span style={{ background: 'linear-gradient(135deg, #f59e0b, #b45309)', color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900, boxShadow: '0 2px 4px rgba(245,158,11,0.3)' }}>⚡ 2X</span>}
+                {hasStreak && <span style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900, boxShadow: '0 2px 4px rgba(59,130,246,0.3)' }}>🛡️</span>}
             </div>
-            <div style={{ fontWeight: 800, fontSize: '15px' }}>{name}</div>
+            <div style={{ fontWeight: 800, fontSize: '15px', textDecoration: isCompletedToday ? 'line-through' : 'none' }}>{name}</div>
             {subText && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px', fontWeight: 700 }}>{subText}</div>}
           </div>
         );
       })}
     </div>
-  );
+  )};
 
   return (
     <div className="fade-in" style={{ maxWidth: '1200px', margin: '0 auto', width: '100%', padding: '20px', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -707,17 +759,21 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
         {!currentModule && (
           <div className="premium-grid">
-            {dashboardView === 'main' && [
-              { id: 'egitim', icon: '📚', label: 'EĞİTİM KONTROL' }, 
-              { id: 'degerler', icon: '🕌', label: 'DAHİLİ DERS & DEĞERLER' },
-              { id: 'isleyis', icon: '⚙️', label: 'YURT İŞLEYİŞ' }, 
-              { id: 'yonetim', icon: '👑', label: 'SİSTEM YÖNETİMİ', bg: '#f8fafc' },
-              { id: 'turnuva', icon: '🎮', label: 'OYUN ODASI & TURNUVA', bg: '#fef2f2' } 
-            ].map(mod => (
-              <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="premium-card card-hover" style={{ background: mod.bg || 'white' }}>
-                <div className="icon">{mod.icon}</div><div className="label" style={{ color: mod.id === 'turnuva' ? '#b91c1c' : '#0f172a' }}>{mod.label}</div>
-              </div>
-            ))}
+{dashboardView === 'main' && [
+              { id: 'egitim', icon: '📚', label: 'EĞİTİM KONTROL' }, 
+              { id: 'degerler', icon: '🕌', label: 'DAHİLİ DERS & DEĞERLER' },
+              { id: 'isleyis', icon: '⚙️', label: 'YURT İŞLEYİŞ' },
+              { id: 'turnuva', icon: '🎮', label: 'OYUN ODASI & TURNUVA' },
+              { id: 'yonetim', icon: '👑', label: 'SİSTEM YÖNETİMİ' },
+              { id: 'admin_custom_slot', icon: '⏰', label: 'Özel Seans Ekle' }
+            ].map(mod => (
+              <div key={mod.id} onClick={() => {
+                  if (mod.id === 'admin_custom_slot') setCurrentModule(mod.id);
+                  else setDashboardView(mod.id);
+              }} className="premium-card card-hover">
+                <div className="icon">{mod.icon}</div><div className="label">{mod.label}</div>
+              </div>
+            ))}
             
             {dashboardView === 'egitim' && [ 
               { id: 'egitim_ders', icon: '📝', label: 'ÖDEV / KİTAP TAKİBİ' }, 
@@ -727,7 +783,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
               <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
             ))}
 
-            {dashboardView === 'turnuva' && [
+{dashboardView === 'turnuva' && [
                 { id: 'admin_ban', icon: '🕵️‍♂️', label: 'Oyun Odası Denetim Merkezi' },
                 { id: 'admin_turnuva', icon: '🏆', label: 'Turnuva Organizasyonu' }
             ].map(mod => (
@@ -881,6 +937,73 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
                                 </div>
                             )
                         })}
+                    </div>
+                </div>
+            </div>
+        )}
+
+{/* --- ÖZEL SEANS EKLEME MERKEZİ --- */}
+        {currentModule === 'admin_custom_slot' && (
+            <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* 1. SEANS EKLEME FORMU */}
+                <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                    <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontWeight: 900 }}>⏰ Yeni Özel Seans Ekle</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginTop: '15px' }}>
+                        <select value={newCustomSlot.device} onChange={e => setNewCustomSlot({...newCustomSlot, device: e.target.value})} className="elite-input">
+                            {GAME_DEVICES.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                        <select value={newCustomSlot.day} onChange={e => setNewCustomSlot({...newCustomSlot, day: e.target.value})} className="elite-input">
+                            {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                        <input type="text" placeholder="Saat (Örn: 10:00 - 11:00)" value={newCustomSlot.time} onChange={e => setNewCustomSlot({...newCustomSlot, time: e.target.value})} className="elite-input" />
+                        <input type="number" placeholder="Fiyat (M-Coin)" value={newCustomSlot.price} onChange={e => setNewCustomSlot({...newCustomSlot, price: e.target.value})} className="elite-input" />
+                        <button onClick={handleAddCustomSlot} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '16px', fontWeight: 900, border: 'none' }}>YAYINLA</button>
+                    </div>
+                </div>
+
+                {/* 2. TÜM ÖZEL SEANSLARIN LİSTESİ (GLOBAL GÖRÜNÜM) */}
+                <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                        <h3 style={{ margin: 0, color: '#0f172a', fontWeight: 900 }}>🌐 Aktif Tüm Özel Seanslar</h3>
+                        <span style={{ background: '#f1f5f9', color: '#64748b', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 800 }}>
+                            Toplam: {Object.values(appData?.custom_game_slots || {}).reduce((acc, dev) => acc + Object.values(dev || {}).reduce((acc2, day) => acc2 + Object.keys(day || {}).length, 0), 0)}
+                        </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {(() => {
+                            const allSlots = [];
+                            Object.entries(appData?.custom_game_slots || {}).forEach(([devId, days]) => {
+                                Object.entries(days || {}).forEach(([dayName, slots]) => {
+                                    Object.entries(slots || {}).forEach(([slotId, slotData]) => {
+                                        allSlots.push({ devId, dayName, slotId, ...slotData });
+                                    });
+                                });
+                            });
+
+                            if (allSlots.length === 0) {
+                                return <div style={{ padding: '30px', textAlign: 'center', color: '#94a3b8', fontWeight: 700, border: '2px dashed #e2e8f0', borderRadius: '15px' }}>Henüz hiçbir özel seans eklenmemiş.</div>;
+                            }
+
+                            return allSlots.sort((a, b) => DAYS.indexOf(a.dayName) - DAYS.indexOf(b.dayName)).map((item) => (
+                                <div key={item.slotId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', background: '#f8fafc', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                        <div style={{ background: '#0f172a', color: '#d4af37', padding: '8px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 900, textAlign: 'center', minWidth: '85px' }}>
+                                            {item.dayName.toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '15px' }}>{item.time} <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '13px' }}>({item.devId.toUpperCase()})</span></div>
+                                            <div style={{ fontSize: '12px', color: '#10b981', fontWeight: 800 }}>{item.price} M-Coin</div>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => {
+                                        if(window.confirm(`${item.dayName} günü ${item.time} seansını silmek istediğine emin misin?`)) {
+                                            db.ref(`mavikent_premium/custom_game_slots/${item.devId}/${item.dayName}/${item.slotId}`).remove();
+                                        }
+                                    }} style={{ background: '#fee2e2', color: '#ef4444', border: 'none', padding: '10px 15px', borderRadius: '12px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>🗑️ SİL</button>
+                                </div>
+                            ));
+                        })()}
                     </div>
                 </div>
             </div>
