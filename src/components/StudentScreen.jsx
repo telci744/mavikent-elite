@@ -80,6 +80,110 @@ const GAME_SLOTS = {
     ]
 };
 
+// 🍽️ YENİ: YEMEK PUANLAMA BİLEŞENİ (3 Öğün ve Zaman Kilitli)
+const YemekPuanlama = ({ ogrenciAdi }) => {
+  const [menu, setMenu] = useState('');
+  const [mevcutPuan, setMevcutPuan] = useState({ kahvalti: 0, ogle: 0, aksam: 0 });
+  const [hoverPuan, setHoverPuan] = useState({ kahvalti: 0, ogle: 0, aksam: 0 });
+  const [yukleniyor, setYukleniyor] = useState(true);
+
+  const tzOffset = new Date().getTimezoneOffset() * 60000;
+  const bugunTarihStr = new Date(Date.now() - tzOffset).toISOString().split('T')[0];
+
+  useEffect(() => {
+    const menuRef = db.ref(`mavikent_premium/yemek_gecmisi/${bugunTarihStr}`);
+    const handleMenu = (snap) => {
+      if (snap.exists()) setMenu(snap.val() || '');
+      else setMenu('');
+      setYukleniyor(false);
+    };
+    menuRef.on('value', handleMenu);
+    return () => menuRef.off('value', handleMenu);
+  }, [bugunTarihStr]);
+
+  useEffect(() => {
+    if (ogrenciAdi) {
+      const oyRef = db.ref(`mavikent_premium/yemek_puanlari/${bugunTarihStr}/${ogrenciAdi}`);
+      const handleOy = (snap) => {
+        if (snap.exists()) {
+           const val = snap.val();
+           // Geriye dönük uyumluluk: Eskiden kalma tek bir sayıysa onu öğleye atayalım
+           if (typeof val === 'number') setMevcutPuan({ kahvalti: 0, ogle: val, aksam: 0 });
+           else setMevcutPuan({ kahvalti: val.kahvalti || 0, ogle: val.ogle || 0, aksam: val.aksam || 0 });
+        } else setMevcutPuan({ kahvalti: 0, ogle: 0, aksam: 0 });
+      };
+      oyRef.on('value', handleOy);
+      return () => oyRef.off('value', handleOy);
+    }
+  }, [ogrenciAdi, bugunTarihStr]);
+
+  const puanGonder = async (ogunId, puan) => {
+    if (!ogrenciAdi) return alert("⚠️ Lütfen önce sisteme giriş yapın!");
+    try {
+      await db.ref(`mavikent_premium/yemek_puanlari/${bugunTarihStr}/${ogrenciAdi}/${ogunId}`).set(puan);
+      setMevcutPuan(prev => ({ ...prev, [ogunId]: puan }));
+    } catch (error) { alert("Hata oluştu: " + error.message); }
+  };
+
+  const isUnlocked = (ogun) => {
+    const now = new Date(); const h = now.getHours(); const m = now.getMinutes();
+    if (ogun === 'kahvalti') return h >= 8;
+    if (ogun === 'ogle') return h > 13 || (h === 13 && m >= 30);
+    if (ogun === 'aksam') return h >= 19;
+    return false;
+  };
+
+  if (yukleniyor || !menu || menu.trim() === '') return null;
+
+  const renderOylama = (ogunId, icon, baslik, saatStr) => {
+    const isAcik = isUnlocked(ogunId);
+    return (
+      <div key={ogunId} style={{ background: 'white', padding: '15px', borderRadius: '20px', marginBottom: '10px', border: '1px solid #fde68a', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', marginBottom: '10px' }}>
+           <div style={{ fontSize: '15px', fontWeight: '900', color: '#b45309', display:'flex', alignItems:'center', gap:'5px' }}><span>{icon}</span> {baslik}</div>
+           <div style={{ fontSize: '11px', fontWeight: '800', color: isAcik ? '#10b981' : '#ef4444', background: isAcik ? '#d1fae5' : '#fef2f2', padding: '4px 8px', borderRadius: '8px' }}>
+              {isAcik ? 'AÇIK' : `Saat ${saatStr}'de Açılacak`}
+           </div>
+        </div>
+        
+        {isAcik ? (
+          <div style={{ width: '100%' }}>
+            <div style={{ fontSize: '12px', fontWeight: '800', color: '#92400e', marginBottom: '5px' }}>{mevcutPuan[ogunId] > 0 ? `Verdiğin Puan: ${mevcutPuan[ogunId]}` : "Puan Ver:"}</div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+              {[1, 2, 3, 4, 5].map((yildiz) => (
+                <button key={yildiz} 
+                  onClick={() => puanGonder(ogunId, yildiz)} 
+                  onMouseEnter={() => setHoverPuan({...hoverPuan, [ogunId]: yildiz})} 
+                  onMouseLeave={() => setHoverPuan({...hoverPuan, [ogunId]: 0})} 
+                  style={{ background: 'none', border: 'none', fontSize: '30px', cursor: 'pointer', color: (hoverPuan[ogunId] || mevcutPuan[ogunId]) >= yildiz ? '#f59e0b' : '#fef3c7', transition: 'all 0.2s', padding: 0, transform: hoverPuan[ogunId] === yildiz ? 'scale(1.2)' : 'scale(1)' }}>★</button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: '30px', color: '#fef3c7', display: 'flex', gap: '8px' }}>★★★★★</div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ background: '#fffbeb', borderRadius: '32px', padding: '30px', boxShadow: '0 15px 40px -10px rgba(217,119,6,0.15)', border: '2px solid #fde68a', marginTop: '25px', textAlign: 'center' }}>
+      <div style={{ fontSize: '13px', fontWeight: '900', color: '#b45309', letterSpacing: '2px', marginBottom: '10px' }}>🍽️ GÜNÜN MENÜSÜ</div>
+      <div style={{ fontSize: '16px', fontWeight: '800', color: '#78350f', marginBottom: '20px', lineHeight: '1.6', background: 'white', padding: '20px', borderRadius: '20px', whiteSpace: 'pre-line', border: '1px solid #fde68a' }}>
+        {menu}
+      </div>
+      
+      <div style={{ width: '100%', height: '2px', background: '#fde68a', marginBottom: '20px' }}></div>
+      <div style={{ fontSize: '14px', fontWeight: '900', color: '#92400e', marginBottom: '15px' }}>👇 ÖĞÜNLERİ DEĞERLENDİR 👇</div>
+      
+      {renderOylama('kahvalti', '🍳', 'Kahvaltı', '08:00')}
+      {renderOylama('ogle', '🍲', 'Öğle Yemeği', '13:30')}
+      {renderOylama('aksam', '🍽️', 'Akşam Yemeği', '19:00')}
+    </div>
+  );
+};
+
+
 const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const safeName = String(studentName || '');
   
@@ -122,7 +226,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const rawRoster = appData?.roster || [];
   const roster = Array.isArray(rawRoster) ? rawRoster : Object.values(rawRoster || {});
 
-  // ZAMAN HESAPLAMALARI (BEYAZ EKRAN ÇÖZÜMÜ BURADA)
+  // ZAMAN HESAPLAMALARI
   const now = new Date();
   const liveDayIdx = now.getDay() === 0 ? 6 : now.getDay() - 1;
   const currentHour = now.getHours();
@@ -839,6 +943,73 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
       }
   };
 
+  const leaveClan = () => {
+    if (!myClanId) return;
+    if (window.confirm('Klandan ayrılmak istediğine emin misin? Savaş puanların silinecek.')) {
+      const updates = {};
+      const clanMembers = appData.clans[myClanId].members || [];
+      const newMembers = clanMembers.filter(m => m !== safeName);
+      
+      if (newMembers.length === 0) {
+        updates[`clans/${myClanId}`] = null;
+      } else {
+        updates[`clans/${myClanId}/members`] = newMembers;
+        if (appData.clans[myClanId].leader === safeName) {
+          updates[`clans/${myClanId}/leader`] = newMembers[0];
+        }
+      }
+      updates[`clan_war_participants/${safeName}`] = null;
+      db.ref('mavikent_premium').update(updates);
+    }
+  };
+
+  const acceptInvite = (clanId) => {
+    if (myClanId) return alert('Zaten bir klandasın! Önce mevcut klandan ayrılmalısın.');
+    const clanToJoin = appData.clans[clanId];
+    if (!clanToJoin) return alert('Klan bulunamadı.');
+    if ((clanToJoin.members || []).length >= 3) return alert('Bu klan tamamen dolu (3/3).');
+    
+    const updates = {};
+    updates[`clans/${clanId}/members`] = [...(clanToJoin.members || []), safeName];
+    updates[`clan_invites/${safeName}`] = null;
+    db.ref('mavikent_premium').update(updates);
+    alert(`${clanToJoin.name} klanına katıldın!`);
+  };
+
+  const rejectInvite = (clanId) => {
+    db.ref(`mavikent_premium/clan_invites/${safeName}/${clanId}`).remove();
+  };
+
+  const joinWar = () => {
+    if (!myClanId) return alert('Savaşa katılmak için bir klanda olmalısın!');
+    if ((myClan?.members || []).length < 3) return alert('Klan savaşına katılmak için klanın tam kapasite (3 kişi) olmalıdır!');
+    if (mCoin < 10) return alert('Savaşa giriş ücreti için 10 M-Coin gerekiyor.');
+    
+    if (window.confirm('Klan savaşına 10 M-Coin karşılığında katılmak istiyor musun? Bu andan itibaren kazanacağın tüm RP puanları klan savaş hanesine de yazılacak!')) {
+      const updates = {};
+      updates[`wallet/${safeName}`] = mCoin - 10;
+      updates[`transactions/${safeName}/txn_war_${Date.now()}`] = { desc: `Klan Savaşı Giriş Ücreti`, amt: -10, date: new Date().toLocaleString('tr-TR') };
+      updates[`clan_war_participants/${safeName}`] = true;
+      db.ref('mavikent_premium').update(updates);
+      alert('Savaşa katıldın! Artık kastığın her RP klanı şampiyonluğa taşıyacak.');
+    }
+  };
+
+  const handleInviteUser = () => {
+    if (!inviteUser.trim()) return;
+    if ((myClan?.members || []).length >= 3) return alert('Klanın tamamen dolu (3/3)!');
+    if (!roster.includes(inviteUser.trim())) return alert('Böyle bir öğrenci bulunamadı.');
+    if ((myClan?.members || []).includes(inviteUser.trim())) return alert('Bu oyuncu zaten klanınızda.');
+    
+    db.ref(`mavikent_premium/clan_invites/${inviteUser.trim()}/${myClanId}`).set({
+      clanName: myClan.name,
+      icon: myClan.icon
+    });
+    alert(`${inviteUser} oyuncusuna davet gönderildi!`);
+    setInviteUser('');
+  };
+
+
   const getNavStyle = (tab) => ({ flex: 1, border: 'none', background: activeTab === tab ? '#ffffff' : 'transparent', color: activeTab === tab ? '#0f172a' : '#64748b', fontWeight: activeTab === tab ? 900 : 700, cursor: 'pointer', padding: '14px 0', borderRadius: '50px', fontSize: '11px', outline: 'none', boxShadow: activeTab === tab ? '0 10px 20px -5px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.3s', whiteSpace: 'nowrap' });
 
   return (
@@ -870,7 +1041,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
         .auto-scroll-chat:hover { animation-play-state: paused; }
       `}</style>
 
-      {/* --- TÜM MODALLAR (EKSİKSİZ) --- */}
+      {/* --- TÜM MODALLAR --- */}
 
       {purchaseModal.active && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.9)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999999, padding: '20px', backdropFilter: 'blur(10px)' }}>
@@ -1068,6 +1239,9 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                    <div style={{ width: '100%', height: '16px', background: '#e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '12px' }}><div style={{ background: 'linear-gradient(90deg, #3b82f6, #0ea5e9)', width: `${xpDetail.progress}%`, height: '100%', borderRadius: '10px', transition: 'width 0.5s ease-out' }}></div></div>
                    <div style={{ textAlign: 'center', fontSize: '14px', fontWeight: 700, color: '#94a3b8' }}><span style={{ color: '#0f172a', fontWeight: 900 }}>{xpDetail.currentXp} XP</span> / {xpDetail.nextLevelXp} XP</div>
                 </div>
+
+                {/* 🍽️ ZAMAN KİLİTLİ 3 ÖĞÜNLÜ YEMEK PUANLAMA BİLEŞENİ BURADA! */}
+                <YemekPuanlama ogrenciAdi={safeName} />
 
                 {myGameAppointments.length > 0 && (
                     <div style={{ background: '#fffbeb', border: '2px solid #fde047', borderRadius: '24px', padding: '25px', marginTop: '25px' }}>
