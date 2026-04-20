@@ -13,7 +13,8 @@ const BADGES = {
   cuzdan_1: { id: 'cuzdan_1', icon: '🪙', name: 'İlk Maaş', desc: '300 M-Coin biriktir.', req: 300, type: 'cuzdan' },
   cuzdan_2: { id: 'cuzdan_2', icon: '🏦', name: 'Borsa Kurdu', desc: '1.000 M-Coin görsün.', req: 1000, type: 'cuzdan' },
   gizli_1: { id: 'gizli_1', icon: '🛡️', name: 'Mavikent Efsanesi', desc: 'Kusursuzlara verilir.', type: 'gizli' },
-  gizli_3: { id: 'gizli_3', icon: '👑', name: 'Elitlerin Efendisi', desc: 'Elit Lige çıkana verilir.', type: 'gizli' }
+  gizli_3: { id: 'gizli_3', icon: '👑', name: 'Elitlerin Efendisi', desc: 'Elit Lige çıkana verilir.', type: 'gizli' },
+  sezon1_samp: { id: 'sezon1_samp', icon: '🏆', name: '1. Sezon Fatihi', desc: 'Mavikent Premier League 1. Sezon Şampiyonu. (Ebedi Rozet)', type: 'gizli' }
 };
 
 const BAD_WORDS = ['amk', 'aq', 'siktir', 'piç', 'oç', 'yavşak', 'lan', 'mal', 'salak', 'gerizekalı'];
@@ -80,7 +81,7 @@ const GAME_SLOTS = {
     ]
 };
 
-// 🍽️ YENİ: YEMEK PUANLAMA BİLEŞENİ (3 Öğün ve Zaman Kilitli)
+// 🍽️ YEMEK PUANLAMA BİLEŞENİ
 const YemekPuanlama = ({ ogrenciAdi }) => {
   const [menu, setMenu] = useState('');
   const [mevcutPuan, setMevcutPuan] = useState({ kahvalti: 0, ogle: 0, aksam: 0 });
@@ -107,7 +108,6 @@ const YemekPuanlama = ({ ogrenciAdi }) => {
       const handleOy = (snap) => {
         if (snap.exists()) {
            const val = snap.val();
-           // Geriye dönük uyumluluk: Eskiden kalma tek bir sayıysa onu öğleye atayalım
            if (typeof val === 'number') setMevcutPuan({ kahvalti: 0, ogle: val, aksam: 0 });
            else setMevcutPuan({ kahvalti: val.kahvalti || 0, ogle: val.ogle || 0, aksam: val.aksam || 0 });
         } else setMevcutPuan({ kahvalti: 0, ogle: 0, aksam: 0 });
@@ -172,7 +172,6 @@ const YemekPuanlama = ({ ogrenciAdi }) => {
       <div style={{ fontSize: '16px', fontWeight: '800', color: '#78350f', marginBottom: '20px', lineHeight: '1.6', background: 'white', padding: '20px', borderRadius: '20px', whiteSpace: 'pre-line', border: '1px solid #fde68a' }}>
         {menu}
       </div>
-      
       <div style={{ width: '100%', height: '2px', background: '#fde68a', marginBottom: '20px' }}></div>
       <div style={{ fontSize: '14px', fontWeight: '900', color: '#92400e', marginBottom: '15px' }}>👇 ÖĞÜNLERİ DEĞERLENDİR 👇</div>
       
@@ -183,6 +182,48 @@ const YemekPuanlama = ({ ogrenciAdi }) => {
   );
 };
 
+// Zaman Kilidi Algoritması (Tarih ve Saati Kontrol Eder)
+const isMatchPlayable = (dateStr, timeStr) => {
+    if (!dateStr || !timeStr) return true; 
+    try {
+        let year, month, day;
+        let cleanDate = String(dateStr).trim();
+        
+        if (cleanDate.includes('.')) {
+            let parts = cleanDate.split('.');
+            day = parseInt(parts[0]); month = parseInt(parts[1]) - 1; year = parseInt(parts[2]);
+            if (year < 100) year += 2000;
+        } else if (cleanDate.includes('/')) {
+            let parts = cleanDate.split('/');
+            day = parseInt(parts[0]); month = parseInt(parts[1]) - 1; year = parseInt(parts[2]);
+            if (year < 100) year += 2000;
+        } else if (cleanDate.includes('-')) {
+            let parts = cleanDate.split('-');
+            if (parts[0].length === 4) {
+                year = parseInt(parts[0]); month = parseInt(parts[1]) - 1; day = parseInt(parts[2]);
+            } else {
+                day = parseInt(parts[0]); month = parseInt(parts[1]) - 1; year = parseInt(parts[2]);
+                if (year < 100) year += 2000;
+            }
+        } else {
+            return true;
+        }
+        
+        let h = 0, m = 0;
+        if (timeStr.includes('-')) {
+            let timeParts = timeStr.split('-')[0].trim().split(':');
+            h = parseInt(timeParts[0]); m = parseInt(timeParts[1]);
+        } else {
+            let timeParts = timeStr.trim().split(':');
+            h = parseInt(timeParts[0]); m = parseInt(timeParts[1]);
+        }
+        
+        const matchDate = new Date(year, month, day, h, m, 0);
+        return new Date() >= matchDate;
+    } catch (e) {
+        return true; 
+    }
+};
 
 const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const safeName = String(studentName || '');
@@ -213,8 +254,11 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const currentDayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
   const [gameDay, setGameDay] = useState(DAYS[currentDayIndex]);
   const [gameDevice, setGameDevice] = useState('ps4');
+  
+  const [activeTourneyTab, setActiveTourneyTab] = useState({});
+  const [activeWeekTab, setActiveWeekTab] = useState({});
+  const [expandedTourney, setExpandedTourney] = useState(null);
 
-  // OYUN ODASI DENETİM VE TURNUVA STATE'LERİ
   const isController = appData?.settings?.game_room_controller === safeName;
   const [showControlPanel, setShowControlPanel] = useState(false);
   const [evalForm, setEvalForm] = useState({ 
@@ -226,7 +270,6 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const rawRoster = appData?.roster || [];
   const roster = Array.isArray(rawRoster) ? rawRoster : Object.values(rawRoster || {});
 
-  // ZAMAN HESAPLAMALARI
   const now = new Date();
   const liveDayIdx = now.getDay() === 0 ? 6 : now.getDay() - 1;
   const currentHour = now.getHours();
@@ -246,7 +289,6 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
   const todayStrTR = DAYS[currentDayIndex] || 'Pazartesi';
 
-  // FOTOĞRAF YÜKLEME 
   const handlePhotoUpload = (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -405,7 +447,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
           if(!window.confirm("İhlal bildirdiniz ama KANIT FOTOĞRAFI eklemediniz. Yine de göndermek istiyor musunuz?")) return;
       }
 
-      if(window.confirm(`${String(evalForm.student || '').split(' ')[0]} adlı öğrenci için rapor gönderilecek. Onaylıyor musun?`)) {
+      if(window.confirm(`${String(evalForm.student || '')} adlı öğrenci için rapor gönderilecek. Onaylıyor musun?`)) {
           const updates = {};
           const rId = `rep_${Date.now()}`;
           updates[`game_room_reports/${rId}`] = {
@@ -446,8 +488,8 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
       const s1 = parseInt(scoreForm.s1);
       const s2 = parseInt(scoreForm.s2);
       
-      const p1Name = String(m.p1 || '').split(' ')[0];
-      const p2Name = String(m.p2 || '').split(' ')[0];
+      const p1Name = String(m.p1 || '');
+      const p2Name = String(m.p2 || '');
       
       if(window.confirm(`⚽ ${p1Name} ${s1} - ${s2} ${p2Name}\n\nBu skor kaydedilecek ve geri alınamayacak. Oyunculara M-Coin ödülleri yatırılacak. Onaylıyor musun?`)) {
           const updates = {};
@@ -562,7 +604,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
       }
   };
 
-  const firstName = safeName.split(' ')[0] || 'Öğrenci';
+  const firstName = safeName || 'Öğrenci';
   const xpDetail = getDetailedLevelInfo(appData?.xp?.[safeName]);
   const mCoin = Number(appData?.wallet?.[safeName] || 0);
   const myRp = Number(appData?.season_score?.[safeName] || 0);
@@ -1412,7 +1454,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
                           return (
                              <div key={k} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
-                                {!isMe && <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800, marginBottom: '4px', marginLeft: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>{msg.s.split(' ')[0]} <TitleBadge title={msgTitle && !isSystem ? msgTitle : null} /></div>}
+                                {!isMe && <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800, marginBottom: '4px', marginLeft: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>{msg.s} <TitleBadge title={msgTitle && !isSystem ? msgTitle : null} /></div>}
                                 <div className={isMe ? 'chat-me chat-bubble' : 'chat-other chat-bubble'}>{msg.t}</div>
                                 <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 700, marginTop: '4px', textAlign: isMe ? 'right' : 'left' }}>{msg.date}</div>
                              </div>
@@ -1435,11 +1477,13 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                {Object.keys(appData?.tournaments || {}).length > 0 && (
                    <div style={{ background: 'white', borderRadius: '32px', padding: '25px', border: '1px solid #f1f5f9', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.05)', marginBottom: '25px' }}>
                        <h3 style={{ margin: '0 0 15px 0', color: '#0f172a', fontWeight: 900, fontSize: '20px' }}>🏆 Aktif Turnuvalar (Lig)</h3>
-                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                            {Object.keys(appData.tournaments).reverse().map(tId => {
                                const t = appData.tournaments[tId];
                                const isJoined = (t.participants || []).includes(safeName);
                                const isLocked = t.status === 'active';
+                               const activeTTab = activeTourneyTab[tId] || 'standings';
+                               const isExpanded = expandedTourney === tId;
                                
                                const standingsArray = Object.keys(t.standings || {}).map(p => ({ name: p, ...t.standings[p] })).sort((a,b) => {
                                    if((b.pts || 0) !== (a.pts || 0)) return (b.pts || 0) - (a.pts || 0);
@@ -1447,91 +1491,234 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                                    return (b.gf || 0) - (a.gf || 0);
                                });
 
+                               // Fikstürü haftalara göre grupla ve sırala
+                               const fixturesByWeek = {};
+                               const sortedFixtures = Object.keys(t.fixture || {}).map(k => ({ id: k, ...t.fixture[k] })).sort((a, b) => {
+                                   const weekA = parseInt(String(a.week).replace(/\D/g, '')) || 0;
+                                   const weekB = parseInt(String(b.week).replace(/\D/g, '')) || 0;
+                                   return weekA - weekB;
+                               });
+
+                               sortedFixtures.forEach(m => {
+                                   const weekNum = parseInt(String(m.week).replace(/\D/g, '')) || 1;
+                                   if (!fixturesByWeek[weekNum]) fixturesByWeek[weekNum] = [];
+                                   fixturesByWeek[weekNum].push(m);
+                               });
+
+                               const availableWeeks = Object.keys(fixturesByWeek).map(Number).sort((a,b) => a - b);
+                               const selectedWeek = activeWeekTab[tId] || (availableWeeks.length > 0 ? availableWeeks[0] : 1);
+
                                return (
-                                   <div key={tId} style={{ background: isJoined ? '#f0fdf4' : '#f8fafc', border: `2px solid ${isJoined ? '#10b981' : '#e2e8f0'}`, borderRadius: '24px', padding: '20px' }}>
-                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '15px' }}>
+                                   <div key={tId} style={{ background: isJoined ? '#f0fdf4' : '#f8fafc', border: `2px solid ${isJoined ? '#10b981' : '#e2e8f0'}`, borderRadius: '24px', overflow: 'hidden', transition: 'all 0.3s' }}>
+                                       
+                                       {/* TIKLANABİLİR AKORDİYON BAŞLIĞI */}
+                                       <div onClick={() => setExpandedTourney(isExpanded ? null : tId)} style={{ padding: '20px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                                            <div>
-                                               <div style={{ fontSize: '20px', fontWeight: 900, color: '#0f172a', marginBottom: '4px' }}>{t.name} <span style={{fontSize: '12px', background: isLocked ? '#ecfdf5' : '#fffbeb', color: isLocked ? '#10b981' : '#d97706', padding: '4px 8px', borderRadius: '8px', marginLeft: '8px', verticalAlign: 'middle'}}>{isLocked ? 'Lig Başladı ⚔️' : 'Kayıt Aşamasında'}</span></div>
-                                               <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>{t.game} • Cihaz: {String(t.device).toUpperCase()} • Ödüller: 🥇{t.p1}M | 🥈{t.p2}M | 🥉{t.p3}M</div>
-                                               <div style={{ fontSize: '12px', color: '#3b82f6', fontWeight: 800, marginTop: '6px' }}>Katılımcı: {(t.participants || []).length} Kişi</div>
+                                               <div style={{ fontSize: '20px', fontWeight: 900, color: '#0f172a', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                   <span style={{ fontSize: '14px', background: 'white', padding: '4px 8px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>{isExpanded ? '🔽' : '▶️'}</span>
+                                                   {t.name} 
+                                                   <span style={{fontSize: '12px', background: isLocked ? '#ecfdf5' : '#fffbeb', color: isLocked ? '#10b981' : '#d97706', padding: '4px 8px', borderRadius: '8px', marginLeft: '8px'}}>{isLocked ? 'Lig Başladı ⚔️' : 'Kayıt'}</span>
+                                               </div>
+                                               <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700, marginLeft: '38px' }}>{t.game} • Cihaz: {String(t.device).toUpperCase()} • Katılımcı: {(t.participants || []).length} Kişi</div>
                                            </div>
-                                           <div>
+                                           <div onClick={e => e.stopPropagation()}>
                                                {!isLocked && (
                                                    isJoined ? (
-                                                       <div style={{ background: '#10b981', color: 'white', padding: '10px 16px', borderRadius: '50px', fontWeight: 900, fontSize: '12px' }}>✅ KATILDIN</div>
+                                                       <div style={{ background: '#10b981', color: 'white', padding: '8px 16px', borderRadius: '50px', fontWeight: 900, fontSize: '12px' }}>✅ KATILDIN</div>
                                                    ) : (
-                                                       <button onClick={() => handleJoinTournament(tId, t)} className="profile-btn" style={{ background: '#0f172a', color: 'white', padding: '12px 20px', fontSize: '14px' }}>KATIL ({t.fee} M)</button>
+                                                       <button onClick={() => handleJoinTournament(tId, t)} className="profile-btn" style={{ background: '#0f172a', color: 'white', padding: '10px 16px', fontSize: '13px' }}>KATIL ({t.fee} M)</button>
                                                    )
                                                )}
                                            </div>
                                        </div>
 
-                                       {/* LİG TABLOSU */}
-                                       {isLocked && standingsArray.length > 0 && (
-                                           <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0', marginBottom: '15px' }}>
-                                               <div style={{ background: '#0f172a', color: 'white', padding: '10px 12px', fontSize: '11px', fontWeight: 900, display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 1fr 1fr 1fr 1fr 1.5fr', textAlign: 'center' }}>
-                                                   <div style={{textAlign:'left'}}>Takım (Oyuncu)</div><div>O</div><div>G</div><div>B</div><div>M</div><div>A</div><div>Y</div><div>AV</div><div>P</div>
+                                       {/* AÇILAN DETAY PANELİ */}
+                                       {isExpanded && isLocked && (
+                                           <div className="fade-in" style={{ padding: '0 20px 20px 20px', borderTop: '1px solid #e2e8f0', marginTop: '5px', paddingTop: '20px' }}>
+                                               
+                                               {/* 3'LÜ ANA SEKMELER */}
+                                               <div className="clean-scroll" style={{ display: 'flex', gap: '15px', marginBottom: '20px', borderBottom: '2px solid #e2e8f0', paddingBottom: '10px', overflowX: 'auto' }}>
+                                                   <button onClick={() => setActiveTourneyTab({...activeTourneyTab, [tId]: 'standings'})} style={{ background: 'transparent', border: 'none', fontWeight: 900, fontSize: '14px', color: activeTTab === 'standings' ? '#0f172a' : '#94a3b8', borderBottom: activeTTab === 'standings' ? '3px solid #0f172a' : 'none', padding: '5px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>📊 Puan Durumu</button>
+                                                   <button onClick={() => setActiveTourneyTab({...activeTourneyTab, [tId]: 'fixture'})} style={{ background: 'transparent', border: 'none', fontWeight: 900, fontSize: '14px', color: activeTTab === 'fixture' ? '#0f172a' : '#94a3b8', borderBottom: activeTTab === 'fixture' ? '3px solid #0f172a' : 'none', padding: '5px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>🗓️ Fikstür</button>
+                                                   <button onClick={() => setActiveTourneyTab({...activeTourneyTab, [tId]: 'rules'})} style={{ background: 'transparent', border: 'none', fontWeight: 900, fontSize: '14px', color: activeTTab === 'rules' ? '#3b82f6' : '#94a3b8', borderBottom: activeTTab === 'rules' ? '3px solid #3b82f6' : 'none', padding: '5px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>📜 Kurallar & Ödül</button>
                                                </div>
-                                               {standingsArray.map((st, i) => (
-                                                   <div key={st.name} style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 700, borderBottom: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 1fr 1fr 1fr 1fr 1.5fr', textAlign: 'center', alignItems: 'center', background: i === 0 ? '#fefce8' : (i===1 ? '#f1f5f9' : (i===2 ? '#fff7ed' : 'white')) }}>
-                                                       <div style={{textAlign:'left', fontWeight: 900, color: '#0f172a'}}>{i+1}. {String(st.name || '').split(' ')[0]}</div>
-                                                       <div>{st.p || 0}</div><div>{st.w || 0}</div><div>{st.d || 0}</div><div>{st.l || 0}</div><div>{st.gf || 0}</div><div>{st.ga || 0}</div><div style={{fontWeight:800}}>{(st.gd || 0) > 0 ? `+${st.gd}` : (st.gd || 0)}</div>
-                                                       <div style={{fontWeight: 900, color: '#3b82f6', fontSize:'13px'}}>{st.pts || 0}</div>
-                                                   </div>
-                                               ))}
-                                           </div>
-                                       )}
 
-                                       {/* HAKEM SKOR GİRİŞİ (Sadece Kontrolcü Görebilir) */}
-                                       {isLocked && isController && t.fixture && (
-                                           <div style={{ background: '#fef2f2', border: '2px solid #fca5a5', borderRadius: '16px', padding: '20px', marginTop: '15px' }}>
-                                               <div style={{ fontSize: '14px', fontWeight: 900, color: '#b91c1c', marginBottom: '15px' }}>⚽ HAKEM PANELİ: SKOR GİRİŞİ</div>
-                                               <select value={scoreForm.matchId} onChange={e => setScoreForm({...scoreForm, matchId: e.target.value, tId: tId})} className="elite-input" style={{ marginBottom: '15px', textAlign: 'left' }}>
-                                                   <option value="">Oynanmamış Maç Seçin...</option>
-                                                   {Object.keys(t.fixture || {}).map(mId => {
-                                                       const m = t.fixture[mId];
-                                                       if(!m || m.played) return null; 
-                                                       return <option key={mId} value={mId}>{m.day} {m.time} | {String(m.p1 || '').split(' ')[0]} vs {String(m.p2 || '').split(' ')[0]}</option>
-                                                   })}
-                                               </select>
-                                               {scoreForm.matchId && scoreForm.tId === tId && t.fixture[scoreForm.matchId] && (
-                                                   <div className="fade-in" style={{ display: 'flex', alignItems: 'center', gap: '15px', background: 'white', padding: '15px', borderRadius: '12px' }}>
-                                                       <div style={{ flex: 1, textAlign: 'right', fontWeight: 900, fontSize: '16px' }}>{String(t.fixture[scoreForm.matchId].p1 || '').split(' ')[0]}</div>
-                                                       <input type="number" value={scoreForm.s1} onChange={e => setScoreForm({...scoreForm, s1: e.target.value})} className="elite-input" style={{ width: '60px', textAlign: 'center', fontSize: '20px', padding: '10px' }} />
-                                                       <div style={{ fontWeight: 900, color: '#94a3b8' }}>-</div>
-                                                       <input type="number" value={scoreForm.s2} onChange={e => setScoreForm({...scoreForm, s2: e.target.value})} className="elite-input" style={{ width: '60px', textAlign: 'center', fontSize: '20px', padding: '10px' }} />
-                                                       <div style={{ flex: 1, textAlign: 'left', fontWeight: 900, fontSize: '16px' }}>{String(t.fixture[scoreForm.matchId].p2 || '').split(' ')[0]}</div>
-                                                       
-                                                       <button onClick={submitMatchScore} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '12px 24px', fontSize: '14px' }}>KAYDET</button>
-                                                   </div>
-                                               )}
-                                           </div>
-                                       )}
-
-                                       {/* FİKSTÜR LİSTESİ */}
-                                       {isLocked && t.fixture && (
-                                           <div style={{ marginTop: '15px' }}>
-                                               <div style={{ fontSize: '13px', fontWeight: 900, color: '#64748b', marginBottom: '10px' }}>📅 FİKSTÜR VE MAÇ SONUÇLARI</div>
-                                               <div className="clean-scroll" style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '10px' }}>
-                                                   {Object.keys(t.fixture || {}).map(mId => {
-                                                       const m = t.fixture[mId];
-                                                       if (!m) return null;
-                                                       return (
-                                                           <div key={mId} style={{ minWidth: '220px', background: m.played ? '#f1f5f9' : 'white', border: `1px solid ${m.played ? '#cbd5e1' : '#e2e8f0'}`, borderRadius: '16px', padding: '12px', opacity: m.played ? 0.7 : 1 }}>
-                                                               <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, marginBottom: '6px', textAlign: 'center' }}>Hafta {m.week} • {m.day} {m.time}</div>
-                                                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 900, color: '#0f172a', fontSize: '14px' }}>
-                                                                   <span>{String(m.p1 || '').split(' ')[0]}</span>
-                                                                   {m.played ? (
-                                                                       <span style={{ background: '#0f172a', color: 'white', padding: '2px 8px', borderRadius: '6px' }}>{m.s1} - {m.s2}</span>
-                                                                   ) : (
-                                                                       <span style={{ color: '#cbd5e1' }}>VS</span>
-                                                                   )}
-                                                                   <span>{String(m.p2 || '').split(' ')[0]}</span>
+                                               {/* 1. SEKMЕ: PUAN DURUMU (KÜRSÜLÜ VE FORM GRAFİKLİ) */}
+                                               {activeTTab === 'standings' && standingsArray.length > 0 && (
+                                                   <div className="fade-in">
+                                                       {/* 🏆 ŞEREF KÜRSÜSÜ (PODIUM) */}
+                                                       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: '10px', marginBottom: '30px', padding: '20px 0' }}>
+                                                           {standingsArray[1] && (
+                                                               <div style={{ textAlign: 'center' }}>
+                                                                   <div style={{ fontSize: '30px' }}>🥈</div>
+                                                                   <div style={{ width: '80px', background: '#f1f5f9', border: '2px solid #cbd5e1', borderRadius: '15px 15px 0 0', padding: '10px 5px', height: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                                                       <div style={{ fontSize: '10px', fontWeight: 900, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis' }}>{standingsArray[1].name}</div>
+                                                                   </div>
+                                                               </div>
+                                                           )}
+                                                           <div style={{ textAlign: 'center', transform: 'scale(1.1)', zIndex: 2 }}>
+                                                               <div style={{ fontSize: '40px', filter: 'drop-shadow(0 0 10px rgba(245,158,11,0.5))' }}>👑</div>
+                                                               <div style={{ width: '90px', background: 'linear-gradient(180deg, #fef3c7, #fde68a)', border: '3px solid #f59e0b', borderRadius: '15px 15px 0 0', padding: '15px 5px', height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center', boxShadow: '0 10px 20px rgba(245,158,11,0.2)' }}>
+                                                                   <div style={{ fontSize: '11px', fontWeight: 900, color: '#92400e' }}>{standingsArray[0].name}</div>
+                                                                   <div style={{ fontSize: '9px', color: '#b45309', fontWeight: 800, marginTop: '4px' }}>LİDER</div>
                                                                </div>
                                                            </div>
-                                                       )
-                                                   })}
-                                               </div>
+                                                           {standingsArray[2] && (
+                                                               <div style={{ textAlign: 'center' }}>
+                                                                   <div style={{ fontSize: '30px' }}>🥉</div>
+                                                                   <div style={{ width: '80px', background: '#fff7ed', border: '2px solid #ffedd5', borderRadius: '15px 15px 0 0', padding: '10px 5px', height: '45px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                                                       <div style={{ fontSize: '10px', fontWeight: 900, color: '#9a3412', overflow: 'hidden', textOverflow: 'ellipsis' }}>{standingsArray[2].name}</div>
+                                                                   </div>
+                                                               </div>
+                                                           )}
+                                                       </div>
+
+                                                       {/* PUAN TABLOSU */}
+                                                       <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflowX: 'auto' }} className="clean-scroll">
+                                                           <div style={{ minWidth: '650px' }}>
+                                                               <div style={{ background: '#0f172a', color: '#94a3b8', padding: '12px 15px', fontSize: '11px', fontWeight: 900, display: 'grid', gridTemplateColumns: '3fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr 1fr 1.5fr', textAlign: 'center', letterSpacing: '0.5px' }}>
+                                                                   <div style={{textAlign:'left', color: 'white'}}>TAKIM / OYUNCU</div>
+                                                                   <div>O</div><div>G</div><div>B</div><div>M</div><div>AV</div><div>P</div><div style={{color: '#38bdf8'}}>SON 5 MAÇ</div>
+                                                               </div>
+                                                               
+                                                               {standingsArray.map((st, i) => {
+                                                                   const last5 = sortedFixtures.filter(m => m.played && (m.p1 === st.name || m.p2 === st.name)).slice(-5).map(m => {
+                                                                       const isP1 = m.p1 === st.name;
+                                                                       const myS = isP1 ? m.s1 : m.s2;
+                                                                       const opS = isP1 ? m.s2 : m.s1;
+                                                                       if (myS > opS) return { r: 'G', c: '#10b981' };
+                                                                       if (myS < opS) return { r: 'M', c: '#ef4444' };
+                                                                       return { r: 'B', c: '#f59e0b' };
+                                                                   });
+
+                                                                   let rowBg = 'white'; let rankColor = '#64748b'; let rankBg = '#f1f5f9';
+                                                                   if (i === 0) { rowBg = '#fefce8'; rankColor = '#b45309'; rankBg = '#fde68a'; }
+                                                                   else if (i === 1) { rowBg = '#f8fafc'; rankColor = '#334155'; rankBg = '#e2e8f0'; }
+                                                                   else if (i === 2) { rowBg = '#fff7ed'; rankColor = '#9a3412'; rankBg = '#ffedd5'; }
+
+                                                                   return (
+                                                                       <div key={st.name} style={{ padding: '10px 15px', fontSize: '13px', fontWeight: 700, borderBottom: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '3fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr 1fr 1.5fr', textAlign: 'center', alignItems: 'center', background: rowBg, transition: 'background 0.2s' }}>
+                                                                           <div style={{textAlign:'left', display: 'flex', alignItems: 'center', gap: '10px'}}>
+                                                                               <div style={{ background: rankBg, color: rankColor, width: '24px', height: '24px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '12px' }}>{i+1}</div>
+                                                                               <div style={{ fontWeight: 900, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st.name}</div>
+                                                                           </div>
+                                                                           <div style={{color: '#475569'}}>{st.p || 0}</div>
+                                                                           <div style={{color: '#10b981', fontWeight: 800}}>{st.w || 0}</div>
+                                                                           <div style={{color: '#f59e0b', fontWeight: 800}}>{st.d || 0}</div>
+                                                                           <div style={{color: '#ef4444', fontWeight: 800}}>{st.l || 0}</div>
+                                                                           <div style={{fontWeight: 800, color: (st.gd || 0) > 0 ? '#10b981' : ((st.gd || 0) < 0 ? '#ef4444' : '#64748b')}}>{(st.gd || 0) > 0 ? `+${st.gd}` : (st.gd || 0)}</div>
+                                                                           <div style={{fontWeight: 900, color: '#0f172a', fontSize: '15px', background: '#e0f2fe', padding: '4px 0', borderRadius: '6px'}}>{st.pts || 0}</div>
+                                                                           <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                                                               {last5.length === 0 ? <span style={{fontSize:'10px', color:'#cbd5e1'}}>Maç yok</span> : last5.map((form, idx) => (
+                                                                                   <div key={idx} style={{ width: '18px', height: '18px', borderRadius: '4px', background: form.c, color: 'white', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>{form.r}</div>
+                                                                               ))}
+                                                                           </div>
+                                                                       </div>
+                                                                   )
+                                                               })}
+                                                           </div>
+                                                       </div>
+                                                   </div>
+                                               )}
+
+                                               {/* 2. SEKMЕ: FİKSTÜR (TIKLANABİLİR VE KİLİTLİ HAKEM GİRİŞİ) */}
+                                               {activeTTab === 'fixture' && availableWeeks.length > 0 && (
+                                                   <div className="fade-in">
+                                                       <div className="clean-scroll" style={{ display: 'flex', gap: '8px', marginBottom: '15px', overflowX: 'auto', paddingBottom: '5px' }}>
+                                                           {availableWeeks.map(week => (
+                                                               <button key={week} onClick={() => setActiveWeekTab({...activeWeekTab, [tId]: week})} style={{ background: selectedWeek === week ? '#3b82f6' : '#f1f5f9', color: selectedWeek === week ? 'white' : '#64748b', border: 'none', padding: '8px 16px', borderRadius: '12px', fontWeight: 800, fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                                                   {week}. Hafta
+                                                               </button>
+                                                           ))}
+                                                       </div>
+
+                                                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px' }}>
+                                                           {(fixturesByWeek[selectedWeek] || []).map(m => {
+                                                               const macTarihi = m.date || m.day; 
+                                                               const isPlayable = isMatchPlayable(macTarihi, m.time);
+                                                               const isEditingThis = scoreForm.matchId === m.id && scoreForm.tId === tId;
+                                                               
+                                                               // 🔥 DERBİ KONTROLÜ
+                                                               const isDerby = standingsArray.slice(0, 3).some(s => s.name === m.p1) && standingsArray.slice(0, 3).some(s => s.name === m.p2);
+
+                                                               return (
+                                                                   <div key={m.id} 
+                                                                        onClick={() => { if (isController && !m.played && isPlayable) setScoreForm({ tId: tId, matchId: m.id, s1: '', s2: '' }); }}
+                                                                        style={{ background: isDerby && !m.played ? 'linear-gradient(135deg, #fffbeb, #ffffff)' : (m.played ? '#f1f5f9' : 'white'), border: `2px solid ${isDerby && !m.played ? '#f59e0b' : (isEditingThis ? '#3b82f6' : (m.played ? '#cbd5e1' : '#e2e8f0'))}`, borderRadius: '20px', padding: '16px', opacity: m.played ? 0.8 : 1, boxShadow: isDerby && !m.played ? '0 8px 20px rgba(245,158,11,0.2)' : (isEditingThis ? '0 4px 15px rgba(59,130,246,0.2)' : '0 4px 10px rgba(0,0,0,0.02)'), cursor: (isController && !m.played && isPlayable) ? 'pointer' : 'default', transition: 'all 0.2s', position: 'relative' }}>
+                                                                       
+                                                                       {isDerby && !m.played && <div style={{ position: 'absolute', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: '#f59e0b', color: 'white', padding: '4px 12px', borderRadius: '10px', fontSize: '10px', fontWeight: 900, letterSpacing: '1px', boxShadow: '0 4px 10px rgba(245,158,11,0.3)' }}>🔥 HAFTANIN DERBİSİ</div>}
+
+                                                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', marginTop: isDerby && !m.played ? '10px' : '0' }}>
+                                                                          <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 900, background: '#e2e8f0', padding: '4px 8px', borderRadius: '6px' }}>Hafta {selectedWeek}</span>
+                                                                          <span style={{ fontSize: '12px', color: '#b45309', fontWeight: 800 }}>📅 {macTarihi} • 🕒 {m.time}</span>
+                                                                       </div>
+                                                                       
+                                                                       {!isEditingThis ? (
+                                                                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>
+                                                                               <span style={{ flex: 1, textAlign: 'right' }}>{m.p1}</span>
+                                                                               {m.played ? (
+                                                                                   <span style={{ background: '#0f172a', color: 'white', padding: '4px 12px', borderRadius: '8px', margin: '0 15px', fontSize: '14px', whiteSpace: 'nowrap' }}>{m.s1} - {m.s2}</span>
+                                                                               ) : (
+                                                                                   <span style={{ color: !isPlayable ? '#ef4444' : '#cbd5e1', fontSize: '12px', margin: '0 15px', textAlign: 'center' }}>
+                                                                                       {!isPlayable ? '⏳ BEKLENİYOR' : 'VS'}
+                                                                                   </span>
+                                                                               )}
+                                                                               <span style={{ flex: 1, textAlign: 'left' }}>{m.p2}</span>
+                                                                           </div>
+                                                                       ) : (
+                                                                           <div className="fade-in" onClick={e => e.stopPropagation()} style={{ background: '#f8fafc', padding: '15px', borderRadius: '16px', border: '1px solid #bfdbfe', marginTop: '10px' }}>
+                                                                               <div style={{ fontSize: '12px', fontWeight: 900, color: '#3b82f6', marginBottom: '10px', textAlign: 'center' }}>⚽ HAKEM: SKORU GİRİNİZ</div>
+                                                                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                                                   <div style={{ flex: 1, textAlign: 'right', fontWeight: 900, fontSize: '15px', color: '#0f172a' }}>{m.p1}</div>
+                                                                                   <input type="number" value={scoreForm.s1} onChange={e => setScoreForm({...scoreForm, s1: e.target.value})} className="elite-input" style={{ width: '60px', textAlign: 'center', fontSize: '20px', padding: '10px', background: 'white' }} />
+                                                                                   <div style={{ fontWeight: 900, color: '#cbd5e1' }}>-</div>
+                                                                                   <input type="number" value={scoreForm.s2} onChange={e => setScoreForm({...scoreForm, s2: e.target.value})} className="elite-input" style={{ width: '60px', textAlign: 'center', fontSize: '20px', padding: '10px', background: 'white' }} />
+                                                                                   <div style={{ flex: 1, textAlign: 'left', fontWeight: 900, fontSize: '15px', color: '#0f172a' }}>{m.p2}</div>
+                                                                               </div>
+                                                                               <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                                                                                   <button onClick={() => setScoreForm({ tId: '', matchId: '', s1: '', s2: '' })} className="profile-btn" style={{ flex: 1, background: '#e2e8f0', color: '#64748b', padding: '12px', fontSize: '13px' }}>İPTAL</button>
+                                                                                   <button onClick={submitMatchScore} className="profile-btn badge-glow" style={{ flex: 2, background: '#10b981', color: 'white', padding: '12px', fontSize: '13px' }}>KAYDET</button>
+                                                                               </div>
+                                                                           </div>
+                                                                       )}
+                                                                       
+                                                                       {isController && !m.played && !isEditingThis && (
+                                                                           <div style={{ textAlign: 'center', marginTop: '15px', fontSize: '11px', fontWeight: 800, color: isPlayable ? '#3b82f6' : '#ef4444' }}>
+                                                                               {isPlayable ? '👉 Skoru girmek için maça dokun' : '⏳ Maç saati gelmediği için kilitli'}
+                                                                           </div>
+                                                                       )}
+                                                                   </div>
+                                                               )
+                                                           })}
+                                                       </div>
+                                                   </div>
+                                               )}
+
+                                               {/* 3. SEKMЕ: KURALLAR VE ÖDÜLLER */}
+                                               {activeTTab === 'rules' && (
+                                                   <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                                       <div style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)', color: 'white', padding: '25px', borderRadius: '24px', textAlign: 'center' }}>
+                                                           <div style={{ fontSize: '40px', marginBottom: '10px' }}>🎁</div>
+                                                           <h4 style={{ margin: '0 0 10px 0', fontSize: '20px', fontWeight: 900 }}>1. SEZON BÜYÜK ÖDÜLLERİ</h4>
+                                                           <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
+                                                               <div style={{ background: 'rgba(255,255,255,0.1)', padding: '10px 20px', borderRadius: '15px', border: '1px solid #f59e0b' }}>🥇 <b>{t.p1} M-Coin</b> + "1. Sezon Fatihi" Rozeti</div>
+                                                               <div style={{ background: 'rgba(255,255,255,0.1)', padding: '10px 20px', borderRadius: '15px', border: '1px solid #cbd5e1' }}>🥈 <b>{t.p2} M-Coin</b></div>
+                                                               <div style={{ background: 'rgba(255,255,255,0.1)', padding: '10px 20px', borderRadius: '15px', border: '1px solid #9a3412' }}>🥉 <b>{t.p3} M-Coin</b></div>
+                                                           </div>
+                                                       </div>
+
+                                                       <div style={{ background: '#f8fafc', padding: '25px', borderRadius: '24px', border: '1px solid #e2e8f0' }}>
+                                                           <h4 style={{ color: '#0f172a', fontWeight: 900, marginBottom: '15px' }}>📜 LİG KURALLARI</h4>
+                                                           <ul style={{ paddingLeft: '20px', color: '#475569', fontWeight: 700, fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                               <li>⚡ Maç saati gelmeden skor girilemez, erkencilik yapmayın!</li>
+                                                               <li>🛡️ Maç bitiminde skoru sorumlu öğrenci (hakem) sisteme girer. Hakem maça tıklayarak skoru yazar.</li>
+                                                               <li>🔥 "Haftanın Derbisi" maçlarını kaçırmayın, ilk 3 arasındaki rekabeti izleyin.</li>
+                                                               <li>🏆 Sezon sonunda 1. olan öğrenci, profiline süresiz "1. Sezon Fatihi" rozetini takar.</li>
+                                                               <li>⚠️ Centilmenlik dışı hareket edenler ligden ihraç edilir.</li>
+                                                           </ul>
+                                                       </div>
+                                                   </div>
+                                               )}
                                            </div>
                                        )}
                                    </div>
@@ -1593,7 +1780,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                                <option value="">Bugünün Aktif Randevularından Seçin...</option>
                                {allBookingsForController.map(b => (
                                    <option key={`${b.device}|${b.day}|${b.slotId}`} value={`${b.device}|${b.day}|${b.slotId}|${b.student}|${b.time}`}>
-                                       {b.time} | {b.devName} | Oynayan: {String(b.student || '').split(' ')[0]}
+                                       {b.time} | {b.devName} | Oynayan: {b.student}
                                    </option>
                                ))}
                            </select>
@@ -1725,7 +1912,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
                           <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>3. SEANS SEÇİN ({gameDay})</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-{([...(GAME_SLOTS[gameDevice] || []), ...Object.keys(appData?.custom_game_slots?.[gameDevice]?.[gameDay] || {}).map(k => ({id: k, ...appData.custom_game_slots[gameDevice][gameDay][k]}))].sort((a,b) => a.time.localeCompare(b.time))).map(slot => {
+                             {([...(GAME_SLOTS[gameDevice] || []), ...Object.keys(appData?.custom_game_slots?.[gameDevice]?.[gameDay] || {}).map(k => ({id: k, ...appData.custom_game_slots[gameDevice][gameDay][k]}))].sort((a,b) => a.time.localeCompare(b.time))).map(slot => {
                                  const bookedBy = appData?.game_room_appointments?.[gameDevice]?.[gameDay]?.[slot.id];
                                  const isBooked = !!bookedBy;
                                  const isMyBook = bookedBy === safeName;
@@ -1751,7 +1938,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                                          <div>
                                              <div style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a', marginBottom: '4px', textDecoration: isLockedTime && !isMyBook && !isBooked ? 'line-through' : 'none' }}>🕒 {slot.time}</div>
                                              <div style={{ fontSize: '13px', fontWeight: 800, color: isMyBook ? '#047857' : (isBooked ? '#ef4444' : (isLockedTime ? '#94a3b8' : '#64748b')) }}>
-                                                 {isMyBook ? '✅ SENİN RANDEVUN' : (isLockedTime && !isBooked ? '⏳ SÜRESİ GEÇTİ' : (isBooked ? `🔒 DOLU (${String(bookedBy||'').split(' ')[0]})` : '🟢 BOŞ'))}
+                                                 {isMyBook ? '✅ SENİN RANDEVUN' : (isLockedTime && !isBooked ? '⏳ SÜRESİ GEÇTİ' : (isBooked ? `🔒 DOLU (${String(bookedBy||'')})` : '🟢 BOŞ'))}
                                              </div>
                                          </div>
                                          {!isBooked && !isLockedTime && (
@@ -1871,7 +2058,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                               return (
                                  <div key={m} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                       <span style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>{String(m).split(' ')[0]}</span>
+                                       <span style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>{String(m)}</span>
                                        {myClan?.leader === m && <span style={{ fontSize: '14px' }}>👑</span>}
                                        <TitleBadge title={title} />
                                        {isWarPart && <span style={{ background: '#fef2f2', color: '#ef4444', padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 900 }}>SAVAŞTA</span>}
@@ -1912,7 +2099,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                            </div>
                            <div style={{ textAlign: 'right' }}>
                                <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.9 }}>Lider</div>
-                               <div style={{ fontSize: '16px', fontWeight: 800 }}>{appData.auction.highestBidder ? String(appData.auction.highestBidder).split(' ')[0] : 'Yok'}</div>
+                               <div style={{ fontSize: '16px', fontWeight: 800 }}>{appData.auction.highestBidder ? String(appData.auction.highestBidder) : 'Yok'}</div>
                            </div>
                        </div>
                        <div style={{ display: 'flex', gap: '10px' }}>
