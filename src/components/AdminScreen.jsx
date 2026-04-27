@@ -830,8 +830,8 @@ const renderStudentGrid = (students, type) => {
         {currentModule === 'admin_ban' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
                 <div style={{ background: '#eff6ff', padding: '30px', borderRadius: '24px', border: '1px solid #bfdbfe' }}>
-                    <h3 style={{ margin: '0 0 15px 0', color: '#1e3a8a', fontWeight: 900 }}>🕵️‍♂️ Oyun Odası Sorumlusu Ata</h3>
-                    <p style={{ fontSize: '13px', color: '#1e40af', marginBottom: '20px', fontWeight: 600 }}>Seçilen öğrenci, kendi panelinden oyun odası randevularını kontrol edebilir ve 5 maddelik denetim formunu doldurabilir.</p>
+                    <h3 style={{ margin: '0 0 15px 0', color: '#1e3a8a', fontWeight: 900 }}>🕵️‍♂️ Oyun Odası Sorumlusu & Yönetim</h3>
+                    <p style={{ fontSize: '13px', color: '#1e40af', marginBottom: '20px', fontWeight: 600 }}>Seçilen öğrenci, oyun odası randevularını kontrol edebilir. Ayrıca buradan tüm randevuları manuel olarak sıfırlayabilirsiniz.</p>
                     <div style={{ display: 'flex', gap: '10px' }}>
                         <select value={appData?.settings?.game_room_controller || ''} onChange={e => {
                             db.ref('mavikent_premium/settings/game_room_controller').set(e.target.value);
@@ -840,6 +840,130 @@ const renderStudentGrid = (students, type) => {
                             <option value="">Sorumlu Seçin</option>
                             {roster.map(n => <option key={n} value={n}>{n}</option>)}
                         </select>
+                    </div>
+                    <button onClick={() => {
+                        if(window.confirm('Tüm oyun odası randevuları ŞU AN tamamen temizlenecek. Emin misiniz?')) {
+                            const newAppointments = {};
+                            
+                            // 1. Oynanmamış tüm turnuva maçlarını bul ve yeni tertemiz seans tablosuna yerleştir (2. Hafta, 3. Hafta vb.)
+                            Object.keys(appData?.tournaments || {}).forEach(tId => {
+                                const t = appData.tournaments[tId];
+                                if (t.status === 'active' && t.fixture) {
+                                    Object.values(t.fixture).forEach(m => {
+                                        if (!m.played && m.day && m.slotId) {
+                                            if (!newAppointments[t.device]) newAppointments[t.device] = {};
+                                            if (!newAppointments[t.device][m.day]) newAppointments[t.device][m.day] = {};
+                                            newAppointments[t.device][m.day][m.slotId] = `🏆 TURNUVA: ${t.name}`;
+                                        }
+                                    });
+                                }
+                            });
+
+                            const updates = {};
+                            // 2. game_room_appointments tablosunu sadece turnuva maçları olacak şekilde tamamen ez
+                            updates['game_room_appointments'] = Object.keys(newAppointments).length > 0 ? newAppointments : null;
+
+                            db.ref('mavikent_premium').update(updates).then(() => {
+                                db.ref('mavikent_premium/global_chat').push({ 
+                                    s: 'YÖNETİCİ', 
+                                    t: '📢 Oyun Odası randevuları sıfırlandı! (Sıradaki lig maçları seanslara otomatik kilitlendi)', 
+                                    ts: Date.now(), 
+                                    type: 'admin', 
+                                    date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) 
+                                });
+                                alert('Sistem sıfırlandı! Oynanmamış tüm turnuva maçları (sıradaki haftalar) otomatik olarak oyun odasını kapattı.');
+                            }).catch(err => alert("Hata oluştu: " + err.message));
+                        }
+                    }} className="premium-btn" style={{ width: '100%', background: '#f59e0b', color: 'white', padding: '16px', marginTop: '15px' }}>
+                        🎮 TÜM RANDEVULARI ŞİMDİ SIFIRLA
+                    </button>
+                </div>
+
+                {/* --- YENİ EKLENEN: AKTİF RANDEVULAR VE İADE YÖNETİMİ --- */}
+                <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', gridColumn: '1 / -1' }}>
+                    <h3 style={{ margin: '0 0 15px 0', color: '#0f172a', fontWeight: 900 }}>🔄 Randevu İptal & İade Yönetimi</h3>
+                    <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', fontWeight: 600 }}>Cihaz arızası gibi durumlarda öğrencinin randevusunu iptal edip ücretini (M-Coin) anında iade edebilirsiniz.</p>
+                    <div className="clean-scroll" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                        {(() => {
+                            const appointments = [];
+                            Object.keys(appData?.game_room_appointments || {}).forEach(device => {
+                                Object.keys(appData.game_room_appointments[device] || {}).forEach(day => {
+                                    Object.keys(appData.game_room_appointments[device][day] || {}).forEach(slotId => {
+                                        const student = appData.game_room_appointments[device][day][slotId];
+                                        // Turnuva maçlarını listeye dahil etme, sadece normal randevular görünsün
+                                        if (student && !String(student).includes("TURNUVA")) { 
+                                            appointments.push({ device, day, slotId, student });
+                                        }
+                                    });
+                                });
+                            });
+
+                            if (appointments.length === 0) return <div style={{color:'#64748b', fontSize:'13px', fontWeight:600}}>Şu an alınmış aktif randevu bulunmuyor.</div>;
+
+                            return appointments.map((app, idx) => {
+                                const devObj = GAME_DEVICES.find(d => d.id === app.device);
+                                const devName = devObj ? devObj.name : app.device.toUpperCase();
+                                const slotObj = (GAME_SLOTS[app.device] || []).find(s => s.id === app.slotId);
+                                const timeStr = slotObj ? slotObj.time : 'Özel Seans';
+
+                                return (
+                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '12px 16px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '8px' }}>
+                                        <div>
+                                            <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '15px' }}>{app.student}</div>
+                                            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>{devName} • {app.day} • {timeStr}</div>
+                                        </div>
+                                        <button onClick={() => {
+                                            // Tahmini fiyat belirleme
+                                            let suggestedPrice = 0;
+                                            if (app.device === 'ps5') suggestedPrice = 30;
+                                            else if (app.device === 'ps4') suggestedPrice = 20;
+                                            else if (app.device === 'vr') suggestedPrice = 40;
+                                            else if (app.device === 'pc') suggestedPrice = 30;
+                                            
+                                            // Eğer özel bir seans ise onun fiyatını bul
+                                            const customSlot = appData?.custom_game_slots?.[app.device]?.[app.day]?.[app.slotId];
+                                            if (customSlot && customSlot.price) suggestedPrice = Number(customSlot.price);
+
+                                            // Yöneticiye iade edilecek miktarı sor (Tahmini fiyatı otomatik getirir)
+                                            const overridePrice = prompt(`${app.student} adlı öğrenciye ne kadar M-Coin iade edilecek?`, suggestedPrice);
+                                            if (overridePrice === null) return; 
+                                            const finalPrice = parseInt(overridePrice) || 0;
+
+                                            if (window.confirm(`${app.student} adlı öğrencinin randevusu silinip hesabına ${finalPrice} M-Coin iade edilecek. Onaylıyor musunuz?`)) {
+                                                const updates = {};
+                                                
+                                                // 1. Randevuyu boşa çıkar
+                                                updates[`game_room_appointments/${app.device}/${app.day}/${app.slotId}`] = null;
+                                                
+                                                // 2. Bakiyeyi iade et ve loglara yaz
+                                                if (finalPrice > 0) {
+                                                    updates[`wallet/${app.student}`] = (Number(appData?.wallet?.[app.student]) || 0) + finalPrice;
+                                                    updates[`transactions/${app.student}/txn_refund_${Date.now()}`] = { 
+                                                        desc: `Randevu İadesi (${devName})`, 
+                                                        amt: finalPrice, 
+                                                        date: new Date().toLocaleString('tr-TR') 
+                                                    };
+                                                }
+
+                                                // 3. Değişiklikleri kaydet ve anons geç
+                                                db.ref('mavikent_premium').update(updates).then(() => {
+                                                    db.ref('mavikent_premium/global_chat').push({ 
+                                                        s: 'SİSTEM', 
+                                                        t: `📢 ${String(app.student).split(' ')[0]} adlı öğrencinin ${devName} randevusu teknik sebeplerle iptal edilmiş ve ücreti anında iade edilmiştir.`, 
+                                                        ts: Date.now(), 
+                                                        type: 'system', 
+                                                        date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) 
+                                                    });
+                                                    alert("✅ Randevu başarıyla iptal edildi ve iade sağlandı.");
+                                                });
+                                            }
+                                        }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '8px 16px', fontSize: '12px' }}>
+                                            🔄 İptal & İade
+                                        </button>
+                                    </div>
+                                );
+                            });
+                        })()}
                     </div>
                 </div>
 

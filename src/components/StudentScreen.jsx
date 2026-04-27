@@ -385,19 +385,44 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
   useEffect(() => {
       if (!appData) return;
-      if (liveDayIdx === 5 && currentHour >= 17) {
-          const todayStr = now.toDateString();
+      const dayIndex = new Date().getDay(); // 0:Pazar, 6:Cmt
+      const hour = new Date().getHours();
+
+      if (dayIndex === 6 && hour >= 16) {
+          const todayStr = new Date().toDateString();
           if (appData?.settings?.last_gameroom_reset !== todayStr) {
+              const newAppointments = {};
+              
+              // 1. Oynanmamış tüm turnuva maçlarını bul ve seanslara yerleştir (2. Hafta, 3. Hafta vb.)
+              Object.keys(appData?.tournaments || {}).forEach(tId => {
+                  const t = appData.tournaments[tId];
+                  if (t.status === 'active' && t.fixture) {
+                      Object.values(t.fixture).forEach(m => {
+                          if (!m.played && m.day && m.slotId) {
+                              if (!newAppointments[t.device]) newAppointments[t.device] = {};
+                              if (!newAppointments[t.device][m.day]) newAppointments[t.device][m.day] = {};
+                              newAppointments[t.device][m.day][m.slotId] = `🏆 TURNUVA: ${t.name}`;
+                          }
+                      });
+                  }
+              });
+
               const updates = {};
-              updates['game_room_appointments'] = null; 
               updates['settings/last_gameroom_reset'] = todayStr;
-              db.ref('mavikent_premium').update(updates);
-              if(!appData?.settings?.last_gameroom_reset || appData.settings.last_gameroom_reset !== todayStr) {
-                 db.ref('mavikent_premium/global_chat').push({ s: 'SİSTEM', t: `📢 Oyun Odası randevuları sıfırlandı! Yeni hafta için randevular açılmıştır.`, ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) });
-              }
+              updates['game_room_appointments'] = Object.keys(newAppointments).length > 0 ? newAppointments : null;
+              
+              db.ref('mavikent_premium').update(updates).then(() => {
+                  db.ref('mavikent_premium/global_chat').push({ 
+                      s: 'SİSTEM', 
+                      t: `📢 Oyun Odası randevuları sıfırlandı! (Sıradaki lig maçları seanslara otomatik kilitlendi). Yeni hafta rezervasyonları açılmıştır.`, 
+                      ts: Date.now(), 
+                      type: 'system', 
+                      date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) 
+                  });
+              });
           }
       }
-  }, [appData, liveDayIdx, currentHour, now]);
+  }, [appData]);
 
   useEffect(() => {
     if (!safeName || !appData) return;
