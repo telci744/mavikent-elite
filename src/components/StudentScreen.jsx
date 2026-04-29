@@ -1318,8 +1318,35 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
         <div className="fade-in" key={activeTab}>
           
           {activeTab === 'home' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              <div style={{ background: '#ffffff', borderRadius: '32px', padding: '35px', border: '1px solid #f1f5f9', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            
+            {/* Hijyen ve Temizlik Bildirim Sistemi */}
+            {Object.values(appData?.hygiene_logs || {})
+                .filter(log => log.student === safeName || log.responsibles?.includes(safeName))
+                .sort((a,b) => b.timestamp - a.timestamp)
+                .slice(0, 1)
+                .map((lastLog, index) => (
+                <div key={index} style={{ 
+                    background: lastLog.coinImpact > 0 ? '#ecfdf5' : '#fef2f2', 
+                    border: `2px solid ${lastLog.coinImpact > 0 ? '#10b981' : '#ef4444'}`,
+                    padding: '20px', borderRadius: '24px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)',
+                    animation: 'popIn 0.5s forwards'
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ fontWeight: 900, fontSize: '16px', color: lastLog.coinImpact > 0 ? '#065f46' : '#991b1b' }}>
+                            📢 {lastLog.areaName} Denetimi Sonuçlandı
+                        </span>
+                        <span style={{ fontSize: '24px' }}>{lastLog.coinImpact > 0 ? '✅' : '⚠️'}</span>
+                    </div>
+                    <p style={{ fontSize: '14px', color: '#475569', margin: 0, fontWeight: 700 }}>
+                        {lastLog.coinImpact > 0 
+                            ? `Tebrikler! Dünkü ${lastLog.areaName} denetiminden ${'★'.repeat(lastLog.score)} aldın ve ${lastLog.coinImpact} M-Coin kazandın.` 
+                            : `Dikkat! ${lastLog.areaName} denetiminden maalesef ${'★'.repeat(lastLog.score)} aldığın için hesabından ${Math.abs(lastLog.coinImpact)} M-Coin kesildi.`}
+                    </p>
+                </div>
+            ))}
+
+            <div style={{ background: '#ffffff', borderRadius: '32px', padding: '35px', border: '1px solid #f1f5f9', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '30px' }}>
                    <div style={avatarStyle}>{(myCosmetics.avatar && myCosmetics.avatar.val) ? myCosmetics.avatar.val : '🎓'}</div>
                    <div>

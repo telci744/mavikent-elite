@@ -4,6 +4,98 @@ import { db } from '../firebase';
 const AdminScreen = ({ appData, goBackToRoles }) => {
   const [dashboardView, setDashboardView] = useState('main'); 
   const [currentModule, setCurrentModule] = useState(null); 
+  
+  const [hygieneTab, setHygieneTab] = useState('wc'); // 'wc', 'general', 'history'
+  const [hygieneForm, setHygieneForm] = useState({ areaId: '', score: 5, note: '' });
+  const [generalCleaningList, setGeneralCleaningList] = useState({}); // { studentName: { area: '', score: 5 } }
+  const [isHygieneSaving, setIsHygieneSaving] = useState(false);
+
+  const getCoinImpact = (score) => {
+      if (score === 5) return 30;
+      if (score === 4) return 20;
+      if (score === 3) return 10;
+      if (score === 2) return -30;
+      if (score === 1) return -60;
+      return 0;
+  };
+
+  const saveInspection = async () => {
+      if(!hygieneForm.areaId) return alert("Lütfen bir alan seçin!");
+      setIsHygieneSaving(true);
+      
+      const area = appData.hygiene_areas?.[hygieneForm.areaId];
+      const responsibles = area?.responsibles || [];
+      const coinImpact = getCoinImpact(hygieneForm.score);
+
+      const updates = {};
+      const logId = `hyg_${Date.now()}`;
+      
+      updates[`hygiene_logs/${logId}`] = {
+          ...hygieneForm,
+          areaName: area?.name || 'Bilinmeyen Alan',
+          responsibles: responsibles,
+          timestamp: Date.now(),
+          inspector: "Yönetici",
+          coinImpact,
+          type: 'wc'
+      };
+
+      responsibles.forEach(studentId => {
+          updates[`wallet/${studentId}`] = (Number(appData?.wallet?.[studentId]) || 0) + coinImpact;
+          updates[`transactions/${studentId}/txn_hyg_${Date.now()}_${Math.floor(Math.random()*1000)}`] = { 
+              desc: `${area?.name || 'Alan'} WC Denetimi`, 
+              amt: coinImpact, 
+              date: new Date().toLocaleString('tr-TR') 
+          };
+      });
+
+      try {
+          await db.ref('mavikent_premium').update(updates);
+          alert(`✅ Denetim kaydedildi! ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
+          setHygieneForm({ areaId: '', score: 5, note: '' });
+      } catch (e) { 
+          console.error(e); 
+          alert("Kaydedilirken hata oluştu!"); 
+      } finally { 
+          setIsHygieneSaving(false); 
+      }
+  };
+
+  const autoAssignToilets = async () => {
+      if (!window.confirm("Dikkat! Mevcut tuvalet nöbetçileri silinecek ve sistemdeki tüm öğrenciler 7 tuvalete rastgele (kura ile) dağıtılacaktır. Onaylıyor musunuz?")) return;
+
+      if (!roster || roster.length === 0) return alert("Sistemde kayıtlı öğrenci bulunamadı!");
+
+      // Öğrencileri rastgele karıştır (Adil dağıtım için)
+      let shuffledStudents = [...roster].sort(() => 0.5 - Math.random());
+      
+      const totalWc = 7;
+      const updates = {};
+      
+      // 7 Tuvaleti oluştur
+      for (let i = 1; i <= totalWc; i++) {
+          updates[`hygiene_areas/wc_${i}`] = {
+              name: `${i} Numaralı Tuvalet`,
+              type: 'wc',
+              responsibles: []
+          };
+      }
+
+      // Öğrencileri 1'den 7'ye kadar sırayla tuvaletlere dağıt
+      shuffledStudents.forEach((student, index) => {
+          const wcIndex = (index % totalWc) + 1;
+          updates[`hygiene_areas/wc_${wcIndex}`].responsibles.push(student);
+      });
+
+      try {
+          await db.ref('mavikent_premium').update(updates);
+          alert("✅ Kura çekildi! Öğrenciler 7 tuvalete başarıyla dağıtıldı.");
+      } catch (error) {
+          console.error(error);
+          alert("Bir hata oluştu!");
+      }
+  };
+
   const [selectedSession, setSelectedSession] = useState(''); 
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [modalType, setModalType] = useState(null); 
@@ -760,20 +852,21 @@ const renderStudentGrid = (students, type) => {
         {!currentModule && (
           <div className="premium-grid">
 {dashboardView === 'main' && [
-              { id: 'egitim', icon: '📚', label: 'EĞİTİM KONTROL' }, 
-              { id: 'degerler', icon: '🕌', label: 'DAHİLİ DERS & DEĞERLER' },
-              { id: 'isleyis', icon: '⚙️', label: 'YURT İŞLEYİŞ' },
-              { id: 'turnuva', icon: '🎮', label: 'OYUN ODASI & TURNUVA' },
+              { id: 'egitim', icon: '📚', label: 'EĞİTİM KONTROL' }, 
+              { id: 'degerler', icon: '🕌', label: 'DAHİLİ DERS & DEĞERLER' },
+              { id: 'isleyis', icon: '⚙️', label: 'YURT İŞLEYİŞ' },
+              { id: 'turnuva', icon: '🎮', label: 'OYUN ODASI & TURNUVA' },
               { id: 'yonetim', icon: '👑', label: 'SİSTEM YÖNETİMİ' },
-              { id: 'admin_custom_slot', icon: '⏰', label: 'Özel Seans Ekle' }
-            ].map(mod => (
-              <div key={mod.id} onClick={() => {
-                  if (mod.id === 'admin_custom_slot') setCurrentModule(mod.id);
-                  else setDashboardView(mod.id);
-              }} className="premium-card card-hover">
-                <div className="icon">{mod.icon}</div><div className="label">{mod.label}</div>
-              </div>
-            ))}
+              { id: 'admin_custom_slot', icon: '⏰', label: 'Özel Seans Ekle' },
+              { id: 'hygiene', icon: '✨', label: 'HİJYEN DENETİM', bg: '#f0fdf4' }
+            ].map(mod => (
+              <div key={mod.id} onClick={() => {
+                  if (mod.id === 'admin_custom_slot' || mod.id === 'hygiene') setCurrentModule(mod.id);
+                  else setDashboardView(mod.id);
+              }} className="premium-card card-hover" style={{ background: mod.bg || 'white' }}>
+                <div className="icon">{mod.icon}</div><div className="label">{mod.label}</div>
+              </div>
+            ))}
             
             {dashboardView === 'egitim' && [ 
               { id: 'egitim_ders', icon: '📝', label: 'ÖDEV / KİTAP TAKİBİ' }, 
@@ -1792,7 +1885,193 @@ const renderStudentGrid = (students, type) => {
         )}
 
       </div> 
+{/* --- HİJYEN DENETİM MERKEZİ --- */}
+  {currentModule === 'hygiene' && (
+          <div style={{ padding: '20px', animation: 'fadeIn 0.3s ease-out' }}>
+            {/* ÜST SEKME MENÜSÜ */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', background: 'white', padding: '10px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
+                <button onClick={() => setHygieneTab('wc')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'wc' ? '#0ea5e9' : 'transparent', color: hygieneTab === 'wc' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🚽 WC Paneli</button>
+                <button onClick={() => setHygieneTab('general')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'general' ? '#10b981' : 'transparent', color: hygieneTab === 'general' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🧹 Temizlik Kontrol</button>
+                <button onClick={() => setHygieneTab('history')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'history' ? '#f59e0b' : 'transparent', color: hygieneTab === 'history' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>📜 Geçmiş</button>
+                <button onClick={() => setCurrentModule(null)} style={{ padding: '12px 20px', borderRadius: '20px', border: 'none', background: '#f1f5f9', color: '#475569', fontWeight: 900, cursor: 'pointer' }}>🔙</button>
+            </div>
 
+            {/* 1. PANEL: WC DENETİM */}
+            {hygieneTab === 'wc' && (
+                <div className="fade-in">
+                    <div style={{ background: '#ffffff', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '2px dashed #f1f5f9', paddingBottom: '15px' }}>
+                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🚽 WC Zimmet & Denetim</h3>
+                            <button onClick={autoAssignToilets} className="premium-btn" style={{ background: '#0f172a', color: 'white', padding: '10px 15px', fontSize: '12px' }}>🔄 Kura Çek</button>
+                        </div>
+
+                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TUVALET SEÇİN:</label>
+                        <select 
+                            value={hygieneForm.areaId} 
+                            onChange={(e) => setHygieneForm({...hygieneForm, areaId: e.target.value})}
+                            className="elite-input" style={{ marginBottom: '25px' }}
+                        >
+                            <option value="">-- Denetlenecek WC Seçin --</option>
+                            {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
+                                <option key={key} value={key}>{area.name} ({area.responsibles?.length || 0} Kişi)</option>
+                            ))}
+                        </select>
+
+                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TEMİZLİK DURUMU:</label>
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
+                            {[1, 2, 3, 4, 5].map(star => (
+                                <button 
+                                    key={star}
+                                    onClick={() => setHygieneForm({...hygieneForm, score: star})}
+                                    style={{ 
+                                        flex: 1, padding: '20px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer',
+                                        background: hygieneForm.score >= star ? '#fbbf24' : '#f8fafc',
+                                        color: hygieneForm.score >= star ? '#fff' : '#cbd5e1',
+                                        transition: '0.2s'
+                                    }}
+                                >★</button>
+                            ))}
+                        </div>
+
+                        <button 
+                            onClick={saveInspection} 
+                            disabled={isHygieneSaving}
+                            className="premium-btn" 
+                            style={{ width: '100%', padding: '20px', background: '#0ea5e9', color: 'white', fontWeight: 900, fontSize: '16px' }}
+                        >
+                            {isHygieneSaving ? '⏳ İşleniyor...' : '✅ WC DENETİMİNİ KAYDET'}
+                        </button>
+
+                        {/* ANLIK ZİMMET LİSTESİ ÖNİZLEME */}
+                        <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                            {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
+                                <div key={key} style={{ background: '#f8fafc', padding: '12px', borderRadius: '15px', border: '1px solid #e2e8f0' }}>
+                                    <div style={{ fontWeight: 900, fontSize: '12px', color: '#0ea5e9', marginBottom: '5px' }}>{area.name}</div>
+                                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>{(area.responsibles || []).join(', ')}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 2. PANEL: TEMİZLİK KONTROL (23 ÖĞRENCİ LİSTESİ) */}
+            {hygieneTab === 'general' && (
+                <div className="fade-in">
+                    <div style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
+                        <div style={{ marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
+                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🧹 Günlük Temizlik Kontrolü</h3>
+                            <p style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, marginTop: '5px' }}>Tüm öğrencilerin görev alanlarını girin ve puanlayın.</p>
+                        </div>
+
+                        <div className="clean-scroll" style={{ maxHeight: '500px', overflowY: 'auto', marginBottom: '25px', paddingRight: '5px' }}>
+                            {roster.map(student => (
+                                <div key={student} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', background: generalCleaningList[student]?.score ? '#f8fafc' : 'transparent', borderRadius: '15px', marginBottom: '5px' }}>
+                                    <div style={{ flex: '1 1 120px', fontWeight: 900, fontSize: '14px', color: '#0f172a' }}>{student}</div>
+                                    
+                                    <input 
+                                        placeholder="Temizlik Alanı (Örn: Mescid)" 
+                                        value={generalCleaningList[student]?.area || ''}
+                                        onChange={(e) => setGeneralCleaningList({...generalCleaningList, [student]: {...(generalCleaningList[student] || {}), area: e.target.value}})}
+                                        className="elite-input" style={{ flex: '2 1 180px', padding: '12px 15px', fontSize: '13px', background: 'white' }}
+                                    />
+                                    
+                                    <div style={{ flex: '1 1 180px', display: 'flex', gap: '4px' }}>
+                                        {[1,2,3,4,5].map(s => (
+                                            <button 
+                                                key={s} 
+                                                onClick={() => setGeneralCleaningList({...generalCleaningList, [student]: {...(generalCleaningList[student] || {}), score: s}})} 
+                                                style={{ 
+                                                    flex: 1, padding: '10px 0', border: 'none', borderRadius: '10px', cursor: 'pointer',
+                                                    background: (generalCleaningList[student]?.score || 0) >= s ? '#10b981' : '#f1f5f9', 
+                                                    color: (generalCleaningList[student]?.score || 0) >= s ? 'white' : '#cbd5e1', 
+                                                    fontSize: '14px', transition: '0.2s'
+                                                }}
+                                            >★</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <button 
+                            onClick={async () => {
+                                const entries = Object.entries(generalCleaningList).filter(([name, data]) => data.area && data.score);
+                                if(entries.length === 0) return alert("En az bir öğrenci için alan ve puan girmelisiniz!");
+                                if(!window.confirm(`${entries.length} öğrencinin puanı kaydedilecek. Onaylıyor musun?`)) return;
+                                
+                                setIsHygieneSaving(true);
+                                const updates = {};
+                                const now = Date.now();
+                                
+                                entries.forEach(([student, data]) => {
+                                    const impact = getCoinImpact(data.score);
+                                    const logId = `gen_${student}_${now}`;
+                                    
+                                    updates[`hygiene_logs/${logId}`] = { 
+                                        student, areaName: data.area, score: data.score, 
+                                        timestamp: now, coinImpact: impact, type: 'general' 
+                                    };
+                                    updates[`wallet/${student}`] = (Number(appData?.wallet?.[student]) || 0) + impact;
+                                    updates[`transactions/${student}/txn_${logId}`] = { 
+                                        desc: `${data.area} Temizlik Kontrolü`, 
+                                        amt: impact, 
+                                        date: new Date().toLocaleString('tr-TR') 
+                                    };
+                                });
+
+                                try {
+                                    await db.ref('mavikent_premium').update(updates);
+                                    alert("✅ Günlük temizlik kontrolleri kaydedildi ve M-Coin'ler dağıtıldı!");
+                                    setGeneralCleaningList({}); 
+                                } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
+                            }} 
+                            disabled={isHygieneSaving}
+                            className="premium-btn" 
+                            style={{ width: '100%', padding: '20px', background: '#10b981', color: 'white', fontWeight: 900, fontSize: '16px' }}
+                        >
+                            {isHygieneSaving ? '⏳ Toplu Kayıt Yapılıyor...' : '🚀 TÜMÜNÜ KAYDET VE M-COIN DAĞIT'}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* 3. PANEL: GEÇMİŞ (LOGLAR) */}
+            {hygieneTab === 'history' && (
+                <div className="fade-in">
+                    <div style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0, fontWeight: 900 }}>📜 Son Denetim Kayıtları</h3>
+                            <button onClick={() => { if(window.confirm('Tüm geçmişi silmek istediğine emin misin?')) db.ref('mavikent_premium/hygiene_logs').set(null); }} style={{ background: '#fef2f2', color: '#ef4444', border: 'none', padding: '8px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: 800 }}>Geçmişi Temizle</button>
+                        </div>
+                        
+                        <div className="clean-scroll" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                            {Object.values(appData?.hygiene_logs || {}).length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontWeight: 700 }}>Henüz kayıt bulunmuyor.</div>
+                            ) : (
+                                Object.values(appData.hygiene_logs).sort((a,b) => b.timestamp - a.timestamp).slice(0, 50).map((log, i) => (
+                                    <div key={i} style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <div style={{ fontWeight: 900, fontSize: '14px', color: '#0f172a' }}>{log.areaName}</div>
+                                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, marginTop: '3px' }}>
+                                                {log.student || log.responsibles?.join(', ')} • {new Date(log.timestamp).toLocaleTimeString('tr-TR')}
+                                            </div>
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <div style={{ fontWeight: 900, color: log.coinImpact >= 0 ? '#10b981' : '#ef4444', fontSize: '15px' }}>
+                                                {log.coinImpact >= 0 ? '+' : ''}{log.coinImpact} M
+                                            </div>
+                                            <div style={{ fontSize: '12px', color: '#fbbf24', marginTop: '2px' }}>{'★'.repeat(log.score)}</div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+          </div>
+        )}
       {/* --- EKSİK KALAN MODALLAR (YOKLAMA, EĞİTİM, SINAV VB.) --- */}
       {selectedStudent && modalType === 'isleyis' && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', animation: 'fadeIn 0.3s ease-out' }}>
