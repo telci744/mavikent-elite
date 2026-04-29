@@ -448,7 +448,8 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
           const html5QrCode = new window.Html5Qrcode("reader");
           window.currentScanner = html5QrCode;
           html5QrCode.start(
-              { facingMode: "environment", advanced: [{ focusMode: "continuous" }] },
+              // iPhone'un (iOS Safari) hata vermemesi için advanced (odak) zorlamasını kaldırdık
+              { facingMode: "environment" },
               { 
                   fps: 20, 
                   formatsToSupport: [
@@ -470,7 +471,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
               },
               (errorMessage) => { }
           ).catch((err) => {
-              alert("Kamera başlatılamadı. Cihazınız bu odak ayarını desteklemiyor olabilir.");
+              alert("Kamera başlatılamadı veya izin verilmedi.");
               setScannerActive(false);
           });
       }, 300);
