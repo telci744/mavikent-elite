@@ -263,6 +263,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const [showControlPanel, setShowControlPanel] = useState(false);
   const [evalForm, setEvalForm] = useState({ 
       bookingId: '', student: '', device: '', day: '', slot: '', time: '', 
+      attended: true, // İştirak durumu
       q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' 
   });
   const [scoreForm, setScoreForm] = useState({ tId: '', matchId: '', s1: '', s2: '' });
@@ -466,39 +467,75 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
   const submitEvaluation = () => {
       if(!evalForm.student) return alert("Değerlendirilecek randevuyu seçin!");
-      const hasViolation = !evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5;
       
-      if(hasViolation && !evalForm.photoUrl) {
-          if(!window.confirm("İhlal bildirdiniz ama KANIT FOTOĞRAFI eklemediniz. Yine de göndermek istiyor musunuz?")) return;
+      if(evalForm.attended !== false) {
+          const hasViolation = !evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5;
+          if(hasViolation && !evalForm.photoUrl) {
+              if(!window.confirm("İhlal bildirdiniz ama KANIT FOTOĞRAFI eklemediniz. Yine de göndermek istiyor musunuz?")) return;
+          }
       }
 
-      if(window.confirm(`${String(evalForm.student || '')} adlı öğrenci için rapor gönderilecek. Onaylıyor musun?`)) {
+      if(window.confirm(`${String(evalForm.student || '')} adlı öğrenci için işlem sisteme işlenecek. Onaylıyor musun?`)) {
           const updates = {};
           const rId = `rep_${Date.now()}`;
+          
           updates[`game_room_reports/${rId}`] = {
               controller: safeName, target: evalForm.student, device: evalForm.device, day: evalForm.day, time: evalForm.time,
+              attended: evalForm.attended !== false,
               q1: evalForm.q1, q2: evalForm.q2, q3: evalForm.q3, q4: evalForm.q4, q5: evalForm.q5,
               photoUrl: evalForm.photoUrl || '', date: new Date().toLocaleString('tr-TR')
           };
 
-          if(evalForm.q5) {
-              const expTime = Date.now() + (7 * 24 * 60 * 60 * 1000); 
-              updates[`game_room_bans/${evalForm.student}`] = {
-                  reason: 'Yiyecek/İçecek İhlali (Sorumlu Raporu)', photoUrl: evalForm.photoUrl || '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR')
-              };
-              Object.keys(appData?.game_room_appointments || {}).forEach(d => {
-                  Object.keys(appData.game_room_appointments[d] || {}).forEach(dy => {
-                      Object.keys(appData.game_room_appointments[d][dy] || {}).forEach(sId => {
-                          if (appData.game_room_appointments[d][dy][sId] === evalForm.student) { updates[`game_room_appointments/${d}/${dy}/${sId}`] = null; }
+          if(evalForm.attended !== false) {
+              // 1. ÖĞRENCİ GELDİYSE NORMAL İŞLEYİŞ VE CEZALAR
+              if(evalForm.q5) {
+                  const expTime = Date.now() + (7 * 24 * 60 * 60 * 1000); 
+                  updates[`game_room_bans/${evalForm.student}`] = {
+                      reason: 'Yiyecek/İçecek İhlali (Sorumlu Raporu)', photoUrl: evalForm.photoUrl || '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR')
+                  };
+                  Object.keys(appData?.game_room_appointments || {}).forEach(d => {
+                      Object.keys(appData.game_room_appointments[d] || {}).forEach(dy => {
+                          Object.keys(appData.game_room_appointments[d][dy] || {}).forEach(sId => {
+                              if (appData.game_room_appointments[d][dy][sId] === evalForm.student) { updates[`game_room_appointments/${d}/${dy}/${sId}`] = null; }
+                          });
                       });
                   });
+              }
+          } else {
+              // 2. İŞTİRAK ETMEDİYSE İPTAL VE İADE YAP
+              if (evalForm.device && evalForm.day && evalForm.slot) {
+                  updates[`game_room_appointments/${evalForm.device}/${evalForm.day}/${evalForm.slot}`] = null;
+              }
+              
+              let refundAmt = 0;
+              const slotList = GAME_SLOTS[evalForm.device] || [];
+              const slotObj = slotList.find(s => s.id === evalForm.slot);
+              if (slotObj && slotObj.price) refundAmt = Number(slotObj.price);
+              else if (evalForm.device === 'ps5') refundAmt = 30;
+              else if (evalForm.device === 'ps4') refundAmt = 5;
+              else if (evalForm.device === 'vr') refundAmt = 60;
+              else if (evalForm.device === 'pc') refundAmt = 30;
+
+              const customPrice = appData?.custom_game_slots?.[evalForm.device]?.[evalForm.day]?.[evalForm.slot]?.price;
+              if (customPrice) refundAmt = Number(customPrice);
+
+              updates[`wallet/${evalForm.student}`] = (Number(appData?.wallet?.[evalForm.student]) || 0) + refundAmt;
+              updates[`transactions/${evalForm.student}/txn_auto_ref_${Date.now()}`] = { 
+                  desc: `Oyun Odası İadesi (Gelmeme/Arıza)`, amt: refundAmt, date: new Date().toLocaleString('tr-TR') 
+              };
+
+              db.ref('mavikent_premium/global_chat').push({ 
+                  s: 'SİSTEM', 
+                  t: `📢 ${String(evalForm.student).split(' ')[0]} adlı öğrenci randevusuna iştirak edemediği için ${refundAmt} M-Coin iadesi yapılmıştır.`, 
+                  ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) 
               });
           }
           
-          db.ref('mavikent_premium').update(updates);
-          alert("Rapor başarıyla yöneticiye iletildi!");
-          setEvalForm({ bookingId: '', student: '', device: '', day: '', slot: '', time: '', q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' });
-          setShowControlPanel(false);
+          db.ref('mavikent_premium').update(updates).then(() => {
+              alert(evalForm.attended !== false ? "✅ Rapor başarıyla yöneticiye iletildi!" : "🔄 Randevu iptal edildi ve M-Coin iadesi yapıldı.");
+              setEvalForm({ bookingId: '', student: '', device: '', day: '', slot: '', time: '', attended: true, q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' });
+              setShowControlPanel(false);
+          });
       }
   };
 
@@ -1814,74 +1851,93 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                        {evalForm.student && (
                            <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                                <div style={{ fontSize: '13px', fontWeight: 900, color: '#1e3a8a', marginBottom: '5px' }}>2. AŞAMA: DURUM TESPİTİ (Evet / Hayır)</div>
-                               
-                               <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                                   <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>1. Cihazlar sağlam bir şekilde teslim edildi mi?</div>
-                                   <div style={{ display: 'flex', gap: '8px' }}>
-                                       <button onClick={() => setEvalForm({...evalForm, q1: true})} className="profile-btn" style={{ background: evalForm.q1 ? '#10b981' : '#e2e8f0', color: evalForm.q1 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
-                                       <button onClick={() => setEvalForm({...evalForm, q1: false})} className="profile-btn" style={{ background: !evalForm.q1 ? '#ef4444' : '#e2e8f0', color: !evalForm.q1 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
-                                   </div>
-                               </div>
+                            
+                            {/* İLK SORU: İŞTİRAK DURUMU */}
+                            <div style={{ background: '#eff6ff', padding: '20px', borderRadius: '16px', border: '2px solid #3b82f6', marginBottom: '10px' }}>
+                                <div style={{ fontSize: '15px', fontWeight: 900, color: '#1e40af', marginBottom: '12px' }}>Öğrenci randevusuna iştirak etti mi?</div>
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <button onClick={() => setEvalForm({...evalForm, attended: true})} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: evalForm.attended !== false ? '#10b981' : '#e2e8f0', color: evalForm.attended !== false ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer' }}>EVET (Oynadı)</button>
+                                    <button onClick={() => setEvalForm({...evalForm, attended: false})} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: evalForm.attended === false ? '#ef4444' : '#e2e8f0', color: evalForm.attended === false ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer' }}>HAYIR (İade Yap)</button>
+                                </div>
+                            </div>
 
-                               <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                                   <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>2. Masa sandalye tertip düzenli bırakıldı mı?</div>
-                                   <div style={{ display: 'flex', gap: '8px' }}>
-                                       <button onClick={() => setEvalForm({...evalForm, q2: true})} className="profile-btn" style={{ background: evalForm.q2 ? '#10b981' : '#e2e8f0', color: evalForm.q2 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
-                                       <button onClick={() => setEvalForm({...evalForm, q2: false})} className="profile-btn" style={{ background: !evalForm.q2 ? '#ef4444' : '#e2e8f0', color: !evalForm.q2 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                            {evalForm.attended !== false ? (
+                                <>
+                                   <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                       <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>1. Cihazlar sağlam bir şekilde teslim edildi mi?</div>
+                                       <div style={{ display: 'flex', gap: '8px' }}>
+                                           <button onClick={() => setEvalForm({...evalForm, q1: true})} className="profile-btn" style={{ background: evalForm.q1 ? '#10b981' : '#e2e8f0', color: evalForm.q1 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                           <button onClick={() => setEvalForm({...evalForm, q1: false})} className="profile-btn" style={{ background: !evalForm.q1 ? '#ef4444' : '#e2e8f0', color: !evalForm.q1 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                       </div>
                                    </div>
-                               </div>
 
-                               <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                                   <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>3. Eğer ilk seans ise oyundan çıkılarak teslim edildi mi?</div>
-                                   <div style={{ display: 'flex', gap: '8px' }}>
-                                       <button onClick={() => setEvalForm({...evalForm, q3: true})} className="profile-btn" style={{ background: evalForm.q3 ? '#10b981' : '#e2e8f0', color: evalForm.q3 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
-                                       <button onClick={() => setEvalForm({...evalForm, q3: false})} className="profile-btn" style={{ background: !evalForm.q3 ? '#ef4444' : '#e2e8f0', color: !evalForm.q3 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                   <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                       <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>2. Masa sandalye tertip düzenli bırakıldı mı?</div>
+                                       <div style={{ display: 'flex', gap: '8px' }}>
+                                           <button onClick={() => setEvalForm({...evalForm, q2: true})} className="profile-btn" style={{ background: evalForm.q2 ? '#10b981' : '#e2e8f0', color: evalForm.q2 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                           <button onClick={() => setEvalForm({...evalForm, q2: false})} className="profile-btn" style={{ background: !evalForm.q2 ? '#ef4444' : '#e2e8f0', color: !evalForm.q2 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                       </div>
                                    </div>
-                               </div>
 
-                               <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                                   <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>4. Eğer son seans ise cihaz tamamen kapatılıp teslim edildi mi?</div>
-                                   <div style={{ display: 'flex', gap: '8px' }}>
-                                       <button onClick={() => setEvalForm({...evalForm, q4: true})} className="profile-btn" style={{ background: evalForm.q4 ? '#10b981' : '#e2e8f0', color: evalForm.q4 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
-                                       <button onClick={() => setEvalForm({...evalForm, q4: false})} className="profile-btn" style={{ background: !evalForm.q4 ? '#ef4444' : '#e2e8f0', color: !evalForm.q4 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                   <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                       <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>3. Eğer ilk seans ise oyundan çıkılarak teslim edildi mi?</div>
+                                       <div style={{ display: 'flex', gap: '8px' }}>
+                                           <button onClick={() => setEvalForm({...evalForm, q3: true})} className="profile-btn" style={{ background: evalForm.q3 ? '#10b981' : '#e2e8f0', color: evalForm.q3 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                           <button onClick={() => setEvalForm({...evalForm, q3: false})} className="profile-btn" style={{ background: !evalForm.q3 ? '#ef4444' : '#e2e8f0', color: !evalForm.q3 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                       </div>
                                    </div>
-                               </div>
 
-                               <div style={{ background: evalForm.q5 ? '#fef2f2' : '#f8fafc', padding: '20px', borderRadius: '16px', border: `2px solid ${evalForm.q5 ? '#ef4444' : '#e2e8f0'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
-                                   <div style={{ flex: 1 }}>
-                                       <div style={{ fontSize: '15px', fontWeight: 900, color: evalForm.q5 ? '#b91c1c' : '#334155' }}>5. Oyun odasına yiyecek veya içecek sokuldu mu?</div>
-                                       {evalForm.q5 ? (
-                                           <div className="fade-in" style={{ fontSize: '12px', color: '#ef4444', fontWeight: 900, marginTop: '6px', background: '#fee2e2', padding: '4px 8px', borderRadius: '6px', display: 'inline-block' }}>⛔ DİKKAT: Gönderildiği an öğrenci 1 Hafta Ban yiyecek!</div>
-                                       ) : (
-                                           <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>Kesinlikle yasaktır, tespiti halinde ağır cezası vardır.</div>
-                                       )}
+                                   <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                       <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>4. Eğer son seans ise cihaz tamamen kapatılıp teslim edildi mi?</div>
+                                       <div style={{ display: 'flex', gap: '8px' }}>
+                                           <button onClick={() => setEvalForm({...evalForm, q4: true})} className="profile-btn" style={{ background: evalForm.q4 ? '#10b981' : '#e2e8f0', color: evalForm.q4 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                           <button onClick={() => setEvalForm({...evalForm, q4: false})} className="profile-btn" style={{ background: !evalForm.q4 ? '#ef4444' : '#e2e8f0', color: !evalForm.q4 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                       </div>
                                    </div>
-                                   <div style={{ display: 'flex', gap: '8px' }}>
-                                       <button onClick={() => setEvalForm({...evalForm, q5: true})} className="profile-btn" style={{ background: evalForm.q5 ? '#ef4444' : '#e2e8f0', color: evalForm.q5 ? 'white' : '#64748b', padding: '10px 16px' }}>Evet (İhlal Var)</button>
-                                       <button onClick={() => setEvalForm({...evalForm, q5: false})} className="profile-btn" style={{ background: !evalForm.q5 ? '#10b981' : '#e2e8f0', color: !evalForm.q5 ? 'white' : '#64748b', padding: '10px 16px' }}>Hayır (Temiz)</button>
-                                   </div>
-                               </div>
 
-                               {(!evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5) && (
-                                   <div className="fade-in" style={{ marginTop: '15px', background: '#fef2f2', border: '2px dashed #fca5a5', padding: '20px', borderRadius: '16px', textAlign: 'center' }}>
-                                       <div style={{ fontSize: '14px', fontWeight: 900, color: '#ef4444', marginBottom: '10px' }}>📸 İHLAL TESPİT EDİLDİ - KANIT FOTOĞRAFI YÜKLE</div>
-                                       
-                                       <input type="file" id="proofPhotoInput" accept="image/*" capture="environment" onChange={handlePhotoUpload} style={{ display: 'none' }} />
-                                       
-                                       {!evalForm.photoUrl ? (
-                                           <button onClick={() => document.getElementById('proofPhotoInput').click()} className="profile-btn" style={{ background: '#ef4444', color: 'white', padding: '16px 20px', fontSize: '14px', width: '100%', boxShadow: '0 4px 10px rgba(239,68,68,0.3)' }}>
-                                               📷 Kamerayı Aç veya Galeriden Seç
-                                           </button>
-                                       ) : (
-                                           <div className="fade-in">
-                                               <img src={evalForm.photoUrl} alt="Kanıt" style={{ width: '100%', maxHeight: '250px', objectFit: 'cover', borderRadius: '12px', border: '2px solid #ef4444', marginBottom: '15px' }} />
-                                               <button onClick={() => setEvalForm({...evalForm, photoUrl: ''})} className="profile-btn" style={{ background: 'white', color: '#ef4444', border: '1px solid #fca5a5 !important', padding: '10px 16px', fontSize: '13px' }}>🗑️ Fotoğrafı Sil / Yeniden Yükle</button>
-                                           </div>
-                                       )}
+                                   <div style={{ background: evalForm.q5 ? '#fef2f2' : '#f8fafc', padding: '20px', borderRadius: '16px', border: `2px solid ${evalForm.q5 ? '#ef4444' : '#e2e8f0'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
+                                       <div style={{ flex: 1 }}>
+                                           <div style={{ fontSize: '15px', fontWeight: 900, color: evalForm.q5 ? '#b91c1c' : '#334155' }}>5. Oyun odasına yiyecek veya içecek sokuldu mu?</div>
+                                           {evalForm.q5 ? (
+                                               <div className="fade-in" style={{ fontSize: '12px', color: '#ef4444', fontWeight: 900, marginTop: '6px', background: '#fee2e2', padding: '4px 8px', borderRadius: '6px', display: 'inline-block' }}>⛔ DİKKAT: Gönderildiği an öğrenci 1 Hafta Ban yiyecek!</div>
+                                           ) : (
+                                               <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>Kesinlikle yasaktır, tespiti halinde ağır cezası vardır.</div>
+                                           )}
+                                       </div>
+                                       <div style={{ display: 'flex', gap: '8px' }}>
+                                           <button onClick={() => setEvalForm({...evalForm, q5: true})} className="profile-btn" style={{ background: evalForm.q5 ? '#ef4444' : '#e2e8f0', color: evalForm.q5 ? 'white' : '#64748b', padding: '10px 16px' }}>Evet (İhlal Var)</button>
+                                           <button onClick={() => setEvalForm({...evalForm, q5: false})} className="profile-btn" style={{ background: !evalForm.q5 ? '#10b981' : '#e2e8f0', color: !evalForm.q5 ? 'white' : '#64748b', padding: '10px 16px' }}>Hayır (Temiz)</button>
+                                       </div>
                                    </div>
-                               )}
 
-                               <button onClick={submitEvaluation} className="premium-btn badge-glow" style={{ background: '#0f172a', color: 'white', padding: '20px', width: '100%', marginTop: '15px', fontSize: '16px' }}>RAPORU YÖNETİCİYE GÖNDER</button>
+                                   {(!evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5) && (
+                                       <div className="fade-in" style={{ marginTop: '15px', background: '#fef2f2', border: '2px dashed #fca5a5', padding: '20px', borderRadius: '16px', textAlign: 'center' }}>
+                                           <div style={{ fontSize: '14px', fontWeight: 900, color: '#ef4444', marginBottom: '10px' }}>📸 İHLAL TESPİT EDİLDİ - KANIT FOTOĞRAFI YÜKLE</div>
+                                           
+                                           <input type="file" id="proofPhotoInput" accept="image/*" capture="environment" onChange={handlePhotoUpload} style={{ display: 'none' }} />
+                                           
+                                           {!evalForm.photoUrl ? (
+                                               <button onClick={() => document.getElementById('proofPhotoInput').click()} className="profile-btn" style={{ background: '#ef4444', color: 'white', padding: '16px 20px', fontSize: '14px', width: '100%', boxShadow: '0 4px 10px rgba(239,68,68,0.3)' }}>
+                                                   📷 Kamerayı Aç veya Galeriden Seç
+                                               </button>
+                                           ) : (
+                                               <div className="fade-in">
+                                                   <img src={evalForm.photoUrl} alt="Kanıt" style={{ width: '100%', maxHeight: '250px', objectFit: 'cover', borderRadius: '12px', border: '2px solid #ef4444', marginBottom: '15px' }} />
+                                                   <button onClick={() => setEvalForm({...evalForm, photoUrl: ''})} className="profile-btn" style={{ background: 'white', color: '#ef4444', border: '1px solid #fca5a5 !important', padding: '10px 16px', fontSize: '13px' }}>🗑️ Fotoğrafı Sil / Yeniden Yükle</button>
+                                               </div>
+                                           )}
+                                       </div>
+                                   )}
+                                </>
+                            ) : (
+                                <div className="fade-in" style={{ padding: '20px', background: '#fff1f2', borderRadius: '16px', border: '1px solid #fda4af', color: '#be123c', fontSize: '13px', fontWeight: 700, textAlign: 'center' }}>
+                                    ⚠️ "HAYIR" seçildiği için diğer sorular devre dışı bırakıldı. Onayladığınızda öğrenciye otomatik M-Coin iadesi yapılacak ve bu seans iptal edilecektir.
+                                </div>
+                            )}
+
+                            <button onClick={submitEvaluation} className="premium-btn badge-glow" style={{ background: '#0f172a', color: 'white', padding: '20px', width: '100%', marginTop: '15px', fontSize: '16px' }}>
+                                {evalForm.attended !== false ? 'RAPORU YÖNETİCİYE GÖNDER' : 'İADE YAP VE İPTAL ET'}
+                            </button>
                            </div>
                        )}
                    </div>

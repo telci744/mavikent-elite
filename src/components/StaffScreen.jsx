@@ -12,12 +12,20 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   const [examData, setExamData] = useState({}); 
   const [valuesTopic, setValuesTopic] = useState({ subject: '', topic: '' });
 
+  // KANTİN STATELERİ
+  const [canteenView, setCanteenView] = useState('satis');
+  const [cart, setCart] = useState([]);
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [depositAmount, setDepositAmount] = useState('');
+  const [canteenStudent, setCanteenStudent] = useState('');
+  const [scannerActive, setScannerActive] = useState(false);
+  const [newProduct, setNewProduct] = useState({ barcode: '', name: '', price: '', stock: '' });
   // OYUN ODASI KONTROL İÇİN YENİ EKLENEN STATELER
   const [evalForm, setEvalForm] = useState({ 
       bookingId: '', student: '', device: '', day: '', slot: '', time: '', 
+      attended: true, // Yeni eklendi
       q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' 
   });
-
   const csvDenemeRef = useRef(null);
   const csvYaziliRef = useRef(null);
 
@@ -99,41 +107,70 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
 
   const submitEvaluation = () => {
       if(!evalForm.student) return alert("Değerlendirilecek randevuyu seçin!");
-      const hasViolation = !evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5;
       
-      if(hasViolation && !evalForm.photoUrl) {
-          if(!window.confirm("İhlal bildirdiniz ama KANIT FOTOĞRAFI eklemediniz. Yine de kaydetmek istiyor musunuz?")) return;
+      if(evalForm.attended) {
+          const hasViolation = !evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5;
+          if(hasViolation && !evalForm.photoUrl) {
+              if(!window.confirm("İhlal bildirdiniz ama KANIT FOTOĞRAFI eklemediniz. Yine de kaydetmek istiyor musunuz?")) return;
+          }
       }
 
-      if(window.confirm(`${String(evalForm.student || '').split(',')[0]} (ve diğer sorumlular) için rapor sisteme işlenecek. Onaylıyor musun?`)) {
+      if(window.confirm(`${String(evalForm.student || '').split(',')[0]} için işlem sisteme işlenecek. Onaylıyor musun?`)) {
           const updates = {};
           const rId = `rep_${Date.now()}`;
+          
           updates[`game_room_reports/${rId}`] = {
-              controller: 'PERSONEL', // Personel tarafından yapıldığını belirtiyoruz
+              controller: 'PERSONEL',
               target: evalForm.student, device: evalForm.device, day: evalForm.day, time: evalForm.time,
+              attended: evalForm.attended,
               q1: evalForm.q1, q2: evalForm.q2, q3: evalForm.q3, q4: evalForm.q4, q5: evalForm.q5,
               photoUrl: evalForm.photoUrl || '', date: new Date().toLocaleString('tr-TR')
           };
 
-          if(evalForm.q5) {
-              const expTime = Date.now() + (7 * 24 * 60 * 60 * 1000); 
-              const studentArray = String(evalForm.student || '').split(', ');
-              studentArray.forEach(stu => {
-                  if(stu.trim()) {
-                      updates[`game_room_bans/${stu.trim()}`] = {
-                          reason: 'Yiyecek/İçecek İhlali (Personel Tespiti)', photoUrl: evalForm.photoUrl || '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR')
-                      };
+          if(evalForm.attended) {
+              if(evalForm.q5) {
+                  const expTime = Date.now() + (7 * 24 * 60 * 60 * 1000); 
+                  const studentArray = String(evalForm.student || '').split(', ');
+                  studentArray.forEach(stu => {
+                      if(stu.trim()) {
+                          updates[`game_room_bans/${stu.trim()}`] = {
+                              reason: 'Yiyecek/İçecek İhlali (Personel Tespiti)', photoUrl: evalForm.photoUrl || '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR')
+                          };
+                      }
+                  });
+                  if (evalForm.device && evalForm.day && evalForm.slotId) {
+                      updates[`game_room_appointments/${evalForm.device}/${evalForm.day}/${evalForm.slotId}`] = null;
                   }
-              });
-              
-              if (evalForm.device && evalForm.day && evalForm.slot) {
-                  updates[`game_room_appointments/${evalForm.device}/${evalForm.day}/${evalForm.slot}`] = null;
               }
+          } else {
+              // İŞTİRAK ETMEDİ İSE İPTAL VE İADE YAP
+              updates[`game_room_appointments/${evalForm.device}/${evalForm.day}/${evalForm.slotId}`] = null;
+              
+              let refundAmt = 0;
+              if (evalForm.device === 'ps5') refundAmt = 30;
+              else if (evalForm.device === 'ps4') refundAmt = 20;
+              else if (evalForm.device === 'vr') refundAmt = 40;
+              else if (evalForm.device === 'pc') refundAmt = 30;
+
+              const customPrice = appData?.custom_game_slots?.[evalForm.device]?.[evalForm.day]?.[evalForm.slotId]?.price;
+              if (customPrice) refundAmt = Number(customPrice);
+
+              updates[`wallet/${evalForm.student}`] = (Number(appData?.wallet?.[evalForm.student]) || 0) + refundAmt;
+              updates[`transactions/${evalForm.student}/txn_auto_ref_${Date.now()}`] = { 
+                  desc: `Oyun Odası İadesi (Denetim Kaynaklı)`, amt: refundAmt, date: new Date().toLocaleString('tr-TR') 
+              };
+
+              db.ref('mavikent_premium/global_chat').push({ 
+                  s: 'SİSTEM', 
+                  t: `📢 ${String(evalForm.student).split(' ')[0]} adlı öğrenci randevusuna iştirak edemediği için ${refundAmt} M-Coin iadesi yapılmıştır.`, 
+                  ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) 
+              });
           }
           
-          db.ref('mavikent_premium').update(updates);
-          alert("Denetim raporu başarıyla kaydedildi!");
-          setEvalForm({ bookingId: '', student: '', device: '', day: '', slot: '', time: '', q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' });
+          db.ref('mavikent_premium').update(updates).then(() => {
+              alert(evalForm.attended ? "✅ Denetim raporu kaydedildi!" : "🔄 Randevu iptal edildi ve M-Coin iadesi yapıldı.");
+              setEvalForm({ bookingId: '', student: '', device: '', day: '', slotId: '', time: '', attended: true, q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' });
+          });
       }
   };
 
@@ -398,7 +435,27 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
       try { const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff', useCORS: true }); const link = document.createElement('a'); link.download = `Mavikent_${className}_${type}.jpg`; link.href = canvas.toDataURL('image/jpeg', 0.9); link.click(); } catch(e) { console.error(e); } finally { document.body.removeChild(container); document.getElementById(btnId).innerText = originalText; }
   };
 
-  const renderStudentGrid = (students, type) => (
+  const startBarcodeScanner = async (onScanSuccess) => {
+      if (!window.Html5QrcodeScanner) {
+          await new Promise(resolve => {
+              const script = document.createElement('script');
+              script.src = 'https://unpkg.com/html5-qrcode';
+              script.onload = resolve;
+              document.head.appendChild(script);
+          });
+      }
+      setScannerActive(true);
+      setTimeout(() => {
+          window.currentScanner = new window.Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
+          window.currentScanner.render((decodedText) => {
+              window.currentScanner.clear();
+              setScannerActive(false);
+              onScanSuccess(decodedText);
+          }, () => {});
+      }, 200);
+  };
+
+  const renderStudentGrid = (students, type) => (
     <div className="grid-mobile-2">
       {students.map(name => {
         let bgColor = '#ffffff'; let subText = '';
@@ -494,12 +551,14 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
               { id: 'egitim', icon: '📚', label: 'EĞİTİM KONTROL' }, 
               { id: 'degerler', icon: '🕌', label: 'DAHİLİ DERS & DEĞERLER' },
               { id: 'isleyis', icon: '⚙️', label: 'YURT İŞLEYİŞ' },
-              { id: 'staff_gameroom', icon: '🎮', label: 'OYUN ODASI DENETİM', bg: '#fef2f2' }
-            ].map(mod => (
+              { id: 'staff_gameroom', icon: '🎮', label: 'OYUN ODASI DENETİM', bg: '#fef2f2' },
+              { id: 'kantin', icon: '🏪', label: 'KANTİN YÖNETİMİ', bg: '#f0fdf4' }
+            ].map(mod => (
               <div key={mod.id} onClick={() => {
-                  if (mod.id === 'staff_gameroom') setCurrentModule('staff_gameroom');
-                  else setDashboardView(mod.id);
-              }} className="premium-card card-hover" style={{ background: mod.bg || 'white' }}>
+                  if (mod.id === 'staff_gameroom') setCurrentModule('staff_gameroom');
+                  else if (mod.id === 'kantin') setCurrentModule('kantin');
+                  else setDashboardView(mod.id);
+              }} className="premium-card card-hover" style={{ background: mod.bg || 'white' }}>
                 <div className="icon">{mod.icon}</div><div className="label">{mod.label}</div>
               </div>
             ))}
@@ -575,118 +634,355 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                     {evalForm.student && (
                         <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                             <div style={{ fontSize: '13px', fontWeight: 900, color: '#1e3a8a', marginBottom: '5px' }}>2. AŞAMA: DURUM TESPİTİ (Evet / Hayır)</div>
-                            
-                            <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>1. Cihazlar sağlam bir şekilde teslim edildi mi?</div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button onClick={() => setEvalForm({...evalForm, q1: true})} className="premium-btn" style={{ background: evalForm.q1 ? '#10b981' : '#e2e8f0', color: evalForm.q1 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
-                                    <button onClick={() => setEvalForm({...evalForm, q1: false})} className="premium-btn" style={{ background: !evalForm.q1 ? '#ef4444' : '#e2e8f0', color: !evalForm.q1 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+
+                            {/* İLK SORU: İŞTİRAK DURUMU */}
+                            <div style={{ background: '#eff6ff', padding: '20px', borderRadius: '16px', border: '2px solid #3b82f6', marginBottom: '10px' }}>
+                                <div style={{ fontSize: '15px', fontWeight: 900, color: '#1e40af', marginBottom: '12px' }}>Öğrenci randevusuna iştirak etti mi?</div>
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <button onClick={() => setEvalForm({...evalForm, attended: true})} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: evalForm.attended ? '#10b981' : '#e2e8f0', color: evalForm.attended ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer' }}>EVET (Oynadı)</button>
+                                    <button onClick={() => setEvalForm({...evalForm, attended: false})} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: !evalForm.attended ? '#ef4444' : '#e2e8f0', color: !evalForm.attended ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer' }}>HAYIR (İade Yap)</button>
                                 </div>
                             </div>
 
-                            <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>2. Masa sandalye tertip düzenli bırakıldı mı?</div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button onClick={() => setEvalForm({...evalForm, q2: true})} className="premium-btn" style={{ background: evalForm.q2 ? '#10b981' : '#e2e8f0', color: evalForm.q2 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
-                                    <button onClick={() => setEvalForm({...evalForm, q2: false})} className="premium-btn" style={{ background: !evalForm.q2 ? '#ef4444' : '#e2e8f0', color: !evalForm.q2 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
-                                </div>
-                            </div>
+                            {evalForm.attended ? (
+                                <>
+                                    <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>1. Cihazlar sağlam bir şekilde teslim edildi mi?</div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => setEvalForm({...evalForm, q1: true})} className="premium-btn" style={{ background: evalForm.q1 ? '#10b981' : '#e2e8f0', color: evalForm.q1 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                            <button onClick={() => setEvalForm({...evalForm, q1: false})} className="premium-btn" style={{ background: !evalForm.q1 ? '#ef4444' : '#e2e8f0', color: !evalForm.q1 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                        </div>
+                                    </div>
 
-                            <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>3. Eğer ilk seans ise oyundan çıkılarak teslim edildi mi?</div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button onClick={() => setEvalForm({...evalForm, q3: true})} className="premium-btn" style={{ background: evalForm.q3 ? '#10b981' : '#e2e8f0', color: evalForm.q3 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
-                                    <button onClick={() => setEvalForm({...evalForm, q3: false})} className="premium-btn" style={{ background: !evalForm.q3 ? '#ef4444' : '#e2e8f0', color: !evalForm.q3 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
-                                </div>
-                            </div>
+                                    <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>2. Masa sandalye tertip düzenli bırakıldı mı?</div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => setEvalForm({...evalForm, q2: true})} className="premium-btn" style={{ background: evalForm.q2 ? '#10b981' : '#e2e8f0', color: evalForm.q2 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                            <button onClick={() => setEvalForm({...evalForm, q2: false})} className="premium-btn" style={{ background: !evalForm.q2 ? '#ef4444' : '#e2e8f0', color: !evalForm.q2 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                        </div>
+                                    </div>
 
-                            <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>4. Eğer son seans ise cihaz tamamen kapatılıp teslim edildi mi?</div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button onClick={() => setEvalForm({...evalForm, q4: true})} className="premium-btn" style={{ background: evalForm.q4 ? '#10b981' : '#e2e8f0', color: evalForm.q4 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
-                                    <button onClick={() => setEvalForm({...evalForm, q4: false})} className="premium-btn" style={{ background: !evalForm.q4 ? '#ef4444' : '#e2e8f0', color: !evalForm.q4 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
-                                </div>
-                            </div>
+                                    <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>3. Eğer ilk seans ise oyundan çıkılarak teslim edildi mi?</div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => setEvalForm({...evalForm, q3: true})} className="premium-btn" style={{ background: evalForm.q3 ? '#10b981' : '#e2e8f0', color: evalForm.q3 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                            <button onClick={() => setEvalForm({...evalForm, q3: false})} className="premium-btn" style={{ background: !evalForm.q3 ? '#ef4444' : '#e2e8f0', color: !evalForm.q3 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                        </div>
+                                    </div>
 
-                            <div style={{ background: evalForm.q5 ? '#fef2f2' : '#f8fafc', padding: '20px', borderRadius: '16px', border: `2px solid ${evalForm.q5 ? '#ef4444' : '#e2e8f0'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ fontSize: '15px', fontWeight: 900, color: evalForm.q5 ? '#b91c1c' : '#334155' }}>5. Oyun odasına yiyecek veya içecek sokuldu mu?</div>
-                                    {evalForm.q5 ? (
-                                        <div className="fade-in" style={{ fontSize: '12px', color: '#ef4444', fontWeight: 900, marginTop: '6px', background: '#fee2e2', padding: '4px 8px', borderRadius: '6px', display: 'inline-block' }}>⛔ DİKKAT: Gönderildiği an öğrenci 1 Hafta Ban yiyecek!</div>
-                                    ) : (
-                                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>Kesinlikle yasaktır, tespiti halinde ağır cezası vardır.</div>
-                                    )}
-                                </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button onClick={() => setEvalForm({...evalForm, q5: true})} className="premium-btn" style={{ background: evalForm.q5 ? '#ef4444' : '#e2e8f0', color: evalForm.q5 ? 'white' : '#64748b', padding: '10px 16px' }}>Evet (İhlal Var)</button>
-                                    <button onClick={() => setEvalForm({...evalForm, q5: false})} className="premium-btn" style={{ background: !evalForm.q5 ? '#10b981' : '#e2e8f0', color: !evalForm.q5 ? 'white' : '#64748b', padding: '10px 16px' }}>Hayır (Temiz)</button>
-                                </div>
-                            </div>
+                                    <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', flex: 1 }}>4. Eğer son seans ise cihaz tamamen kapatılıp teslim edildi mi?</div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => setEvalForm({...evalForm, q4: true})} className="premium-btn" style={{ background: evalForm.q4 ? '#10b981' : '#e2e8f0', color: evalForm.q4 ? 'white' : '#64748b', padding: '8px 16px' }}>Evet</button>
+                                            <button onClick={() => setEvalForm({...evalForm, q4: false})} className="premium-btn" style={{ background: !evalForm.q4 ? '#ef4444' : '#e2e8f0', color: !evalForm.q4 ? 'white' : '#64748b', padding: '8px 16px' }}>Hayır</button>
+                                        </div>
+                                    </div>
 
-                            {(!evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5) && (
-                                <div className="fade-in" style={{ marginTop: '15px', background: '#fef2f2', border: '2px dashed #fca5a5', padding: '20px', borderRadius: '16px', textAlign: 'center' }}>
-                                    <div style={{ fontSize: '14px', fontWeight: 900, color: '#ef4444', marginBottom: '10px' }}>📸 İHLAL TESPİT EDİLDİ - KANIT FOTOĞRAFI YÜKLE</div>
-                                    
-                                    <input type="file" id="proofPhotoInputStaff" accept="image/*" capture="environment" onChange={handlePhotoUpload} style={{ display: 'none' }} />
-                                    
-                                    {!evalForm.photoUrl ? (
-                                        <button onClick={() => document.getElementById('proofPhotoInputStaff').click()} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '16px 20px', fontSize: '14px', width: '100%', boxShadow: '0 4px 10px rgba(239,68,68,0.3)' }}>
-                                            📷 Kamerayı Aç veya Galeriden Seç
-                                        </button>
-                                    ) : (
-                                        <div className="fade-in">
-                                            <img src={evalForm.photoUrl} alt="Kanıt" style={{ width: '100%', maxHeight: '250px', objectFit: 'cover', borderRadius: '12px', border: '2px solid #ef4444', marginBottom: '15px' }} />
-                                            <button onClick={() => setEvalForm({...evalForm, photoUrl: ''})} className="premium-btn" style={{ background: 'white', color: '#ef4444', border: '1px solid #fca5a5 !important', padding: '10px 16px', fontSize: '13px' }}>🗑️ Fotoğrafı Sil / Yeniden Yükle</button>
+                                    <div style={{ background: evalForm.q5 ? '#fef2f2' : '#f8fafc', padding: '20px', borderRadius: '16px', border: `2px solid ${evalForm.q5 ? '#ef4444' : '#e2e8f0'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontSize: '15px', fontWeight: 900, color: evalForm.q5 ? '#b91c1c' : '#334155' }}>5. Oyun odasına yiyecek veya içecek sokuldu mu?</div>
+                                            {evalForm.q5 ? (
+                                                <div className="fade-in" style={{ fontSize: '12px', color: '#ef4444', fontWeight: 900, marginTop: '6px', background: '#fee2e2', padding: '4px 8px', borderRadius: '6px', display: 'inline-block' }}>⛔ DİKKAT: Gönderildiği an öğrenci 1 Hafta Ban yiyecek!</div>
+                                            ) : (
+                                                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>Kesinlikle yasaktır, tespiti halinde ağır cezası vardır.</div>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => setEvalForm({...evalForm, q5: true})} className="premium-btn" style={{ background: evalForm.q5 ? '#ef4444' : '#e2e8f0', color: evalForm.q5 ? 'white' : '#64748b', padding: '10px 16px' }}>Evet (İhlal Var)</button>
+                                            <button onClick={() => setEvalForm({...evalForm, q5: false})} className="premium-btn" style={{ background: !evalForm.q5 ? '#10b981' : '#e2e8f0', color: !evalForm.q5 ? 'white' : '#64748b', padding: '10px 16px' }}>Hayır (Temiz)</button>
+                                        </div>
+                                    </div>
+
+                                    {(!evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5) && (
+                                        <div className="fade-in" style={{ marginTop: '15px', background: '#fef2f2', border: '2px dashed #fca5a5', padding: '20px', borderRadius: '16px', textAlign: 'center' }}>
+                                            <div style={{ fontSize: '14px', fontWeight: 900, color: '#ef4444', marginBottom: '10px' }}>📸 İHLAL TESPİT EDİLDİ - KANIT FOTOĞRAFI YÜKLE</div>
+                                            
+                                            <input type="file" id="proofPhotoInputStaff" accept="image/*" capture="environment" onChange={handlePhotoUpload} style={{ display: 'none' }} />
+                                            
+                                            {!evalForm.photoUrl ? (
+                                                <button onClick={() => document.getElementById('proofPhotoInputStaff').click()} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '16px 20px', fontSize: '14px', width: '100%', boxShadow: '0 4px 10px rgba(239,68,68,0.3)' }}>
+                                                    📷 Kamerayı Aç veya Galeriden Seç
+                                                </button>
+                                            ) : (
+                                                <div className="fade-in">
+                                                    <img src={evalForm.photoUrl} alt="Kanıt" style={{ width: '100%', maxHeight: '250px', objectFit: 'cover', borderRadius: '12px', border: '2px solid #ef4444', marginBottom: '15px' }} />
+                                                    <button onClick={() => setEvalForm({...evalForm, photoUrl: ''})} className="premium-btn" style={{ background: 'white', color: '#ef4444', border: '1px solid #fca5a5 !important', padding: '10px 16px', fontSize: '13px' }}>🗑️ Fotoğrafı Sil / Yeniden Yükle</button>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
+                                </>
+                            ) : (
+                                <div className="fade-in" style={{ padding: '20px', background: '#fff1f2', borderRadius: '16px', border: '1px solid #fda4af', color: '#be123c', fontSize: '13px', fontWeight: 700, textAlign: 'center' }}>
+                                    ⚠️ "HAYIR" seçildiği için diğer sorular devre dışı bırakıldı. Raporu gönderdiğinizde öğrenciye otomatik M-Coin iadesi yapılacak ve bu seans iptal edilecektir.
                                 </div>
                             )}
 
                             <button onClick={() => {
                                 if(!evalForm.student) return alert("Değerlendirilecek randevuyu seçin!");
-                                const hasViolation = !evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5;
-                                if(hasViolation && !evalForm.photoUrl) {
-                                    if(!window.confirm("İhlal bildirdiniz ama KANIT FOTOĞRAFI eklemediniz. Yine de kaydetmek istiyor musunuz?")) return;
+                                
+                                if(evalForm.attended) {
+                                    const hasViolation = !evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5;
+                                    if(hasViolation && !evalForm.photoUrl) {
+                                        if(!window.confirm("İhlal bildirdiniz ama KANIT FOTOĞRAFI eklemediniz. Yine de kaydetmek istiyor musunuz?")) return;
+                                    }
                                 }
 
-                                if(window.confirm(`${String(evalForm.student || '').split(',')[0]} (ve diğer sorumlular) için rapor sisteme işlenecek. Onaylıyor musun?`)) {
+                                if(window.confirm(`${String(evalForm.student || '').split(',')[0]} için işlem sisteme işlenecek. Onaylıyor musun?`)) {
                                     const updates = {};
                                     const rId = `rep_${Date.now()}`;
+                                    
                                     updates[`game_room_reports/${rId}`] = {
                                         controller: 'PERSONEL',
                                         target: evalForm.student, device: evalForm.device, day: evalForm.day, time: evalForm.time,
+                                        attended: evalForm.attended, // Yeni eklenen özellik
                                         q1: evalForm.q1, q2: evalForm.q2, q3: evalForm.q3, q4: evalForm.q4, q5: evalForm.q5,
                                         photoUrl: evalForm.photoUrl || '', date: new Date().toLocaleString('tr-TR')
                                     };
 
-                                    if(evalForm.q5) {
-                                        const expTime = Date.now() + (7 * 24 * 60 * 60 * 1000); 
-                                        const studentArray = String(evalForm.student || '').split(', ');
-                                        studentArray.forEach(stu => {
-                                            if(stu.trim()) {
-                                                updates[`game_room_bans/${stu.trim()}`] = {
-                                                    reason: 'Yiyecek/İçecek İhlali (Personel Tespiti)', photoUrl: evalForm.photoUrl || '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR')
-                                                };
+                                    if(evalForm.attended) {
+                                        // NORMAL RAPORLAMA VE CEZA KESME
+                                        if(evalForm.q5) {
+                                            const expTime = Date.now() + (7 * 24 * 60 * 60 * 1000); 
+                                            const studentArray = String(evalForm.student || '').split(', ');
+                                            studentArray.forEach(stu => {
+                                                if(stu.trim()) {
+                                                    updates[`game_room_bans/${stu.trim()}`] = {
+                                                        reason: 'Yiyecek/İçecek İhlali (Personel Tespiti)', photoUrl: evalForm.photoUrl || '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR')
+                                                    };
+                                                }
+                                            });
+                                            if (evalForm.device && evalForm.day && evalForm.slot) {
+                                                updates[`game_room_appointments/${evalForm.device}/${evalForm.day}/${evalForm.slot}`] = null;
                                             }
-                                        });
-                                        
-                                        if (evalForm.device && evalForm.day && evalForm.slot) {
-                                            updates[`game_room_appointments/${evalForm.device}/${evalForm.day}/${evalForm.slot}`] = null;
                                         }
+                                    } else {
+                                        // İŞTİRAK ETMEDİ İSE İPTAL VE İADE YAP
+                                        updates[`game_room_appointments/${evalForm.device}/${evalForm.day}/${evalForm.slot}`] = null;
+                                        
+                                        let refundAmt = 0;
+                                        if (evalForm.device === 'ps5') refundAmt = 30;
+                                        else if (evalForm.device === 'ps4') refundAmt = 20;
+                                        else if (evalForm.device === 'vr') refundAmt = 40;
+                                        else if (evalForm.device === 'pc') refundAmt = 30;
+
+                                        const customPrice = appData?.custom_game_slots?.[evalForm.device]?.[evalForm.day]?.[evalForm.slot]?.price;
+                                        if (customPrice) refundAmt = Number(customPrice);
+
+                                        updates[`wallet/${evalForm.student}`] = (Number(appData?.wallet?.[evalForm.student]) || 0) + refundAmt;
+                                        updates[`transactions/${evalForm.student}/txn_auto_ref_${Date.now()}`] = { 
+                                            desc: `Oyun Odası İadesi (Denetim Kaynaklı)`, amt: refundAmt, date: new Date().toLocaleString('tr-TR') 
+                                        };
+
+                                        db.ref('mavikent_premium/global_chat').push({ 
+                                            s: 'SİSTEM', 
+                                            t: `📢 ${String(evalForm.student).split(' ')[0]} adlı öğrenci randevusuna iştirak edemediği için ${refundAmt} M-Coin iadesi yapılmıştır.`, 
+                                            ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) 
+                                        });
                                     }
                                     
-                                    db.ref('mavikent_premium').update(updates);
-                                    alert("Denetim raporu başarıyla kaydedildi!");
-                                    setEvalForm({ bookingId: '', student: '', device: '', day: '', slot: '', time: '', q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' });
+                                    db.ref('mavikent_premium').update(updates).then(() => {
+                                        alert(evalForm.attended ? "✅ Denetim raporu başarıyla kaydedildi!" : "🔄 Randevu iptal edildi ve M-Coin iadesi yapıldı.");
+                                        setEvalForm({ bookingId: '', student: '', device: '', day: '', slot: '', time: '', attended: true, q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' });
+                                    });
                                 }
-                            }} className="premium-btn badge-glow" style={{ background: '#0f172a', color: 'white', padding: '20px', width: '100%', marginTop: '15px', fontSize: '16px' }}>RAPORU SİSTEME KAYDET</button>
+                            }} className="premium-btn badge-glow" style={{ background: '#0f172a', color: 'white', padding: '20px', width: '100%', marginTop: '15px', fontSize: '16px' }}>{evalForm.attended ? 'RAPORU SİSTEME KAYDET' : 'İADE YAP VE İPTAL ET'}</button>
                         </div>
                     )}
                 </div>
             </div>
         )}
 
-        {/* İŞLEYİŞ EKRANLARI */}
+       {/* --- KANTİN YÖNETİMİ --- */}
+        {currentModule === 'kantin' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                
+                {/* KAMERA EKRANI (OVERLAY MODAL) */}
+                {scannerActive && (
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.85)', zIndex: 999999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                        <div className="popIn-anim" style={{ background: 'white', padding: '20px', borderRadius: '24px', width: '100%', maxWidth: '400px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+                            <h3 style={{ margin: '0 0 15px 0', textAlign: 'center', color: '#0f172a', fontWeight: 900 }}>📷 Barkod Okutuluyor...</h3>
+                            <div id="reader" style={{ width: '100%', overflow: 'hidden', borderRadius: '12px' }}></div>
+                            <button onClick={() => { setScannerActive(false); if(window.currentScanner) window.currentScanner.clear(); }} className="premium-btn" style={{ background: '#ef4444', color: 'white', width: '100%', padding: '15px', marginTop: '15px', fontSize: '16px' }}>KAPAT / İPTAL ET</button>
+                        </div>
+                    </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '5px' }}>
+                    <button onClick={() => setCanteenView('satis')} className="premium-btn" style={{ flex: 1, padding: '14px', background: canteenView === 'satis' ? '#0f172a' : 'white', color: canteenView === 'satis' ? '#10b981' : '#64748b', fontWeight: 900, whiteSpace: 'nowrap' }}>🛒 Satış Ekranı</button>
+                    <button onClick={() => setCanteenView('urun_ekle')} className="premium-btn" style={{ flex: 1, padding: '14px', background: canteenView === 'urun_ekle' ? '#0f172a' : 'white', color: canteenView === 'urun_ekle' ? '#f59e0b' : '#64748b', fontWeight: 900, whiteSpace: 'nowrap' }}>📦 Ürün Ekle</button>
+                    <button onClick={() => setCanteenView('yukleme')} className="premium-btn" style={{ flex: 1, padding: '14px', background: canteenView === 'yukleme' ? '#0f172a' : 'white', color: canteenView === 'yukleme' ? '#3b82f6' : '#64748b', fontWeight: 900, whiteSpace: 'nowrap' }}>💰 Bakiye Yükle</button>
+                    <button onClick={() => setCanteenView('rapor')} className="premium-btn" style={{ flex: 1, padding: '14px', background: canteenView === 'rapor' ? '#0f172a' : 'white', color: canteenView === 'rapor' ? '#d4af37' : '#64748b', fontWeight: 900, whiteSpace: 'nowrap' }}>📊 Kasa Raporu</button>
+                </div>
+
+                {/* 1. SATIŞ EKRANI */}
+                {canteenView === 'satis' && (
+                    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                            <div style={{ fontWeight: 900, color: '#0f172a', marginBottom: '15px' }}>Satışa Ürün Ekle</div>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <input autoFocus type="text" value={barcodeInput} onChange={e => setBarcodeInput(e.target.value)} placeholder="Barkod No" className="elite-input" style={{ flex: 1 }} />
+                                <button onClick={() => {
+                                    if(!barcodeInput.trim()) return;
+                                    const prod = appData?.canteen_products?.[barcodeInput.trim()];
+                                    if(prod) { setCart([...cart, { id: barcodeInput.trim(), name: prod.name, price: Number(prod.price) }]); setBarcodeInput(''); } 
+                                    else { alert("Sistemde bu barkoda ait ürün yok! Önce 'Ürün Ekle' kısmından kaydedin."); }
+                                }} className="premium-btn" style={{ background: '#0f172a', color: 'white', padding: '0 25px' }}>EKLE</button>
+                                <button onClick={() => startBarcodeScanner((code) => {
+                                    const prod = appData?.canteen_products?.[code];
+                                    if(prod) { setCart(prev => [...prev, { id: code, name: prod.name, price: Number(prod.price) }]); } 
+                                    else { alert(`Bilinmeyen Barkod: ${code}\nLütfen önce 'Ürün Ekle' menüsünden bu ürünü kaydedin.`); }
+                                })} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '0 20px', fontSize: '24px' }} title="Kamera ile Okut">📷</button>
+                            </div>
+                        </div>
+
+                        {cart.length > 0 && (
+                            <div className="fade-in" style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                                    <div style={{ fontWeight: 900, color: '#0f172a' }}>🛒 Sepet ({cart.length} Ürün)</div>
+                                    <button onClick={() => setCart([])} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 800, cursor: 'pointer' }}>Sepeti Temizle</button>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '200px', overflowY: 'auto', marginBottom: '20px' }}>
+                                    {cart.map((item, i) => (
+                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: '#f8fafc', borderRadius: '12px', alignItems: 'center' }}>
+                                            <div style={{ fontWeight: 700, color: '#334155' }}>{item.name}</div><div style={{ fontWeight: 900, color: '#0f172a' }}>{item.price} ₺</div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', background: '#ecfdf5', borderRadius: '16px', border: '2px dashed #10b981', marginBottom: '25px' }}>
+                                    <div style={{ fontWeight: 900, color: '#047857', fontSize: '18px' }}>TOPLAM TUTAR:</div><div style={{ fontWeight: 900, color: '#047857', fontSize: '28px' }}>{cart.reduce((a,b)=>a+b.price, 0)} ₺</div>
+                                </div>
+
+                                {/* ŞIK ÖDEME BLOKLARI */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                    <select className="elite-input" value={canteenStudent} onChange={e => setCanteenStudent(e.target.value)} style={{ background: canteenStudent ? '#ecfdf5' : '#f8fafc', borderColor: canteenStudent ? '#10b981' : '#e2e8f0', fontWeight: 800 }}>
+                                        <option value="">👤 HESAPTAN DÜŞÜLECEKSE ÖĞRENCİ SEÇİN (Nakitse Seçmeyin)</option>
+                                        {roster.map(n => <option key={n} value={n}>{n} (Mevcut Bakiye: {appData?.canteen_wallet?.[n] || 0} ₺)</option>)}
+                                    </select>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                                        {/* NAKİT ÖDEME BLOĞU */}
+                                        <div onClick={() => {
+                                            const total = cart.reduce((a,b)=>a+b.price, 0);
+                                            if(window.confirm(`Nakit kasasına ${total} ₺ eklenecek. Onaylıyor musunuz?`)) {
+                                                const updates = {};
+                                                updates[`canteen_logs/txn_${Date.now()}`] = { type: 'cash_sale', amount: total, items: cart.map(c=>c.name).join(', '), date: new Date().toLocaleString('tr-TR'), timestamp: Date.now() };
+                                                cart.forEach(item => { const cStock = appData?.canteen_products?.[item.id]?.stock || 0; updates[`canteen_products/${item.id}/stock`] = Math.max(0, cStock - 1); });
+                                                db.ref('mavikent_premium').update(updates).then(() => { alert('✅ Satış Başarılı! Nakit kasaya eklendi.'); setCart([]); });
+                                            }
+                                        }} className="card-hover" style={{ background: 'linear-gradient(135deg, #10b981, #047857)', color: 'white', padding: '25px', borderRadius: '24px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 10px 25px rgba(16,185,129,0.3)' }}>
+                                            <div style={{ fontSize: '45px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.2))' }}>💵</div>
+                                            <div style={{ fontSize: '18px', fontWeight: 900, letterSpacing: '1px' }}>NAKİT ALINDI</div>
+                                            <div style={{ fontSize: '13px', opacity: 0.9, marginTop: '5px', fontWeight: 600 }}>Tutar Kasaya İşlenir</div>
+                                        </div>
+
+                                        {/* HESAPTAN DÜŞ BLOĞU */}
+                                        <div onClick={() => {
+                                            if(!canteenStudent) return alert('Lütfen yukarıdaki menüden hesabı düşülecek öğrenciyi seçin!');
+                                            const total = cart.reduce((a,b)=>a+b.price, 0); const currBalance = Number(appData?.canteen_wallet?.[canteenStudent]) || 0;
+                                            if(currBalance < total) { if(!window.confirm(`⚠️ DİKKAT: ${canteenStudent} adlı öğrencinin bakiyesi YETERSİZ (${currBalance} ₺). Yine de hesabı eksiye düşürülsün mü?`)) return; }
+                                            const updates = {};
+                                            updates[`canteen_wallet/${canteenStudent}`] = currBalance - total; 
+                                            updates[`canteen_logs/txn_${Date.now()}`] = { type: 'account_sale', amount: total, student: canteenStudent, items: cart.map(c=>c.name).join(', '), date: new Date().toLocaleString('tr-TR'), timestamp: Date.now() };
+                                            cart.forEach(item => { const cStock = appData?.canteen_products?.[item.id]?.stock || 0; updates[`canteen_products/${item.id}/stock`] = Math.max(0, cStock - 1); });
+                                            db.ref('mavikent_premium').update(updates).then(() => { alert(`✅ Satış Başarılı! Yeni bakiye: ${currBalance - total} ₺`); setCart([]); setCanteenStudent(''); });
+                                        }} className="card-hover" style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: 'white', padding: '25px', borderRadius: '24px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 10px 25px rgba(59,130,246,0.3)' }}>
+                                            <div style={{ fontSize: '45px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.2))' }}>💳</div>
+                                            <div style={{ fontSize: '18px', fontWeight: 900, letterSpacing: '1px' }}>HESAPTAN DÜŞ</div>
+                                            <div style={{ fontSize: '13px', opacity: 0.9, marginTop: '5px', fontWeight: 600 }}>Öğrenci Bakiyesinden Düşer</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* 2. ÜRÜN EKLEME EKRANI */}
+                {canteenView === 'urun_ekle' && (
+                    <div className="fade-in" style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                        <div style={{ fontWeight: 900, color: '#0f172a', marginBottom: '20px', fontSize: '18px' }}>📦 Sisteme Yeni Ürün Kaydet</div>
+                        
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                            <input type="text" value={newProduct.barcode} onChange={e => setNewProduct({...newProduct, barcode: e.target.value})} placeholder="Barkod Numarası" className="elite-input" style={{ flex: 1 }} />
+                            <button onClick={() => startBarcodeScanner((code) => setNewProduct({...newProduct, barcode: code}))} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '0 20px', fontSize: '15px' }}>📷 Kamera İle Oku</button>
+                        </div>
+                        
+                        <input type="text" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="Ürün Adı (Örn: Ülker Çikolatalı Gofret)" className="elite-input" style={{ width: '100%', marginBottom: '15px' }} />
+                        
+                        <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
+                            <input type="number" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} placeholder="Fiyatı (₺)" className="elite-input" style={{ flex: 1 }} />
+                            <input type="number" value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} placeholder="Stok Adedi" className="elite-input" style={{ flex: 1 }} />
+                        </div>
+
+                        <button onClick={() => {
+                            if(!newProduct.barcode || !newProduct.name || !newProduct.price || !newProduct.stock) return alert("Lütfen tüm alanları doldurun!");
+                            const updates = {};
+                            updates[`canteen_products/${newProduct.barcode}`] = { name: newProduct.name, price: Number(newProduct.price), stock: Number(newProduct.stock) };
+                            db.ref('mavikent_premium').update(updates).then(() => {
+                                alert("✅ Ürün Başarıyla Kaydedildi!");
+                                setNewProduct({ barcode: '', name: '', price: '', stock: '' });
+                            });
+                        }} className="premium-btn badge-glow" style={{ width: '100%', padding: '20px', background: '#0f172a', color: 'white', fontSize: '16px' }}>ÜRÜNÜ SİSTEME KAYDET</button>
+                    </div>
+                )}
+
+                {/* 3. BAKİYE YÜKLEME EKRANI */}
+                {canteenView === 'yukleme' && (
+                    <div className="fade-in" style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                        <div style={{ fontWeight: 900, color: '#0f172a', marginBottom: '20px', fontSize: '18px' }}>💰 Nakit Bakiye Yükleme</div>
+                        <select className="elite-input" value={canteenStudent} onChange={e => setCanteenStudent(e.target.value)} style={{ marginBottom: '15px' }}>
+                            <option value="">Öğrenci Seçin</option>
+                            {roster.map(n => <option key={n} value={n}>{n} (Mevcut: {appData?.canteen_wallet?.[n] || 0} ₺)</option>)}
+                        </select>
+                        <input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} placeholder="Yüklenecek Tutar (₺)" className="elite-input" style={{ marginBottom: '20px', fontSize: '18px', fontWeight: 900 }} />
+                        <button onClick={() => {
+                            if(!canteenStudent || !depositAmount || isNaN(depositAmount) || depositAmount <= 0) return alert('Geçerli bir öğrenci ve tutar girin!');
+                            const amt = Number(depositAmount);
+                            if(window.confirm(`${canteenStudent} adlı öğrenciye ${amt} ₺ bakiye yüklenecek. Onaylıyor musunuz?`)) {
+                                const currBalance = Number(appData?.canteen_wallet?.[canteenStudent]) || 0; const updates = {};
+                                updates[`canteen_wallet/${canteenStudent}`] = currBalance + amt; updates[`canteen_logs/txn_${Date.now()}`] = { type: 'deposit', amount: amt, student: canteenStudent, date: new Date().toLocaleString('tr-TR'), timestamp: Date.now() };
+                                db.ref('mavikent_premium').update(updates).then(() => { alert(`Bakiye Yüklendi! Yeni Bakiye: ${currBalance + amt} ₺`); setDepositAmount(''); setCanteenStudent(''); });
+                            }
+                        }} className="premium-btn" style={{ width: '100%', padding: '20px', background: '#3b82f6', color: 'white', fontSize: '16px' }}>BAKİYE YÜKLE</button>
+                    </div>
+                )}
+
+                {/* 4. KASA RAPORU */}
+                {canteenView === 'rapor' && (
+                    (() => {
+                        const logs = Object.values(appData?.canteen_logs || {}).sort((a,b) => b.timestamp - a.timestamp); const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000); const recentLogs = logs.filter(l => l.timestamp >= weekAgo);
+                        let totalCashIn = 0; let depositTotal = 0; let cashSaleTotal = 0; let accountSaleTotal = 0;
+                        recentLogs.forEach(l => { if(l.type === 'deposit') { depositTotal += Number(l.amount); totalCashIn += Number(l.amount); } else if(l.type === 'cash_sale') { cashSaleTotal += Number(l.amount); totalCashIn += Number(l.amount); } else if(l.type === 'account_sale') { accountSaleTotal += Number(l.amount); } });
+                        return (
+                            <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                                    <div style={{ background: 'linear-gradient(135deg, #10b981, #047857)', color: 'white', padding: '24px', borderRadius: '24px', textAlign: 'center' }}><div style={{ fontSize: '13px', fontWeight: 800 }}>KASAYA GİREN NAKİT (7 GÜN)</div><div style={{ fontSize: '32px', fontWeight: 900, marginTop: '5px' }}>{totalCashIn} ₺</div></div>
+                                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '24px', borderRadius: '24px', textAlign: 'center' }}><div style={{ fontSize: '12px', fontWeight: 800, color: '#64748b' }}>BAKİYE YÜKLEMELERİNDEN</div><div style={{ fontSize: '24px', fontWeight: 900, color: '#3b82f6', marginTop: '5px' }}>{depositTotal} ₺</div></div>
+                                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '24px', borderRadius: '24px', textAlign: 'center' }}><div style={{ fontSize: '12px', fontWeight: 800, color: '#64748b' }}>PEŞİN SATIŞLARDAN</div><div style={{ fontSize: '24px', fontWeight: 900, color: '#0d9488', marginTop: '5px' }}>{cashSaleTotal} ₺</div></div>
+                                    <div style={{ background: '#fffbeb', border: '1px solid #fde047', padding: '24px', borderRadius: '24px', textAlign: 'center' }}><div style={{ fontSize: '12px', fontWeight: 800, color: '#b45309' }}>HESAPTAN SATIŞLAR (ÜRÜN ÇIKIŞI)</div><div style={{ fontSize: '24px', fontWeight: 900, color: '#d97706', marginTop: '5px' }}>{accountSaleTotal} ₺</div></div>
+                                </div>
+                                <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                                    <div style={{ fontWeight: 900, color: '#0f172a', marginBottom: '15px' }}>📜 Son İşlem Geçmişi</div>
+                                    <div className="clean-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
+                                        {logs.slice(0, 30).map((l, i) => (
+                                            <div key={i} style={{ padding: '12px', background: '#f8fafc', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div><div style={{ fontSize: '13px', fontWeight: 800, color: l.type === 'deposit' ? '#3b82f6' : (l.type === 'cash_sale' ? '#10b981' : '#d97706') }}>{l.type === 'deposit' ? '💰 Bakiye Yükleme' : (l.type === 'cash_sale' ? '💵 Nakit Satış' : '💳 Hesaptan Düşüldü')}</div><div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{l.date} | {l.student ? `Öğrenci: ${l.student}` : ''} {l.items ? `| Ürünler: ${l.items}` : ''}</div></div>
+                                                <div style={{ fontWeight: 900, color: '#0f172a' }}>{l.amount} ₺</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()
+                )}
+            </div>
+        )}
+
+        {/* İŞLEYİŞ EKRANLARI */}
+
+        {/* İŞLEYİŞ EKRANLARI */}
         {currentModule === 'yoklama' && !selectedSession && ( 
             <div className="grid-mobile-2">
                 {['Sabah', 'Öğle', 'İkindi', 'Akşam', 'Yatsı', 'İzin Dönüşü', 'Ekstra'].map(s => ( 
