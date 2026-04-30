@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 
 const StaffScreen = ({ appData, goBackToRoles }) => {
@@ -9,6 +9,19 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   const [hygieneForm, setHygieneForm] = useState({ areaId: '', score: 5, note: '' });
   const [generalCleaningList, setGeneralCleaningList] = useState({}); 
   const [isHygieneSaving, setIsHygieneSaving] = useState(false);
+
+  // Yönetici tarafından kaydedilen görev yerlerini Personel ekranına otomatik yükler
+  useEffect(() => {
+    if (appData?.hygiene_assignments) {
+      const savedTasks = {};
+      Object.entries(appData.hygiene_assignments).forEach(([name, area]) => {
+        if (roster.includes(name)) {
+          savedTasks[name] = { area: area, score: (generalCleaningList[name]?.score || 0) };
+        }
+      });
+      setGeneralCleaningList(prev => ({ ...prev, ...savedTasks }));
+    }
+  }, [appData?.hygiene_assignments, appData?.roster]);
 
   const getCoinImpact = (score) => {
       if (score === 5) return 30;
@@ -31,21 +44,15 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
       const logId = `hyg_${Date.now()}`;
       
       updates[`hygiene_logs/${logId}`] = {
-          ...hygieneForm,
-          areaName: area?.name || 'Bilinmeyen Alan',
-          responsibles: responsibles,
-          timestamp: Date.now(),
-          inspector: "Personel",
-          coinImpact,
-          type: 'wc'
+          ...hygieneForm, areaName: area?.name || 'Bilinmeyen Alan',
+          responsibles: responsibles, timestamp: Date.now(),
+          inspector: "Personel", coinImpact, type: 'wc'
       };
 
       responsibles.forEach(studentId => {
           updates[`wallet/${studentId}`] = (Number(appData?.wallet?.[studentId]) || 0) + coinImpact;
           updates[`transactions/${studentId}/txn_hyg_${Date.now()}_${Math.floor(Math.random()*1000)}`] = { 
-              desc: `${area?.name || 'Alan'} WC Denetimi (Personel)`, 
-              amt: coinImpact, 
-              date: new Date().toLocaleString('tr-TR') 
+              desc: `${area?.name || 'Alan'} WC Denetimi (Personel)`, amt: coinImpact, date: new Date().toLocaleString('tr-TR') 
           };
       });
 

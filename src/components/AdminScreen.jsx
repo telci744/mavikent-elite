@@ -5,10 +5,26 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const [dashboardView, setDashboardView] = useState('main'); 
   const [currentModule, setCurrentModule] = useState(null); 
   
-  const [hygieneTab, setHygieneTab] = useState('wc'); // 'wc', 'general', 'history'
+  const [hygieneTab, setHygieneTab] = useState('wc'); 
   const [hygieneForm, setHygieneForm] = useState({ areaId: '', score: 5, note: '' });
-  const [generalCleaningList, setGeneralCleaningList] = useState({}); // { studentName: { area: '', score: 5 } }
+  const [generalCleaningList, setGeneralCleaningList] = useState({}); 
   const [isHygieneSaving, setIsHygieneSaving] = useState(false);
+  const [wcEditMode, setWcEditMode] = useState(false);
+  const [tempWcData, setTempWcData] = useState({});
+
+  // Kayıtlı görev yerlerini veritabanından çekip listeye doldurur
+  useEffect(() => {
+    if (appData?.hygiene_assignments) {
+      const savedTasks = {};
+      Object.entries(appData.hygiene_assignments).forEach(([name, area]) => {
+        // Sadece hala listede (roster) olan öğrencileri getirir
+        if (roster.includes(name)) {
+          savedTasks[name] = { area: area, score: (generalCleaningList[name]?.score || 0) };
+        }
+      });
+      setGeneralCleaningList(prev => ({ ...prev, ...savedTasks }));
+    }
+  }, [appData?.hygiene_assignments, appData?.roster]);
 
   const getCoinImpact = (score) => {
       if (score === 5) return 30;
@@ -22,30 +38,22 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const saveInspection = async () => {
       if(!hygieneForm.areaId) return alert("Lütfen bir alan seçin!");
       setIsHygieneSaving(true);
-      
       const area = appData.hygiene_areas?.[hygieneForm.areaId];
       const responsibles = area?.responsibles || [];
       const coinImpact = getCoinImpact(hygieneForm.score);
-
       const updates = {};
       const logId = `hyg_${Date.now()}`;
       
       updates[`hygiene_logs/${logId}`] = {
-          ...hygieneForm,
-          areaName: area?.name || 'Bilinmeyen Alan',
-          responsibles: responsibles,
-          timestamp: Date.now(),
-          inspector: "Yönetici",
-          coinImpact,
-          type: 'wc'
+          ...hygieneForm, areaName: area?.name || 'Bilinmeyen Alan',
+          responsibles: responsibles, timestamp: Date.now(),
+          inspector: "Yönetici", coinImpact, type: 'wc'
       };
 
       responsibles.forEach(studentId => {
           updates[`wallet/${studentId}`] = (Number(appData?.wallet?.[studentId]) || 0) + coinImpact;
-          updates[`transactions/${studentId}/txn_hyg_${Date.now()}_${Math.floor(Math.random()*1000)}`] = { 
-              desc: `${area?.name || 'Alan'} WC Denetimi`, 
-              amt: coinImpact, 
-              date: new Date().toLocaleString('tr-TR') 
+          updates[`transactions/${studentId}/txn_hyg_${Date.now()}`] = { 
+              desc: `${area?.name || 'Alan'} WC Denetimi`, amt: coinImpact, date: new Date().toLocaleString('tr-TR') 
           };
       });
 
@@ -53,47 +61,39 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           await db.ref('mavikent_premium').update(updates);
           alert(`✅ Denetim kaydedildi! ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
           setHygieneForm({ areaId: '', score: 5, note: '' });
-      } catch (e) { 
-          console.error(e); 
-          alert("Kaydedilirken hata oluştu!"); 
-      } finally { 
-          setIsHygieneSaving(false); 
-      }
+      } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
   };
 
-  const autoAssignToilets = async () => {
-      if (!window.confirm("Dikkat! Mevcut tuvalet nöbetçileri silinecek ve sistemdeki tüm öğrenciler 7 tuvalete rastgele (kura ile) dağıtılacaktır. Onaylıyor musunuz?")) return;
+  // SADECE TEMİZLİK GÖREV YERLERİNİ KAYDEDER (PUAN VERMEZ)
+  const saveCleaningTasks = async () => {
+    const tasks = {};
+    Object.entries(generalCleaningList).forEach(([name, data]) => {
+      if (data.area) tasks[name] = data.area;
+    });
+    try {
+      await db.ref('mavikent_premium/hygiene_assignments').set(tasks);
+      alert("✅ Temizlik görev yerleri başarıyla kaydedildi!");
+    } catch (e) { alert("Hata oluştu!"); }
+  };
 
-      if (!roster || roster.length === 0) return alert("Sistemde kayıtlı öğrenci bulunamadı!");
-
-      // Öğrencileri rastgele karıştır (Adil dağıtım için)
-      let shuffledStudents = [...roster].sort(() => 0.5 - Math.random());
-      
-      const totalWc = 7;
-      const updates = {};
-      
-      // 7 Tuvaleti oluştur
-      for (let i = 1; i <= totalWc; i++) {
-          updates[`hygiene_areas/wc_${i}`] = {
-              name: `${i} Numaralı Tuvalet`,
-              type: 'wc',
-              responsibles: []
-          };
+  const openWcEditMode = () => {
+      const initial = {};
+      for(let i=1; i<=7; i++) {
+          const key = `wc_${i}`;
+          const existingRoster = appData?.hygiene_areas?.[key]?.responsibles || [];
+          const validStudents = existingRoster.filter(s => roster.includes(s)); 
+          initial[key] = { name: `${i} Numaralı Tuvalet`, type: 'wc', responsibles: validStudents };
       }
+      setTempWcData(initial);
+      setWcEditMode(true);
+  };
 
-      // Öğrencileri 1'den 7'ye kadar sırayla tuvaletlere dağıt
-      shuffledStudents.forEach((student, index) => {
-          const wcIndex = (index % totalWc) + 1;
-          updates[`hygiene_areas/wc_${wcIndex}`].responsibles.push(student);
-      });
-
+  const saveWcAssignments = async () => {
       try {
-          await db.ref('mavikent_premium').update(updates);
-          alert("✅ Kura çekildi! Öğrenciler 7 tuvalete başarıyla dağıtıldı.");
-      } catch (error) {
-          console.error(error);
-          alert("Bir hata oluştu!");
-      }
+          await db.ref('mavikent_premium/hygiene_areas').update(tempWcData);
+          alert("✅ WC Nöbetçileri Kaydedildi!");
+          setWcEditMode(false);
+      } catch(e) { alert("Hata!"); }
   };
 
   const [selectedSession, setSelectedSession] = useState(''); 
@@ -1896,61 +1896,90 @@ const renderStudentGrid = (students, type) => {
                 <button onClick={() => setCurrentModule(null)} style={{ padding: '12px 20px', borderRadius: '20px', border: 'none', background: '#f1f5f9', color: '#475569', fontWeight: 900, cursor: 'pointer' }}>🔙</button>
             </div>
 
-            {/* 1. PANEL: WC DENETİM */}
+            {/* 1. PANEL: WC DENETİM VE MANUEL ATAMA */}
             {hygieneTab === 'wc' && (
                 <div className="fade-in">
                     <div style={{ background: '#ffffff', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '2px dashed #f1f5f9', paddingBottom: '15px' }}>
                             <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🚽 WC Zimmet & Denetim</h3>
-                            <button onClick={autoAssignToilets} className="premium-btn" style={{ background: '#0f172a', color: 'white', padding: '10px 15px', fontSize: '12px' }}>🔄 Kura Çek</button>
+                            <button onClick={wcEditMode ? saveWcAssignments : openWcEditMode} className="premium-btn" style={{ background: wcEditMode ? '#10b981' : '#0f172a', color: 'white', padding: '10px 15px', fontSize: '13px' }}>
+                                {wcEditMode ? '💾 LİSTEYİ KAYDET' : '🛠️ Nöbetçileri Ata'}
+                            </button>
                         </div>
 
-                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TUVALET SEÇİN:</label>
-                        <select 
-                            value={hygieneForm.areaId} 
-                            onChange={(e) => setHygieneForm({...hygieneForm, areaId: e.target.value})}
-                            className="elite-input" style={{ marginBottom: '25px' }}
-                        >
-                            <option value="">-- Denetlenecek WC Seçin --</option>
-                            {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
-                                <option key={key} value={key}>{area.name} ({area.responsibles?.length || 0} Kişi)</option>
-                            ))}
-                        </select>
-
-                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TEMİZLİK DURUMU:</label>
-                        <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
-                            {[1, 2, 3, 4, 5].map(star => (
-                                <button 
-                                    key={star}
-                                    onClick={() => setHygieneForm({...hygieneForm, score: star})}
-                                    style={{ 
-                                        flex: 1, padding: '20px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer',
-                                        background: hygieneForm.score >= star ? '#fbbf24' : '#f8fafc',
-                                        color: hygieneForm.score >= star ? '#fff' : '#cbd5e1',
-                                        transition: '0.2s'
-                                    }}
-                                >★</button>
-                            ))}
-                        </div>
-
-                        <button 
-                            onClick={saveInspection} 
-                            disabled={isHygieneSaving}
-                            className="premium-btn" 
-                            style={{ width: '100%', padding: '20px', background: '#0ea5e9', color: 'white', fontWeight: 900, fontSize: '16px' }}
-                        >
-                            {isHygieneSaving ? '⏳ İşleniyor...' : '✅ WC DENETİMİNİ KAYDET'}
-                        </button>
-
-                        {/* ANLIK ZİMMET LİSTESİ ÖNİZLEME */}
-                        <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-                            {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
-                                <div key={key} style={{ background: '#f8fafc', padding: '12px', borderRadius: '15px', border: '1px solid #e2e8f0' }}>
-                                    <div style={{ fontWeight: 900, fontSize: '12px', color: '#0ea5e9', marginBottom: '5px' }}>{area.name}</div>
-                                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>{(area.responsibles || []).join(', ')}</div>
+                        {wcEditMode ? (
+                            <div className="fade-in">
+                                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700, marginBottom: '20px' }}>Öğrenci listesinden seçim yapın. Sildiğiniz öğrenciler burada görünmez.</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px' }}>
+                                    {Object.entries(tempWcData).map(([wcKey, wcData]) => (
+                                        <div key={wcKey} style={{ background: '#f8fafc', padding: '15px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
+                                            <div style={{ fontWeight: 900, color: '#0ea5e9', fontSize: '14px', marginBottom: '10px' }}>{wcData.name}</div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {[0, 1, 2].map(slot => (
+                                                    <select 
+                                                        key={slot}
+                                                        value={wcData.responsibles[slot] || ''} 
+                                                        onChange={(e) => {
+                                                            const newArr = [...(wcData.responsibles || [])];
+                                                            newArr[slot] = e.target.value;
+                                                            setTempWcData({...tempWcData, [wcKey]: {...wcData, responsibles: newArr.filter(Boolean)}});
+                                                        }}
+                                                        className="elite-input" style={{ padding: '10px', fontSize: '13px' }}
+                                                    >
+                                                        <option value="">-- Öğrenci Seç --</option>
+                                                        {roster.map(s => <option key={s} value={s}>{s}</option>)}
+                                                    </select>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
+                                <button onClick={() => setWcEditMode(false)} className="btn-iptal" style={{ width: '100%', marginTop: '20px' }}>İPTAL ET</button>
+                            </div>
+                        ) : (
+                            <div className="fade-in">
+                                <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TUVALET SEÇİN:</label>
+                                <select 
+                                    value={hygieneForm.areaId} 
+                                    onChange={(e) => setHygieneForm({...hygieneForm, areaId: e.target.value})}
+                                    className="elite-input" style={{ marginBottom: '25px' }}
+                                >
+                                    <option value="">-- Denetlenecek WC Seçin --</option>
+                                    {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
+                                        <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Kişi)</option>
+                                    ))}
+                                </select>
+
+                                <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TEMİZLİK DURUMU:</label>
+                                <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
+                                    {[1, 2, 3, 4, 5].map(star => (
+                                        <button 
+                                            key={star}
+                                            onClick={() => setHygieneForm({...hygieneForm, score: star})}
+                                            style={{ 
+                                                flex: 1, padding: '20px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer',
+                                                background: hygieneForm.score >= star ? '#fbbf24' : '#f8fafc',
+                                                color: hygieneForm.score >= star ? '#fff' : '#cbd5e1',
+                                                transition: '0.2s'
+                                            }}
+                                        >★</button>
+                                    ))}
+                                </div>
+
+                                <button onClick={saveInspection} disabled={isHygieneSaving} className="premium-btn" style={{ width: '100%', padding: '20px', background: '#0ea5e9', color: 'white', fontWeight: 900, fontSize: '16px' }}>
+                                    {isHygieneSaving ? '⏳ İşleniyor...' : '✅ WC DENETİMİNİ KAYDET'}
+                                </button>
+
+                                <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                                    {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
+                                        <div key={key} style={{ background: '#f8fafc', padding: '12px', borderRadius: '15px', border: '1px solid #e2e8f0' }}>
+                                            <div style={{ fontWeight: 900, fontSize: '12px', color: '#0ea5e9', marginBottom: '5px' }}>{area.name}</div>
+                                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>{(area.responsibles || []).join(', ')}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -1994,44 +2023,53 @@ const renderStudentGrid = (students, type) => {
                             ))}
                         </div>
 
-                        <button 
-                            onClick={async () => {
-                                const entries = Object.entries(generalCleaningList).filter(([name, data]) => data.area && data.score);
-                                if(entries.length === 0) return alert("En az bir öğrenci için alan ve puan girmelisiniz!");
-                                if(!window.confirm(`${entries.length} öğrencinin puanı kaydedilecek. Onaylıyor musun?`)) return;
-                                
-                                setIsHygieneSaving(true);
-                                const updates = {};
-                                const now = Date.now();
-                                
-                                entries.forEach(([student, data]) => {
-                                    const impact = getCoinImpact(data.score);
-                                    const logId = `gen_${student}_${now}`;
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button 
+                                onClick={saveCleaningTasks}
+                                className="premium-btn" 
+                                style={{ flex: 1, padding: '20px', background: '#0f172a', color: 'white', fontWeight: 900, fontSize: '16px' }}
+                            >
+                                📍 YERLERİ KAYDET
+                            </button>
+                            <button 
+                                onClick={async () => {
+                                    const entries = Object.entries(generalCleaningList).filter(([name, data]) => data.area && data.score);
+                                    if(entries.length === 0) return alert("En az bir öğrenci için alan ve puan girmelisiniz!");
+                                    if(!window.confirm(`${entries.length} öğrencinin puanı kaydedilecek. Onaylıyor musun?`)) return;
                                     
-                                    updates[`hygiene_logs/${logId}`] = { 
-                                        student, areaName: data.area, score: data.score, 
-                                        timestamp: now, coinImpact: impact, type: 'general' 
-                                    };
-                                    updates[`wallet/${student}`] = (Number(appData?.wallet?.[student]) || 0) + impact;
-                                    updates[`transactions/${student}/txn_${logId}`] = { 
-                                        desc: `${data.area} Temizlik Kontrolü`, 
-                                        amt: impact, 
-                                        date: new Date().toLocaleString('tr-TR') 
-                                    };
-                                });
+                                    setIsHygieneSaving(true);
+                                    const updates = {};
+                                    const now = Date.now();
+                                    
+                                    entries.forEach(([student, data]) => {
+                                        const impact = getCoinImpact(data.score);
+                                        const logId = `gen_${student}_${now}`;
+                                        
+                                        updates[`hygiene_logs/${logId}`] = { 
+                                            student, areaName: data.area, score: data.score, 
+                                            timestamp: now, coinImpact: impact, type: 'general' 
+                                        };
+                                        updates[`wallet/${student}`] = (Number(appData?.wallet?.[student]) || 0) + impact;
+                                        updates[`transactions/${student}/txn_${logId}`] = { 
+                                            desc: `${data.area} Temizlik Kontrolü`, 
+                                            amt: impact, 
+                                            date: new Date().toLocaleString('tr-TR') 
+                                        };
+                                    });
 
-                                try {
-                                    await db.ref('mavikent_premium').update(updates);
-                                    alert("✅ Günlük temizlik kontrolleri kaydedildi ve M-Coin'ler dağıtıldı!");
-                                    setGeneralCleaningList({}); 
-                                } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
-                            }} 
-                            disabled={isHygieneSaving}
-                            className="premium-btn" 
-                            style={{ width: '100%', padding: '20px', background: '#10b981', color: 'white', fontWeight: 900, fontSize: '16px' }}
-                        >
-                            {isHygieneSaving ? '⏳ Toplu Kayıt Yapılıyor...' : '🚀 TÜMÜNÜ KAYDET VE M-COIN DAĞIT'}
-                        </button>
+                                    try {
+                                        await db.ref('mavikent_premium').update(updates);
+                                        alert("✅ Günlük temizlik kontrolleri kaydedildi ve M-Coin'ler dağıtıldı!");
+                                        setGeneralCleaningList({}); 
+                                    } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
+                                }} 
+                                disabled={isHygieneSaving}
+                                className="premium-btn" 
+                                style={{ flex: 2, padding: '20px', background: '#10b981', color: 'white', fontWeight: 900, fontSize: '16px' }}
+                            >
+                                {isHygieneSaving ? '⏳...' : '🚀 PUANLARI DAĞIT'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
