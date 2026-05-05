@@ -9,7 +9,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   const [hygieneForm, setHygieneForm] = useState({ areaId: '', score: 5, note: '' });
   const [generalCleaningList, setGeneralCleaningList] = useState({}); 
   const [isHygieneSaving, setIsHygieneSaving] = useState(false);
-
+  const [roomForm, setRoomForm] = useState({ areaId: '', score: 5, note: '' });
   // Yönetici tarafından kaydedilen görev yerlerini Personel ekranına otomatik yükler
   useEffect(() => {
     if (appData?.hygiene_assignments) {
@@ -30,6 +30,43 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
       if (score === 2) return -30;
       if (score === 1) return -60;
       return 0;
+  };
+  const getRoomCoinImpact = (score) => {
+      if (score === 5) return 50;
+      if (score === 4) return 40;
+      if (score === 3) return 30;
+      if (score === 2) return -10;
+      if (score === 1) return -20;
+      return 0;
+  };
+
+  const saveRoomInspection = async () => {
+      if(!roomForm.areaId) return alert("Lütfen bir oda seçin!");
+      setIsHygieneSaving(true);
+      const area = appData.room_areas?.[roomForm.areaId];
+      const responsibles = area?.responsibles || [];
+      const coinImpact = getRoomCoinImpact(roomForm.score);
+      const updates = {};
+      const logId = `room_${Date.now()}`;
+      
+      updates[`hygiene_logs/${logId}`] = {
+          ...roomForm, areaName: area?.name || 'Bilinmeyen Oda',
+          responsibles: responsibles, timestamp: Date.now(),
+          inspector: "Personel", coinImpact, type: 'room'
+      };
+
+      responsibles.forEach(studentId => {
+          updates[`wallet/${studentId}`] = (Number(appData?.wallet?.[studentId]) || 0) + coinImpact;
+          updates[`transactions/${studentId}/txn_room_${Date.now()}`] = { 
+              desc: `${area?.name || 'Oda'} Denetimi (Personel)`, amt: coinImpact, date: new Date().toLocaleString('tr-TR') 
+          };
+      });
+
+      try {
+          await db.ref('mavikent_premium').update(updates);
+          alert(`✅ Oda denetimi kaydedildi! Odadaki öğrencilere ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
+          setRoomForm({ areaId: '', score: 5, note: '' });
+      } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
   };
 
   const saveInspection = async () => {
@@ -1140,11 +1177,54 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
             {/* ÜST SEKME MENÜSÜ */}
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', background: 'white', padding: '10px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
                 <button onClick={() => setHygieneTab('wc')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'wc' ? '#0ea5e9' : 'transparent', color: hygieneTab === 'wc' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🚽 WC Paneli</button>
-                <button onClick={() => setHygieneTab('general')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'general' ? '#10b981' : 'transparent', color: hygieneTab === 'general' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🧹 Temizlik Kontrol</button>
+              <button onClick={() => setHygieneTab('general')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'general' ? '#10b981' : 'transparent', color: hygieneTab === 'general' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🧹 Temizlik Kontrol</button>
+                <button onClick={() => setHygieneTab('rooms')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'rooms' ? '#8b5cf6' : 'transparent', color: hygieneTab === 'rooms' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🛏️ Oda Kontrol</button>
+                <button onClick={() => setHygieneTab('rooms')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'rooms' ? '#8b5cf6' : 'transparent', color: hygieneTab === 'rooms' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🛏️ Oda Kontrol</button>
                 <button onClick={() => setHygieneTab('history')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'history' ? '#f59e0b' : 'transparent', color: hygieneTab === 'history' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>📜 Geçmiş</button>
                 <button onClick={() => setCurrentModule(null)} style={{ padding: '12px 20px', borderRadius: '20px', border: 'none', background: '#f1f5f9', color: '#475569', fontWeight: 900, cursor: 'pointer' }}>🔙</button>
             </div>
+{/* PERSONEL ODA DENETİM PANELİ */}
+            {hygieneTab === 'rooms' && (
+                <div className="fade-in">
+                    <div style={{ background: '#ffffff', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
+                        <div style={{ marginBottom: '25px', borderBottom: '2px dashed #f1f5f9', paddingBottom: '15px' }}>
+                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🛏️ Oda Düzeni Denetimi</h3>
+                        </div>
 
+                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>ODA SEÇİN:</label>
+                        <select 
+                            value={roomForm.areaId} 
+                            onChange={(e) => setRoomForm({...roomForm, areaId: e.target.value})}
+                            className="elite-input" style={{ marginBottom: '25px' }}
+                        >
+                            <option value="">-- Denetlenecek Odayı Seçin --</option>
+                            {Object.entries(appData?.room_areas || {}).filter(([k, v]) => v.responsibles?.length > 0).map(([key, area]) => (
+                                <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Öğrenci)</option>
+                            ))}
+                        </select>
+
+                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>ODA DÜZENİ PUANI:</label>
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                            {[1, 2, 3, 4, 5].map(star => (
+                                <button 
+                                    key={star}
+                                    onClick={() => setRoomForm({...roomForm, score: star})}
+                                    style={{ 
+                                        flex: 1, padding: '20px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer',
+                                        background: roomForm.score >= star ? '#8b5cf6' : '#f8fafc',
+                                        color: roomForm.score >= star ? '#fff' : '#cbd5e1',
+                                        transition: '0.2s'
+                                    }}
+                                >★</button>
+                            ))}
+                        </div>
+
+                        <button onClick={saveRoomInspection} disabled={isHygieneSaving} className="premium-btn" style={{ width: '100%', padding: '20px', background: '#8b5cf6', color: 'white', fontWeight: 900, fontSize: '16px' }}>
+                            {isHygieneSaving ? '⏳ İşleniyor...' : '✅ ODA DENETİMİNİ KAYDET'}
+                        </button>
+                    </div>
+                </div>
+            )}
             {/* 1. PANEL: WC DENETİM */}
             {hygieneTab === 'wc' && (
                 <div className="fade-in">
@@ -1199,6 +1279,64 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                                 </div>
                             ))}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* YENİ PANEL: ODA DENETİMİ (SADECE PUANLAMA) */}
+            {hygieneTab === 'rooms' && (
+                <div className="fade-in">
+                    <div style={{ background: '#ffffff', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
+                        <div style={{ marginBottom: '25px', borderBottom: '2px dashed #f1f5f9', paddingBottom: '15px' }}>
+                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🛏️ Oda Düzeni Denetimi</h3>
+                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '5px', fontWeight: 700 }}>Oda isimleri ve atamaları sistem yöneticisi tarafından belirlenir.</div>
+                        </div>
+
+                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>ODA SEÇİN:</label>
+                        <select 
+                            value={roomForm.areaId} 
+                            onChange={(e) => setRoomForm({...roomForm, areaId: e.target.value})}
+                            className="elite-input" style={{ marginBottom: '25px', width: '100%', padding: '15px', borderRadius: '15px', border: '2px solid #e2e8f0', outline: 'none', fontWeight: 700 }}
+                        >
+                            <option value="">-- Denetlenecek Odayı Seçin --</option>
+                            {Object.entries(appData?.room_areas || {}).filter(([k, v]) => v.responsibles?.length > 0).map(([key, area]) => (
+                                <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Kişi)</option>
+                            ))}
+                        </select>
+
+                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>ODA DÜZENİ PUANI:</label>
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                            {[1, 2, 3, 4, 5].map(star => (
+                                <button 
+                                    key={star}
+                                    onClick={() => setRoomForm({...roomForm, score: star})}
+                                    style={{ 
+                                        flex: 1, padding: '20px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer',
+                                        background: roomForm.score >= star ? '#8b5cf6' : '#f8fafc',
+                                        color: roomForm.score >= star ? '#fff' : '#cbd5e1',
+                                        transition: '0.2s'
+                                    }}
+                                >★</button>
+                            ))}
+                        </div>
+                        
+                        <div style={{ textAlign: 'center', marginBottom: '20px', fontSize: '13px', fontWeight: 800, color: roomForm.score >= 3 ? '#10b981' : '#ef4444' }}>
+                            Bu puana göre odadaki öğrencilere 
+                            {roomForm.score === 5 ? ' +50 M-Coin eklenecek.' : 
+                             roomForm.score === 4 ? ' +40 M-Coin eklenecek.' : 
+                             roomForm.score === 3 ? ' +30 M-Coin eklenecek.' : 
+                             roomForm.score === 2 ? ' -10 M-Coin (Ceza) kesilecek.' : 
+                             ' -20 M-Coin (Ceza) kesilecek.'}
+                        </div>
+
+                        <button 
+                            onClick={saveRoomInspection} 
+                            disabled={isHygieneSaving}
+                            className="premium-btn" 
+                            style={{ width: '100%', padding: '20px', borderRadius: '20px', border: 'none', background: '#8b5cf6', color: 'white', fontWeight: 900, fontSize: '16px', cursor: 'pointer' }}
+                        >
+                            {isHygieneSaving ? '⏳ İşleniyor...' : '✅ ODA DENETİMİNİ KAYDET'}
+                        </button>
                     </div>
                 </div>
             )}
