@@ -81,7 +81,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
   const openWcEditMode = () => {
       const initial = {};
-      for(let i=1; i<=7; i++) {
+      for(let i=1; i<=6; i++) {
           const key = `wc_${i}`;
           const existingRoster = appData?.hygiene_areas?.[key]?.responsibles || [];
           const validStudents = existingRoster.filter(s => roster.includes(s)); 
@@ -1947,18 +1947,106 @@ const renderStudentGrid = (students, type) => {
 
       </div> 
 {/* --- HİJYEN DENETİM MERKEZİ --- */}
-  {currentModule === 'hygiene' && (
+        {currentModule === 'hygiene' && (
           <div style={{ padding: '20px', animation: 'fadeIn 0.3s ease-out' }}>
             {/* ÜST SEKME MENÜSÜ */}
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', background: 'white', padding: '10px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
                 <button onClick={() => setHygieneTab('wc')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'wc' ? '#0ea5e9' : 'transparent', color: hygieneTab === 'wc' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🚽 WC Paneli</button>
-               <button onClick={() => setHygieneTab('general')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'general' ? '#10b981' : 'transparent', color: hygieneTab === 'general' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🧹 Temizlik Kontrol</button>
-                <button onClick={() => setHygieneTab('rooms')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'rooms' ? '#8b5cf6' : 'transparent', color: hygieneTab === 'rooms' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🛏️ Oda Kontrol</button>
+                <button onClick={() => setHygieneTab('general')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'general' ? '#10b981' : 'transparent', color: hygieneTab === 'general' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🧹 Temizlik Kontrol</button>
                 <button onClick={() => setHygieneTab('rooms')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'rooms' ? '#8b5cf6' : 'transparent', color: hygieneTab === 'rooms' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🛏️ Oda Kontrol</button>
                 <button onClick={() => setHygieneTab('history')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'history' ? '#f59e0b' : 'transparent', color: hygieneTab === 'history' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>📜 Geçmiş</button>
                 <button onClick={() => setCurrentModule(null)} style={{ padding: '12px 20px', borderRadius: '20px', border: 'none', background: '#f1f5f9', color: '#475569', fontWeight: 900, cursor: 'pointer' }}>🔙</button>
             </div>
-{/* ODA DENETİMİ VE 10 KİŞİLİK YÖNETİM PANELİ */}
+
+            {/* 1. PANEL: WC DENETİM VE MANUEL ATAMA */}
+            {hygieneTab === 'wc' && (
+                <div className="fade-in">
+                    <div style={{ background: '#ffffff', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '2px dashed #f1f5f9', paddingBottom: '15px' }}>
+                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🚽 WC Zimmet & Denetim (6 Tuvalet - 5 Kişilik)</h3>
+                            <button onClick={wcEditMode ? saveWcAssignments : openWcEditMode} className="premium-btn" style={{ background: wcEditMode ? '#10b981' : '#0f172a', color: 'white', padding: '10px 15px', fontSize: '13px' }}>
+                                {wcEditMode ? '💾 LİSTEYİ KAYDET' : '🛠️ Nöbetçileri Ata'}
+                            </button>
+                        </div>
+
+                        {wcEditMode ? (
+                            <div className="fade-in">
+                                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700, marginBottom: '20px' }}>Öğrenci listesinden seçim yapın. Sildiğiniz öğrenciler burada görünmez.</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px' }}>
+                                    {Object.entries(tempWcData).map(([wcKey, wcData]) => (
+                                        <div key={wcKey} style={{ background: '#f8fafc', padding: '15px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
+                                            <div style={{ fontWeight: 900, color: '#0ea5e9', fontSize: '14px', marginBottom: '10px' }}>{wcData.name}</div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {[0, 1, 2, 3, 4].map(slot => (
+                                                    <select 
+                                                        key={slot}
+                                                        value={wcData.responsibles[slot] || ''} 
+                                                        onChange={(e) => {
+                                                            const newArr = [...(wcData.responsibles || [])];
+                                                            newArr[slot] = e.target.value;
+                                                            setTempWcData({...tempWcData, [wcKey]: {...wcData, responsibles: newArr.filter(Boolean)}});
+                                                        }}
+                                                        className="elite-input" style={{ padding: '10px', fontSize: '13px' }}
+                                                    >
+                                                        <option value="">-- Öğrenci Seç --</option>
+                                                        {roster.map(s => <option key={s} value={s}>{s}</option>)}
+                                                    </select>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button onClick={() => setWcEditMode(false)} className="btn-iptal" style={{ width: '100%', marginTop: '20px' }}>İPTAL ET</button>
+                            </div>
+                        ) : (
+                            <div className="fade-in">
+                                <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TUVALET SEÇİN:</label>
+                                <select 
+                                    value={hygieneForm.areaId} 
+                                    onChange={(e) => setHygieneForm({...hygieneForm, areaId: e.target.value})}
+                                    className="elite-input" style={{ marginBottom: '25px' }}
+                                >
+                                    <option value="">-- Denetlenecek WC Seçin --</option>
+                                    {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
+                                        <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Kişi)</option>
+                                    ))}
+                                </select>
+
+                                <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TEMİZLİK DURUMU:</label>
+                                <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
+                                    {[1, 2, 3, 4, 5].map(star => (
+                                        <button 
+                                            key={star}
+                                            onClick={() => setHygieneForm({...hygieneForm, score: star})}
+                                            style={{ 
+                                                flex: 1, padding: '20px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer',
+                                                background: hygieneForm.score >= star ? '#fbbf24' : '#f8fafc',
+                                                color: hygieneForm.score >= star ? '#fff' : '#cbd5e1',
+                                                transition: '0.2s'
+                                            }}
+                                        >★</button>
+                                    ))}
+                                </div>
+
+                                <button onClick={saveInspection} disabled={isHygieneSaving} className="premium-btn" style={{ width: '100%', padding: '20px', background: '#0ea5e9', color: 'white', fontWeight: 900, fontSize: '16px' }}>
+                                    {isHygieneSaving ? '⏳ İşleniyor...' : '✅ WC DENETİMİNİ KAYDET'}
+                                </button>
+
+                                <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                                    {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
+                                        <div key={key} style={{ background: '#f8fafc', padding: '12px', borderRadius: '15px', border: '1px solid #e2e8f0' }}>
+                                            <div style={{ fontWeight: 900, fontSize: '12px', color: '#0ea5e9', marginBottom: '5px' }}>{area.name}</div>
+                                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>{(area.responsibles || []).join(', ')}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                   </div>
+                </div>
+            )}
+
+            {/* YENİ PANEL: ODA DENETİMİ VE YÖNETİMİ */}
             {hygieneTab === 'rooms' && (
                 <div className="fade-in">
                     <div style={{ background: '#ffffff', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
@@ -2044,187 +2132,8 @@ const renderStudentGrid = (students, type) => {
                     </div>
                 </div>
             )}
-            {/* 1. PANEL: WC DENETİM VE MANUEL ATAMA */}
-            {hygieneTab === 'wc' && (
-                <div className="fade-in">
-                    <div style={{ background: '#ffffff', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '2px dashed #f1f5f9', paddingBottom: '15px' }}>
-                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🚽 WC Zimmet & Denetim</h3>
-                            <button onClick={wcEditMode ? saveWcAssignments : openWcEditMode} className="premium-btn" style={{ background: wcEditMode ? '#10b981' : '#0f172a', color: 'white', padding: '10px 15px', fontSize: '13px' }}>
-                                {wcEditMode ? '💾 LİSTEYİ KAYDET' : '🛠️ Nöbetçileri Ata'}
-                            </button>
-                        </div>
 
-                        {wcEditMode ? (
-                            <div className="fade-in">
-                                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700, marginBottom: '20px' }}>Öğrenci listesinden seçim yapın. Sildiğiniz öğrenciler burada görünmez.</div>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px' }}>
-                                    {Object.entries(tempWcData).map(([wcKey, wcData]) => (
-                                        <div key={wcKey} style={{ background: '#f8fafc', padding: '15px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ fontWeight: 900, color: '#0ea5e9', fontSize: '14px', marginBottom: '10px' }}>{wcData.name}</div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                {[0, 1, 2].map(slot => (
-                                                    <select 
-                                                        key={slot}
-                                                        value={wcData.responsibles[slot] || ''} 
-                                                        onChange={(e) => {
-                                                            const newArr = [...(wcData.responsibles || [])];
-                                                            newArr[slot] = e.target.value;
-                                                            setTempWcData({...tempWcData, [wcKey]: {...wcData, responsibles: newArr.filter(Boolean)}});
-                                                        }}
-                                                        className="elite-input" style={{ padding: '10px', fontSize: '13px' }}
-                                                    >
-                                                        <option value="">-- Öğrenci Seç --</option>
-                                                        {roster.map(s => <option key={s} value={s}>{s}</option>)}
-                                                    </select>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <button onClick={() => setWcEditMode(false)} className="btn-iptal" style={{ width: '100%', marginTop: '20px' }}>İPTAL ET</button>
-                            </div>
-                        ) : (
-                            <div className="fade-in">
-                                <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TUVALET SEÇİN:</label>
-                                <select 
-                                    value={hygieneForm.areaId} 
-                                    onChange={(e) => setHygieneForm({...hygieneForm, areaId: e.target.value})}
-                                    className="elite-input" style={{ marginBottom: '25px' }}
-                                >
-                                    <option value="">-- Denetlenecek WC Seçin --</option>
-                                    {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
-                                        <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Kişi)</option>
-                                    ))}
-                                </select>
-
-                                <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TEMİZLİK DURUMU:</label>
-                                <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
-                                    {[1, 2, 3, 4, 5].map(star => (
-                                        <button 
-                                            key={star}
-                                            onClick={() => setHygieneForm({...hygieneForm, score: star})}
-                                            style={{ 
-                                                flex: 1, padding: '20px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer',
-                                                background: hygieneForm.score >= star ? '#fbbf24' : '#f8fafc',
-                                                color: hygieneForm.score >= star ? '#fff' : '#cbd5e1',
-                                                transition: '0.2s'
-                                            }}
-                                        >★</button>
-                                    ))}
-                                </div>
-
-                                <button onClick={saveInspection} disabled={isHygieneSaving} className="premium-btn" style={{ width: '100%', padding: '20px', background: '#0ea5e9', color: 'white', fontWeight: 900, fontSize: '16px' }}>
-                                    {isHygieneSaving ? '⏳ İşleniyor...' : '✅ WC DENETİMİNİ KAYDET'}
-                                </button>
-
-                                <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-                                    {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
-                                        <div key={key} style={{ background: '#f8fafc', padding: '12px', borderRadius: '15px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ fontWeight: 900, fontSize: '12px', color: '#0ea5e9', marginBottom: '5px' }}>{area.name}</div>
-                                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>{(area.responsibles || []).join(', ')}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                   </div>
-                </div>
-            )}
-
-            {/* YENİ PANEL: ODA DENETİMİ VE YÖNETİMİ */}
-            {hygieneTab === 'rooms' && (
-                <div className="fade-in">
-                    <div style={{ background: '#ffffff', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '2px dashed #f1f5f9', paddingBottom: '15px' }}>
-                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🛏️ Oda Denetimi & Öğrenci Atama</h3>
-                            <button onClick={roomEditMode ? saveRoomAssignments : openRoomEditMode} className="premium-btn" style={{ background: roomEditMode ? '#10b981' : '#0f172a', color: 'white', padding: '10px 15px', fontSize: '13px' }}>
-                                {roomEditMode ? '💾 LİSTEYİ KAYDET' : '🛠️ Odaları Düzenle'}
-                            </button>
-                        </div>
-
-                        {roomEditMode ? (
-                            <div className="fade-in">
-                                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700, marginBottom: '20px' }}>Oda isimlerini değiştirebilir ve o odada kalan öğrencileri seçebilirsiniz.</div>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px' }}>
-                                    {Object.entries(tempRoomData).map(([roomKey, roomData]) => (
-                                        <div key={roomKey} style={{ background: '#f8fafc', padding: '15px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
-                                            <input 
-                                                value={roomData.name} 
-                                                onChange={e => setTempRoomData({...tempRoomData, [roomKey]: {...roomData, name: e.target.value}})}
-                                                className="elite-input" style={{ marginBottom: '10px', fontSize: '14px', background: 'white', borderColor: '#8b5cf6' }} 
-                                            />
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                {[0, 1, 2, 3].map(slot => (
-                                                    <select 
-                                                        key={slot}
-                                                        value={roomData.responsibles[slot] || ''} 
-                                                        onChange={(e) => {
-                                                            const newArr = [...(roomData.responsibles || [])];
-                                                            newArr[slot] = e.target.value;
-                                                            setTempRoomData({...tempRoomData, [roomKey]: {...roomData, responsibles: newArr.filter(Boolean)}});
-                                                        }}
-                                                        className="elite-input" style={{ padding: '10px', fontSize: '13px' }}
-                                                    >
-                                                        <option value="">-- Öğrenci Seç --</option>
-                                                        {roster.map(s => <option key={s} value={s}>{s}</option>)}
-                                                    </select>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <button onClick={() => setRoomEditMode(false)} className="btn-iptal" style={{ width: '100%', marginTop: '20px' }}>İPTAL ET</button>
-                            </div>
-                        ) : (
-                            <div className="fade-in">
-                                <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>ODA SEÇİN:</label>
-                                <select 
-                                    value={roomForm.areaId} 
-                                    onChange={(e) => setRoomForm({...roomForm, areaId: e.target.value})}
-                                    className="elite-input" style={{ marginBottom: '25px' }}
-                                >
-                                    <option value="">-- Denetlenecek Odayı Seçin --</option>
-                                    {Object.entries(appData?.room_areas || {}).filter(([k, v]) => v.responsibles?.length > 0).map(([key, area]) => (
-                                        <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Kişi)</option>
-                                    ))}
-                                </select>
-
-                                <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>ODA DÜZENİ PUANI:</label>
-                                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                                    {[1, 2, 3, 4, 5].map(star => (
-                                        <button 
-                                            key={star}
-                                            onClick={() => setRoomForm({...roomForm, score: star})}
-                                            style={{ 
-                                                flex: 1, padding: '20px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer',
-                                                background: roomForm.score >= star ? '#8b5cf6' : '#f8fafc',
-                                                color: roomForm.score >= star ? '#fff' : '#cbd5e1',
-                                                transition: '0.2s'
-                                            }}
-                                        >★</button>
-                                    ))}
-                                </div>
-                                
-                                <div style={{ textAlign: 'center', marginBottom: '20px', fontSize: '13px', fontWeight: 800, color: roomForm.score >= 3 ? '#10b981' : '#ef4444' }}>
-                                    Bu puana göre odadaki öğrencilere 
-                                    {roomForm.score === 5 ? ' +50 M-Coin eklenecek.' : 
-                                     roomForm.score === 4 ? ' +40 M-Coin eklenecek.' : 
-                                     roomForm.score === 3 ? ' +30 M-Coin eklenecek.' : 
-                                     roomForm.score === 2 ? ' -10 M-Coin (Ceza) kesilecek.' : 
-                                     ' -20 M-Coin (Ceza) kesilecek.'}
-                                </div>
-
-                                <button onClick={saveRoomInspection} disabled={isHygieneSaving} className="premium-btn" style={{ width: '100%', padding: '20px', background: '#8b5cf6', color: 'white', fontWeight: 900, fontSize: '16px' }}>
-                                    {isHygieneSaving ? '⏳ İşleniyor...' : '✅ ODA DENETİMİNİ KAYDET'}
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* 2. PANEL: TEMİZLİK KONTROL (23 ÖĞRENCİ LİSTESİ) */}
+            {/* 2. PANEL: TEMİZLİK KONTROL (ÖĞRENCİ LİSTESİ) */}
             {hygieneTab === 'general' && (
                 <div className="fade-in">
                     <div style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>

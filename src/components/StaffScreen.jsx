@@ -1177,60 +1177,18 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
             {/* ÜST SEKME MENÜSÜ */}
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', background: 'white', padding: '10px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
                 <button onClick={() => setHygieneTab('wc')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'wc' ? '#0ea5e9' : 'transparent', color: hygieneTab === 'wc' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🚽 WC Paneli</button>
-              <button onClick={() => setHygieneTab('general')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'general' ? '#10b981' : 'transparent', color: hygieneTab === 'general' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🧹 Temizlik Kontrol</button>
-                <button onClick={() => setHygieneTab('rooms')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'rooms' ? '#8b5cf6' : 'transparent', color: hygieneTab === 'rooms' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🛏️ Oda Kontrol</button>
+                <button onClick={() => setHygieneTab('general')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'general' ? '#10b981' : 'transparent', color: hygieneTab === 'general' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🧹 Temizlik Kontrol</button>
                 <button onClick={() => setHygieneTab('rooms')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'rooms' ? '#8b5cf6' : 'transparent', color: hygieneTab === 'rooms' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🛏️ Oda Kontrol</button>
                 <button onClick={() => setHygieneTab('history')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'history' ? '#f59e0b' : 'transparent', color: hygieneTab === 'history' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>📜 Geçmiş</button>
                 <button onClick={() => setCurrentModule(null)} style={{ padding: '12px 20px', borderRadius: '20px', border: 'none', background: '#f1f5f9', color: '#475569', fontWeight: 900, cursor: 'pointer' }}>🔙</button>
             </div>
-{/* PERSONEL ODA DENETİM PANELİ */}
-            {hygieneTab === 'rooms' && (
-                <div className="fade-in">
-                    <div style={{ background: '#ffffff', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
-                        <div style={{ marginBottom: '25px', borderBottom: '2px dashed #f1f5f9', paddingBottom: '15px' }}>
-                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🛏️ Oda Düzeni Denetimi</h3>
-                        </div>
 
-                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>ODA SEÇİN:</label>
-                        <select 
-                            value={roomForm.areaId} 
-                            onChange={(e) => setRoomForm({...roomForm, areaId: e.target.value})}
-                            className="elite-input" style={{ marginBottom: '25px' }}
-                        >
-                            <option value="">-- Denetlenecek Odayı Seçin --</option>
-                            {Object.entries(appData?.room_areas || {}).filter(([k, v]) => v.responsibles?.length > 0).map(([key, area]) => (
-                                <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Öğrenci)</option>
-                            ))}
-                        </select>
-
-                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>ODA DÜZENİ PUANI:</label>
-                        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                            {[1, 2, 3, 4, 5].map(star => (
-                                <button 
-                                    key={star}
-                                    onClick={() => setRoomForm({...roomForm, score: star})}
-                                    style={{ 
-                                        flex: 1, padding: '20px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer',
-                                        background: roomForm.score >= star ? '#8b5cf6' : '#f8fafc',
-                                        color: roomForm.score >= star ? '#fff' : '#cbd5e1',
-                                        transition: '0.2s'
-                                    }}
-                                >★</button>
-                            ))}
-                        </div>
-
-                        <button onClick={saveRoomInspection} disabled={isHygieneSaving} className="premium-btn" style={{ width: '100%', padding: '20px', background: '#8b5cf6', color: 'white', fontWeight: 900, fontSize: '16px' }}>
-                            {isHygieneSaving ? '⏳ İşleniyor...' : '✅ ODA DENETİMİNİ KAYDET'}
-                        </button>
-                    </div>
-                </div>
-            )}
             {/* 1. PANEL: WC DENETİM */}
             {hygieneTab === 'wc' && (
                 <div className="fade-in">
                     <div style={{ background: '#ffffff', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
                         <div style={{ marginBottom: '25px', borderBottom: '2px dashed #f1f5f9', paddingBottom: '15px' }}>
-                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🚽 WC Zimmet & Denetim</h3>
+                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🚽 WC Zimmet & Denetim (6 Tuvalet)</h3>
                         </div>
 
                         <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TUVALET SEÇİN:</label>
@@ -1283,7 +1241,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                 </div>
             )}
 
-            {/* YENİ PANEL: ODA DENETİMİ (SADECE PUANLAMA) */}
+            {/* PERSONEL ODA DENETİM PANELİ */}
             {hygieneTab === 'rooms' && (
                 <div className="fade-in">
                     <div style={{ background: '#ffffff', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
@@ -1300,7 +1258,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                         >
                             <option value="">-- Denetlenecek Odayı Seçin --</option>
                             {Object.entries(appData?.room_areas || {}).filter(([k, v]) => v.responsibles?.length > 0).map(([key, area]) => (
-                                <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Kişi)</option>
+                                <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Öğrenci)</option>
                             ))}
                         </select>
 
@@ -1351,7 +1309,33 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                         </div>
 
                         <div className="clean-scroll" style={{ maxHeight: '500px', overflowY: 'auto', marginBottom: '25px', paddingRight: '5px' }}>
-                            {(Object.keys(appData?.students || {})).map(student => (
+                            {(Object.keys(appData?.students || {})).length > 0 ? (Object.keys(appData.students)).map(student => (
+                                <div key={student} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', background: generalCleaningList[student]?.score ? '#f8fafc' : 'transparent', borderRadius: '15px', marginBottom: '5px' }}>
+                                    <div style={{ flex: '1 1 120px', fontWeight: 900, fontSize: '14px', color: '#0f172a' }}>{student}</div>
+                                    
+                                    <input 
+                                        placeholder="Temizlik Alanı (Örn: Mescid)" 
+                                        value={generalCleaningList[student]?.area || ''}
+                                        onChange={(e) => setGeneralCleaningList({...generalCleaningList, [student]: {...(generalCleaningList[student] || {}), area: e.target.value}})}
+                                        className="elite-input" style={{ flex: '2 1 180px', padding: '12px 15px', fontSize: '13px', background: 'white', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none' }}
+                                    />
+                                    
+                                    <div style={{ flex: '1 1 180px', display: 'flex', gap: '4px' }}>
+                                        {[1,2,3,4,5].map(s => (
+                                            <button 
+                                                key={s} 
+                                                onClick={() => setGeneralCleaningList({...generalCleaningList, [student]: {...(generalCleaningList[student] || {}), score: s}})} 
+                                                style={{ 
+                                                    flex: 1, padding: '10px 0', border: 'none', borderRadius: '10px', cursor: 'pointer',
+                                                    background: (generalCleaningList[student]?.score || 0) >= s ? '#10b981' : '#f1f5f9', 
+                                                    color: (generalCleaningList[student]?.score || 0) >= s ? 'white' : '#cbd5e1', 
+                                                    fontSize: '14px', transition: '0.2s'
+                                                }}
+                                            >★</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )) : roster.map(student => (
                                 <div key={student} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', background: generalCleaningList[student]?.score ? '#f8fafc' : 'transparent', borderRadius: '15px', marginBottom: '5px' }}>
                                     <div style={{ flex: '1 1 120px', fontWeight: 900, fontSize: '14px', color: '#0f172a' }}>{student}</div>
                                     
