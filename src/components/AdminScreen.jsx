@@ -188,7 +188,61 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const [adminChatInput, setAdminChatInput] = useState(''); 
 
   const [banInput, setBanInput] = useState({ student: '', duration: '1', reason: '', photoUrl: '' });
-const [newTourney, setNewTourney] = useState({ name: '', game: 'FIFA 24', fee: '', p1: '', p2: '', p3: '', device: 'ps5' });
+  const [newPenaltyCard, setNewPenaltyCard] = useState({ name: '', mcoin: 0, banDays: 0, rp: 0 });
+  const [newTourney, setNewTourney] = useState({ name: '', game: 'FIFA 24', fee: '', p1: '', p2: '', p3: '', device: 'ps5' });
+
+  const handleCreatePenaltyCard = () => {
+      if (!newPenaltyCard.name) return alert("Ceza adı zorunludur!");
+      const cId = `penalty_${Date.now()}`;
+      db.ref(`mavikent_premium/penalty_cards/${cId}`).set({
+          name: newPenaltyCard.name,
+          mcoin: parseInt(newPenaltyCard.mcoin) || 0,
+          banDays: parseInt(newPenaltyCard.banDays) || 0,
+          rp: parseInt(newPenaltyCard.rp) || 0
+      });
+      alert("✅ Ceza Kartı sisteme eklendi!");
+      setNewPenaltyCard({ name: '', mcoin: 0, banDays: 0, rp: 0 });
+  };
+
+  const applyPenaltyCard = (studentName, cardId) => {
+      const card = appData?.penalty_cards?.[cardId];
+      if (!card) return alert("Hata: Kart bulunamadı!");
+      if (!window.confirm(`${studentName} adlı öğrenciye '${card.name}' cezası uygulanacak. Onaylıyor musunuz?`)) return;
+
+      const updates = {};
+      const timestamp = Date.now();
+
+      if (card.mcoin > 0) {
+          updates[`wallet/${studentName}`] = (Number(appData?.wallet?.[studentName]) || 0) - card.mcoin;
+          updates[`transactions/${studentName}/txn_pen_${timestamp}`] = { desc: `⚖️ Disiplin Cezası: ${card.name}`, amt: -card.mcoin, date: new Date().toLocaleString('tr-TR') };
+      }
+
+      if (card.rp > 0) {
+          updates[`season_score/${studentName}`] = (Number(appData?.season_score?.[studentName]) || 0) - card.rp;
+      }
+
+      if (card.banDays > 0) {
+          const expTime = timestamp + (card.banDays * 24 * 60 * 60 * 1000);
+          updates[`game_room_bans/${studentName}`] = { reason: `Disiplin Cezası: ${card.name}`, photoUrl: '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR') };
+          
+          Object.keys(appData?.game_room_appointments || {}).forEach(device => {
+              Object.keys(appData.game_room_appointments[device] || {}).forEach(day => {
+                  Object.keys(appData.game_room_appointments[device][day] || {}).forEach(slotId => {
+                      if (appData.game_room_appointments[device][day][slotId] === studentName) { updates[`game_room_appointments/${device}/${day}/${slotId}`] = null; }
+                  });
+              });
+          });
+      }
+
+      updates[`streaks/${studentName}`] = 0; 
+      updates[`daily_flags/${studentName}/broken`] = true;
+
+      db.ref('mavikent_premium').update(updates).then(() => {
+          alert(`✅ ${studentName} adlı öğrenciye ${card.name} cezası başarıyla uygulandı!`);
+          setSelectedStudent(null);
+          setModalType(null);
+      });
+  };
   const [tourneyDaysMap, setTourneyDaysMap] = useState({}); 
   const [newCustomSlot, setNewCustomSlot] = useState({ device: 'ps4', day: 'Pazartesi', time: '', price: '' });
 
@@ -1005,30 +1059,31 @@ const renderStudentGrid = (students, type) => {
 
             {dashboardView === 'degerler' && levelList.map(lvl => (<div key={lvl} onClick={() => { setCurrentModule('values_view'); setSelectedSession(lvl); }} className="premium-card card-hover"><div className="icon">🕌</div><div className="label">{lvl}</div></div>))}
             
-            {dashboardView === 'isleyis' && [ 
-              { id: 'okul', icon: '🏫', label: 'Okul Dönüş' },
-              { id: 'yoklama', icon: '📋', label: 'Yoklama' }, 
-              { id: 'telefon', icon: '📱', label: 'Telefon' }, 
-              { id: 'yatak', icon: '🛏️', label: 'Yatak / Dolap' }, 
-              { id: 'kanaat', icon: '✍️', label: 'Kanaat Notu' },
-              { id: 'devamsizlik', icon: '📉', label: 'Devamsızlık' }
-            ].map(mod => (
-              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
-            ))}
-            
-            {dashboardView === 'yonetim' && [ 
-              { id: 'admin_students', icon: '👥', label: 'ÖĞRENCİ / BİLET' }, 
-              { id: 'admin_quests', icon: '🎯', label: 'GÖREVLER' }, 
-              { id: 'admin_market', icon: '🛒', label: 'MARKET' }, 
-              { id: 'admin_teslimat', icon: '📦', label: 'TESLİMAT' }, 
-              { id: 'admin_lig', icon: '🏆', label: 'ELİT LİG' }, 
-              { id: 'admin_clans', icon: '🚩', label: 'KLANLAR' }, 
-              { id: 'admin_codes', icon: '🎟️', label: 'KODLAR' },
-              { id: 'admin_chat', icon: '💬', label: 'SOHBET YÖNETİMİ' }, 
-              { id: 'admin_settings', icon: '⚙️', label: 'AYARLAR' } 
-            ].map(mod => (
-              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
-            ))}
+            {dashboardView === 'isleyis' && [ 
+              { id: 'okul', icon: '🏫', label: 'Okul Dönüş' },
+              { id: 'yoklama', icon: '📋', label: 'Yoklama' }, 
+              { id: 'telefon', icon: '📱', label: 'Telefon' }, 
+              { id: 'yatak', icon: '🛏️', label: 'Yatak / Dolap' }, 
+              { id: 'tutanak', icon: '⚖️', label: 'Tutanak / Ceza' },
+              { id: 'devamsizlik', icon: '📉', label: 'Devamsızlık' }
+            ].map(mod => (
+              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
+            ))}
+            
+            {dashboardView === 'yonetim' && [ 
+              { id: 'admin_students', icon: '👥', label: 'ÖĞRENCİ / BİLET' }, 
+              { id: 'admin_discipline', icon: '📜', label: 'DİSİPLİN KURULU' },
+              { id: 'admin_quests', icon: '🎯', label: 'GÖREVLER' }, 
+              { id: 'admin_market', icon: '🛒', label: 'MARKET' }, 
+              { id: 'admin_teslimat', icon: '📦', label: 'TESLİMAT' }, 
+              { id: 'admin_lig', icon: '🏆', label: 'ELİT LİG' }, 
+              { id: 'admin_clans', icon: '🚩', label: 'KLANLAR' }, 
+              { id: 'admin_codes', icon: '🎟️', label: 'KODLAR' },
+              { id: 'admin_chat', icon: '💬', label: 'SOHBET YÖNETİMİ' }, 
+              { id: 'admin_settings', icon: '⚙️', label: 'AYARLAR' } 
+            ].map(mod => (
+              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
+            ))}
           </div>
         )}
 
@@ -1480,7 +1535,7 @@ const renderStudentGrid = (students, type) => {
             </div> 
         )}
         
-        {((currentModule === 'yoklama' && selectedSession) || ['telefon', 'yatak', 'kanaat', 'okul', 'devamsizlik'].includes(currentModule)) && renderStudentGrid(roster, 'isleyis')}
+        {((currentModule === 'yoklama' && selectedSession) || ['telefon', 'yatak', 'tutanak', 'okul', 'devamsizlik'].includes(currentModule)) && renderStudentGrid(roster, 'isleyis')}
         
         {/* EĞİTİM VE DEĞERLER EKRANLARI */}
         {currentModule === 'class_view' && (
@@ -1586,8 +1641,48 @@ const renderStudentGrid = (students, type) => {
           </div>
         )}
 
-        {/* ÖĞRENCİ YÖNETİMİ VE BİLET */}
-        {currentModule === 'admin_students' && (
+        {/* DİSİPLİN KURULU YÖNETİMİ */}
+        {currentModule === 'admin_discipline' && (
+           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div style={{ background: 'linear-gradient(135deg, #7f1d1d 0%, #450a0a 100%)', padding: '30px', borderRadius: '24px', color: 'white', boxShadow: '0 10px 20px rgba(127,29,29,0.3)' }}>
+                 <h3 style={{ margin: '0 0 5px 0', fontSize: '24px', fontWeight: 900 }}>📜 Yeni Ceza Kartı Oluştur</h3>
+                 <p style={{ margin: '0 0 20px 0', fontSize: '14px', fontWeight: 600, opacity: 0.9 }}>Öğrencilere atanacak standart ihlal ve ceza kurallarını belirleyin.</p>
+                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                    <input type="text" value={newPenaltyCard.name} onChange={e => setNewPenaltyCard({...newPenaltyCard, name: e.target.value})} placeholder="Ceza Adı (Örn: İzinsiz Dışarı Çıkma)" className="elite-input" style={{ gridColumn: '1 / -1' }} />
+                    <input type="number" value={newPenaltyCard.mcoin} onChange={e => setNewPenaltyCard({...newPenaltyCard, mcoin: e.target.value})} placeholder="M-Coin Kesintisi (Örn: 100)" className="elite-input" />
+                    <input type="number" value={newPenaltyCard.banDays} onChange={e => setNewPenaltyCard({...newPenaltyCard, banDays: e.target.value})} placeholder="Oyun Odası Ban (Gün)" className="elite-input" />
+                    <input type="number" value={newPenaltyCard.rp} onChange={e => setNewPenaltyCard({...newPenaltyCard, rp: e.target.value})} placeholder="RP Kesintisi (Örn: 5)" className="elite-input" />
+                    <button onClick={handleCreatePenaltyCard} className="premium-btn badge-glow" style={{ background: '#fca5a5', color: '#450a0a', gridColumn: '1 / -1', padding: '16px', marginTop: '10px' }}>CEZA KARTINI SİSTEME EKLE</button>
+                 </div>
+              </div>
+
+              <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                 <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '15px' }}>📋 Mevcut Ceza Yönetmeliği</h4>
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {Object.keys(appData?.penalty_cards || {}).length === 0 && <div style={{ color: '#94a3b8', fontWeight: 700, fontSize: '14px' }}>Henüz ceza kartı oluşturulmadı.</div>}
+                    {Object.keys(appData?.penalty_cards || {}).map(k => {
+                        const card = appData.penalty_cards[k];
+                        return (
+                            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                                <div>
+                                   <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>{card.name}</div>
+                                   <div style={{ fontSize: '13px', color: '#ef4444', fontWeight: 700, marginTop: '4px', display: 'flex', gap: '10px' }}>
+                                       {card.mcoin > 0 && <span>-{card.mcoin} M-Coin</span>}
+                                       {card.banDays > 0 && <span>{card.banDays} Gün Ban</span>}
+                                       {card.rp > 0 && <span>-{card.rp} RP</span>}
+                                   </div>
+                                </div>
+                                <button onClick={() => { if(window.confirm("Bu ceza kartı tamamen silinsin mi?")) db.ref(`mavikent_premium/penalty_cards/${k}`).remove(); }} className="premium-btn" style={{ background: '#fef2f2', color: '#ef4444', padding: '10px 15px' }}>🗑️ SİL</button>
+                            </div>
+                        )
+                    })}
+                 </div>
+              </div>
+           </div>
+        )}
+
+        {/* ÖĞRENCİ YÖNETİMİ VE BİLET */}
+        {currentModule === 'admin_students' && (
           <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
             <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
               <input value={newStudentName} onChange={e => setNewStudentName(e.target.value)} placeholder="Yeni Öğrenci Adı Soyadı" className="elite-input" style={{ flex: 1 }} />
@@ -2327,7 +2422,29 @@ const renderStudentGrid = (students, type) => {
             {isElite(selectedStudent) && <div style={{ fontSize: '13px', background: '#fde047', color: '#b45309', padding: '6px 14px', borderRadius: '12px', fontWeight: 900, marginBottom: '24px', display: 'inline-block' }}>👑 ELİT LİG BONUSU</div>}
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: isElite(selectedStudent) ? '0' : '24px' }}>
-                {currentModule === 'okul' && (
+              {currentModule === 'tutanak' && (
+                <>
+                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#ef4444', marginBottom: '10px' }}>Uygulanacak Cezayı Seçin:</div>
+                  {Object.keys(appData?.penalty_cards || {}).length === 0 ? (
+                      <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>Sistemde kayıtlı ceza kartı yok. Önce Yönetim panelinden oluşturun.</div>
+                  ) : (
+                      Object.keys(appData?.penalty_cards || {}).map(k => {
+                          const card = appData.penalty_cards[k];
+                          return (
+                              <button key={k} onClick={() => applyPenaltyCard(selectedStudent, k)} className="premium-btn" style={{ background: '#fef2f2', border: '1px solid #fca5a5 !important', color: '#7f1d1d', padding: '15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+                                  <span style={{ fontWeight: 900, fontSize: '16px' }}>{card.name}</span>
+                                  <span style={{ fontSize: '12px', fontWeight: 700 }}>
+                                      {card.mcoin > 0 && `-${card.mcoin} M-Coin `}
+                                      {card.banDays > 0 && ` | ${card.banDays} Gün Ban `}
+                                      {card.rp > 0 && ` | -${card.rp} RP `}
+                                  </span>
+                              </button>
+                          );
+                      })
+                  )}
+                </>
+              )}
+              {currentModule === 'okul' && (
                 <>
                   <button onClick={() => saveData('okul', 'p', 10)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🏠 DÖNDÜ (+10 M)</button>
                   <button onClick={() => saveData('okul', 'a', -20)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🚫 GELMEDİ (-20 M + 📉)</button>

@@ -350,6 +350,45 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
     setSelectedStudent(null); 
     setModalType(null);
   };
+  const applyPenaltyCard = (studentName, cardId) => {
+      const card = appData?.penalty_cards?.[cardId];
+      if (!card) return alert("Hata: Kart bulunamadı!");
+      if (!window.confirm(`${studentName} adlı öğrenciye '${card.name}' cezası uygulanacak. Onaylıyor musunuz?`)) return;
+
+      const updates = {};
+      const timestamp = Date.now();
+
+      if (card.mcoin > 0) {
+          updates[`wallet/${studentName}`] = (Number(appData?.wallet?.[studentName]) || 0) - card.mcoin;
+          updates[`transactions/${studentName}/txn_pen_${timestamp}`] = { desc: `⚖️ Disiplin Cezası: ${card.name}`, amt: -card.mcoin, date: new Date().toLocaleString('tr-TR') };
+      }
+
+      if (card.rp > 0) {
+          updates[`season_score/${studentName}`] = (Number(appData?.season_score?.[studentName]) || 0) - card.rp;
+      }
+
+      if (card.banDays > 0) {
+          const expTime = timestamp + (card.banDays * 24 * 60 * 60 * 1000);
+          updates[`game_room_bans/${studentName}`] = { reason: `Disiplin Cezası: ${card.name}`, photoUrl: '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR') };
+          
+          Object.keys(appData?.game_room_appointments || {}).forEach(device => {
+              Object.keys(appData.game_room_appointments[device] || {}).forEach(day => {
+                  Object.keys(appData.game_room_appointments[device][day] || {}).forEach(slotId => {
+                      if (appData.game_room_appointments[device][day][slotId] === studentName) { updates[`game_room_appointments/${device}/${day}/${slotId}`] = null; }
+                  });
+              });
+          });
+      }
+
+      updates[`streaks/${studentName}`] = 0; 
+      updates[`daily_flags/${studentName}/broken`] = true;
+
+      db.ref('mavikent_premium').update(updates).then(() => {
+          alert(`✅ ${studentName} adlı öğrenciye ${card.name} cezası başarıyla uygulandı!`);
+          setSelectedStudent(null);
+          setModalType(null);
+      });
+  };
 
   const saveEducationData = () => {
     const oldData = appData?.education_d?.[selectedStudent] || {}; 
@@ -773,6 +812,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
               { id: 'yoklama', icon: '📋', label: 'Yoklama' }, 
               { id: 'telefon', icon: '📱', label: 'Telefon' }, 
               { id: 'yatak', icon: '🛏️', label: 'Yatak / Dolap' },
+              { id: 'tutanak', icon: '⚖️', label: 'Tutanak / Ceza' },
               { id: 'devamsizlik', icon: '📉', label: 'Devamsızlık' }
             ].map(mod => (
               <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
@@ -1185,7 +1225,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
             </div> 
         )}
         
-        {((currentModule === 'yoklama' && selectedSession) || ['telefon', 'yatak', 'okul', 'devamsizlik'].includes(currentModule)) && renderStudentGrid(roster, 'isleyis')}
+        {((currentModule === 'yoklama' && selectedSession) || ['telefon', 'yatak', 'tutanak', 'okul', 'devamsizlik'].includes(currentModule)) && renderStudentGrid(roster, 'isleyis')}
         
         {/* EĞİTİM VE DEĞERLER EKRANLARI */}
         {currentModule === 'class_view' && (
@@ -1523,6 +1563,30 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
             {isElite(selectedStudent) && <div style={{ fontSize: '13px', background: '#fde047', color: '#b45309', padding: '6px 14px', borderRadius: '12px', fontWeight: 900, marginBottom: '24px', display: 'inline-block' }}>👑 ELİT LİG BONUSU</div>}
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: isElite(selectedStudent) ? '0' : '24px' }}>
+              
+              {currentModule === 'tutanak' && (
+                <>
+                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#ef4444', marginBottom: '10px' }}>Uygulanacak Cezayı Seçin:</div>
+                  {Object.keys(appData?.penalty_cards || {}).length === 0 ? (
+                      <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>Sistemde kayıtlı ceza kartı yok. Önce Yönetim panelinden oluşturun.</div>
+                  ) : (
+                      Object.keys(appData?.penalty_cards || {}).map(k => {
+                          const card = appData.penalty_cards[k];
+                          return (
+                              <button key={k} onClick={() => applyPenaltyCard(selectedStudent, k)} className="premium-btn" style={{ background: '#fef2f2', border: '1px solid #fca5a5 !important', color: '#7f1d1d', padding: '15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+                                  <span style={{ fontWeight: 900, fontSize: '16px' }}>{card.name}</span>
+                                  <span style={{ fontSize: '12px', fontWeight: 700 }}>
+                                      {card.mcoin > 0 && `-${card.mcoin} M-Coin `}
+                                      {card.banDays > 0 && ` | ${card.banDays} Gün Ban `}
+                                      {card.rp > 0 && ` | -${card.rp} RP `}
+                                  </span>
+                              </button>
+                          );
+                      })
+                  )}
+                </>
+              )}
+
               {currentModule === 'okul' && (
                 <>
                   <button onClick={() => saveData('okul', 'p', 10)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🏠 DÖNDÜ (+10 M)</button>
