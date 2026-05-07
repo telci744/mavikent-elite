@@ -373,6 +373,12 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   useEffect(() => { if (activeTab === 'chat' && chatContainerRef.current) { chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; } }, [activeTab, appData?.global_chat]);
 
   useEffect(() => {
+      if(safeName) {
+          db.ref(`mavikent_premium/last_logins/${safeName}`).set(new Date().toLocaleString('tr-TR'));
+      }
+  }, [safeName]);
+
+  useEffect(() => {
       if (!safeName || !appData) return;
       const streakData = appData?.active_cards?.[safeName]?.streak;
       if (streakData && streakData.end && Date.now() >= streakData.end) {
@@ -1218,7 +1224,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999999, padding: '20px', backdropFilter: 'blur(8px)' }}>
           <div style={{ background: '#ffffff', borderRadius: '32px', width: '100%', maxWidth: '450px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 60px rgba(0,0,0,0.4)', animation: 'popIn 0.3s forwards', overflow: 'hidden' }}>
              <div style={{ padding: '30px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div><h2 style={{ margin: 0, fontSize: '22px', fontWeight: 900, color: '#0f172a' }}>💳 Cüzdan Özeti</h2></div>
+                <div><h2 style={{ margin: 0, fontSize: '22px', fontWeight: 900, color: '#0f172a' }}>📜 Puan ve Hesap Geçmişi</h2></div>
                 <button onClick={() => setShowTxnModal(false)} className="profile-btn" style={{ background: '#f8fafc', padding: '10px 15px', color: '#64748b' }}>✕</button>
              </div>
              <div className="clean-scroll" style={{ padding: '20px 30px', overflowY: 'auto', flex: 1 }}>
@@ -1362,7 +1368,8 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                 <div className="grid-mobile-2" style={{ marginBottom: '25px', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
                     <div style={{ background: '#fef3c7', borderRadius: '20px', padding: '20px', border: '1px solid #fde68a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#b45309' }}>🏆 RP SIRASI</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#92400e' }}>{myRpRank}.</span></div>
                     <div style={{ background: '#ecfdf5', borderRadius: '20px', padding: '20px', border: '1px solid #a7f3d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#047857' }}>💳 ZENGİNLİK</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#064e3b' }}>{myWealthRank}.</span></div>
-                    <div style={{ background: '#eff6ff', borderRadius: '20px', padding: '20px', border: '1px solid #bfdbfe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#1d4ed8' }}>🏅 KATILIM</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#1e3a8a' }}>{myXpRank}.</span></div>
+                   <div style={{ background: '#eff6ff', borderRadius: '20px', padding: '20px', border: '1px solid #bfdbfe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#1d4ed8' }}>🏅 KATILIM</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#1e3a8a' }}>{myXpRank}.</span></div>
+                    <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '20px', border: '1px solid #fecaca', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gridColumn: '1 / -1' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#991b1b' }}>📉 TOPLAM DEVAMSIZLIK</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#ef4444' }}>{appData?.absences?.[safeName] || 0} GÜN</span></div>
                 </div>
 
                 <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '24px', padding: '24px' }}>
@@ -1373,6 +1380,10 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
 
                 {/* 🍽️ ZAMAN KİLİTLİ 3 ÖĞÜNLÜ YEMEK PUANLAMA BİLEŞENİ BURADA! */}
                 <YemekPuanlama ogrenciAdi={safeName} />
+
+                <button onClick={() => setShowTxnModal(true)} className="premium-btn card-hover" style={{ width: '100%', background: 'linear-gradient(135deg, #1e293b, #0f172a)', color: 'white', padding: '18px', borderRadius: '24px', marginTop: '25px', fontSize: '15px', fontWeight: 900, border: '1px solid #334155', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+                    📜 DETAYLI PUAN VE HESAP GEÇMİŞİM
+                </button>
 
                 {myGameAppointments.length > 0 && (
                     <div style={{ background: '#fffbeb', border: '2px solid #fde047', borderRadius: '24px', padding: '25px', marginTop: '25px' }}>

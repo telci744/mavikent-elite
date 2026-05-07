@@ -307,11 +307,12 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
     if (!selectedStudent) return;
     const finalPts = getCalculatedPoints(selectedStudent, basePts, type);
     const updates = {};
-    const isFail = status === 'a' || status === 'l' || (type === 'yatak' && basePts === 0) || (type === 'telefon' && status === 'a');
+    const todayStr = new Date().toDateString();
+    const isFail = status === 'a' || status === 'x' || status === 'l' || (type === 'yatak' && basePts === 0) || (type === 'telefon' && status === 'a');
     
     if (isFail) {
         const streakData = appData?.active_cards?.[selectedStudent]?.streak;
-        const hasStreakSaver = streakData && (streakData.date === new Date().toDateString() || (streakData.end && streakData.end > Date.now()));
+        const hasStreakSaver = streakData && (streakData.date === todayStr || (streakData.end && streakData.end > Date.now()));
         if (hasStreakSaver) { 
             alert(`🛡️ ${selectedStudent} SERİ KORUMA KALKANI kullandı! Eksi aldı ama serisi bozulmadı.`); 
             updates[`active_cards/${selectedStudent}/streak`] = null; 
@@ -325,14 +326,25 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
         updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalPts; 
         updates[`xp/${selectedStudent}`] = Math.max(0, (Number(appData?.xp?.[selectedStudent]) || 0) + (basePts * 10)); 
         const tId = `txn_${Date.now()}_${Math.floor(Math.random()*1000)}`;
-        let descText = type === 'kanaat' ? 'Personel Kanaat Notu' : (type === 'yoklama' ? 'Yoklama Puanı' : (type === 'telefon' ? 'Telefon Teslim' : 'Yatak/Dolap Düzeni'));
-        updates[`transactions/${selectedStudent}/${tId}`] = { desc: descText, amt: finalPts, date: new Date().toLocaleString('tr-TR') };
+        let desc = type === 'yoklama' ? 'Yoklama Puanı' : (type === 'telefon' ? 'Telefon Teslim' : (type === 'okul' ? 'Okul Dönüş Yoklaması' : 'Yatak/Dolap Düzeni'));
+        updates[`transactions/${selectedStudent}/${tId}`] = { desc, amt: finalPts, date: new Date().toLocaleString('tr-TR') };
     }
     
-    if (type === 'yoklama') updates[`yoklama_d/${selectedStudent}/sessions/${selectedSession}`] = { st: status, pts: finalPts };
-    else if (type === 'telefon') updates[`telefon_d/${selectedStudent}/sessions/gunluk`] = { st: status, pts: finalPts };
-    else if (type === 'kanaat') updates[`kanaat_w/${selectedStudent}`] = (Number(appData?.kanaat_w?.[selectedStudent]) || 0) + finalPts;
-    else if (type === 'yatak') updates[`yatak_d/${selectedStudent}/${status}_pts`] = finalPts; 
+    if (type === 'okul') {
+        updates[`daily_status/${todayStr}/${selectedStudent}`] = status;
+        if (status === 'a') { 
+            const currentAbs = Number(appData?.absences?.[selectedStudent] || 0) + 1;
+            updates[`absences/${selectedStudent}`] = currentAbs;
+            if (currentAbs % 10 === 0) { 
+                updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalPts - 100;
+                updates[`transactions/${selectedStudent}/abs_fine_${Date.now()}`] = { desc: '🚨 10 Günlük Devamsızlık Cezası', amt: -100, date: new Date().toLocaleString('tr-TR') };
+                alert(`🚨 ${selectedStudent} 10. devamsızlığını yaptı! Hesabından ekstra 100 M-Coin düşüldü.`);
+            }
+        }
+    }
+    else if (type === 'yoklama') updates[`yoklama_d/${todayStr}/${selectedStudent}/sessions/${selectedSession}`] = { st: status, pts: finalPts };
+    else if (type === 'telefon') updates[`telefon_d/${todayStr}/${selectedStudent}/sessions/gunluk`] = { st: status, pts: finalPts };
+    else if (type === 'yatak') updates[`yatak_d/${todayStr}/${selectedStudent}/${status}_pts`] = finalPts; 
     
     db.ref('mavikent_premium').update(updates); 
     setSelectedStudent(null); 
@@ -573,19 +585,65 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
       }, 300);
   };
 
-  const renderStudentGrid = (students, type) => (
+  const renderStudentGrid = (students, type) => {
+    const todayStr = new Date().toDateString();
+    
+    if (currentModule === 'devamsizlik') {
+        return (
+            <div className="fade-in" style={{ gridColumn: '1 / -1', background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px rgba(0,0,0,0.05)' }}>
+                <h3 style={{ marginBottom: '25px', fontWeight: 900, color: '#0f172a', textAlign: 'center', fontSize: '24px' }}>📉 Genel Devamsızlık Çizelgesi</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
+                    {[...students].sort((a,b) => (appData?.absences?.[b] || 0) - (appData?.absences?.[a] || 0)).map((n, index) => (
+                        <div key={n} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', background: '#f8fafc', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                <div style={{ background: '#0f172a', color: '#d4af37', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '13px' }}>{index + 1}</div>
+                                <span style={{ fontWeight: 900, color: '#0f172a', fontSize: '15px' }}>{n}</span>
+                            </div>
+                            <span style={{ fontWeight: 900, fontSize: '14px', background: (appData?.absences?.[n] || 0) >= 8 ? '#fef2f2' : '#f1f5f9', color: (appData?.absences?.[n] || 0) >= 8 ? '#ef4444' : '#0f172a', padding: '8px 16px', borderRadius: '12px' }}>{appData?.absences?.[n] || 0} GÜN</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    return (
     <div className="grid-mobile-2">
       {students.map(name => {
-        let bgColor = '#ffffff'; let subText = '';
+        const okulDurumu = appData?.daily_status?.[todayStr]?.[name];
+        const isNotAtYurt = okulDurumu === 'a'; // Okula gelmediyse tüm modüllerde kilitlenir
         
-        if (currentModule === 'yoklama') { 
-            const st = appData?.yoklama_d?.[name]?.sessions?.[selectedSession]?.st; 
+        let bgColor = '#ffffff'; let subText = ''; let isCompletedToday = false;
+        
+        if (currentModule === 'okul') {
+            if (okulDurumu) { 
+                isCompletedToday = true; 
+                bgColor = okulDurumu === 'p' ? '#ecfdf5' : (okulDurumu === 'a' ? '#fef2f2' : '#f1f5f9'); 
+                subText = okulDurumu === 'p' ? '✅ Döndü (İşlem Yapıldı)' : (okulDurumu === 'a' ? '❌ Gelmedi (İşlem Yapıldı)' : '✉️ İzinli (İşlem Yapıldı)');
+            } else {
+                subText = '⏳ Bekliyor';
+            }
+        }
+        else if (currentModule === 'yoklama') { 
+            const st = appData?.yoklama_d?.[todayStr]?.[name]?.sessions?.[selectedSession]?.st; 
+            if (st) { isCompletedToday = true; subText = '✅ Yoklama Alındı'; }
             if (st === 'p' || st === 't') bgColor = '#ecfdf5'; 
             if (st === 'a') bgColor = '#fef2f2'; 
             if (st === 'l') bgColor = '#fffbeb'; 
         } 
+        else if (currentModule === 'telefon') {
+            const st = appData?.telefon_d?.[todayStr]?.[name]?.sessions?.gunluk?.st;
+            if (st) { isCompletedToday = true; subText = '✅ İşlem Yapıldı'; }
+            if (st === 'p' || st === 'e') bgColor = '#ecfdf5';
+            if (st === 'a') bgColor = '#fef2f2';
+        }
+        else if (currentModule === 'yatak') {
+            const yt = appData?.yatak_d?.[todayStr]?.[name];
+            if (yt && yt.yatak_pts !== undefined && yt.dolap_pts !== undefined) { isCompletedToday = true; subText = '✅ İşlem Yapıldı'; }
+            if (yt) bgColor = '#f0f9ff';
+        }
         else if (currentModule === 'values_view') { 
-            if (appData?.values_edu_d?.[name]?.[new Date().toDateString()]?.done) bgColor = '#ecfdf5'; 
+            if (appData?.values_edu_d?.[name]?.[todayStr]?.done) { bgColor = '#ecfdf5'; isCompletedToday = true; }
         } 
         else if (currentModule === 'class_view') { 
             const d = appData?.education_d?.[name]; 
@@ -601,31 +659,39 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
         }
         
         const isEliteStud = isElite(name);
-        const has2X = (appData?.active_cards?.[name]?.multiplier?.date === new Date().toDateString()) || (appData?.settings?.global_event === '2x_xp');
+        const has2X = (appData?.active_cards?.[name]?.multiplier?.date === todayStr) || (appData?.settings?.global_event === '2x_xp');
         const streakData = appData?.active_cards?.[name]?.streak;
-        const hasStreak = streakData && (streakData.date === new Date().toDateString() || (streakData.end && streakData.end > Date.now()));
+        const hasStreak = streakData && (streakData.date === todayStr || (streakData.end && streakData.end > Date.now()));
+        const isDisabled = isNotAtYurt && currentModule !== 'okul';
 
         return (
           <div key={name} onClick={() => { 
+                if (isDisabled || isCompletedToday) {
+                    if (isCompletedToday && currentModule === 'okul') alert(`⚠️ ${name} için bugünün Okul Dönüş işlemi zaten yapılmış!\n\nGünde sadece bir kez işlem yapılabilir.`);
+                    return;
+                }
                 setSelectedStudent(name); 
                 if (type === 'isleyis') setModalType('isleyis');
                 else if (type === 'egitim_ders') { setEduData({ lessons: appData?.education_d?.[name]?.lessons || [], pages: appData?.education_d?.[name]?.pages || 0, questions: appData?.education_d?.[name]?.questions || 0 }); setModalType('egitim'); }
                 else if (type === 'egitim_deneme') { setExamData(appData?.exams?.[name]?.deneme || {}); setModalType('deneme'); }
                 else if (type === 'egitim_yazili') { setExamData(appData?.exams?.[name]?.yazili || {}); setModalType('yazili'); }
              }} 
-               className="card-hover" style={{ background: bgColor, border: isEliteStud ? '2px solid #d4af37' : 'none', padding: '24px 16px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', color: '#0f172a', cursor: 'pointer' }}>
+               className="card-hover" style={{ background: isDisabled ? '#e2e8f0' : bgColor, border: isEliteStud && !isDisabled ? '2px solid #d4af37' : 'none', padding: '24px 16px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', color: '#0f172a', cursor: (isDisabled || isCompletedToday) ? 'not-allowed' : 'pointer', opacity: (isDisabled || isCompletedToday) ? 0.7 : 1, transition: 'all 0.3s' }}>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                {isEliteStud && <span style={{ fontSize: '18px' }} title="Elit Lig">👑</span>}
-                {has2X && <span style={{ background: 'linear-gradient(135deg, #f59e0b, #b45309)', color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900, boxShadow: '0 2px 4px rgba(245,158,11,0.3)' }}>⚡ 2X AKTİF</span>}
-                {hasStreak && <span style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900, boxShadow: '0 2px 4px rgba(59,130,246,0.3)' }}>🛡️ KORUMA</span>}
+                {isCompletedToday && <span style={{ fontSize: '18px' }} title="Tamamlandı">✅</span>}
+                {isDisabled && <span style={{ fontSize: '18px' }} title="Kurumda Yok">🚫</span>}
+                {isEliteStud && !isCompletedToday && !isDisabled && <span style={{ fontSize: '18px' }} title="Elit Lig">👑</span>}
+                {has2X && <span style={{ background: 'linear-gradient(135deg, #f59e0b, #b45309)', color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900, boxShadow: '0 2px 4px rgba(245,158,11,0.3)' }}>⚡ 2X</span>}
+                {hasStreak && <span style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900, boxShadow: '0 2px 4px rgba(59,130,246,0.3)' }}>🛡️</span>}
             </div>
-            <div style={{ fontWeight: 800, fontSize: '15px' }}>{name}</div>
-            {subText && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px', fontWeight: 700 }}>{subText}</div>}
+            <div style={{ fontWeight: 800, fontSize: '15px', textDecoration: isCompletedToday ? 'line-through' : 'none' }}>{name}</div>
+            {isDisabled && <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 800, marginTop: '5px' }}>Kurumda Değil</div>}
+            {subText && <div style={{ fontSize: '12px', color: (isCompletedToday && currentModule === 'okul') ? '#10b981' : '#64748b', marginTop: '8px', fontWeight: 800 }}>{subText}</div>}
           </div>
         );
       })}
     </div>
-  );
+  )};
 
   return (
     <div className="fade-in" style={{ maxWidth: '1200px', margin: '0 auto', width: '100%', padding: '20px', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -703,10 +769,11 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
             {dashboardView === 'degerler' && levelList.map(lvl => (<div key={lvl} onClick={() => { setCurrentModule('values_view'); setSelectedSession(lvl); }} className="premium-card card-hover"><div className="icon">🕌</div><div className="label">{lvl}</div></div>))}
             
             {dashboardView === 'isleyis' && [ 
+              { id: 'okul', icon: '🏫', label: 'Okul Dönüş' },
               { id: 'yoklama', icon: '📋', label: 'Yoklama' }, 
               { id: 'telefon', icon: '📱', label: 'Telefon' }, 
-              { id: 'yatak', icon: '🛏️', label: 'Yatak / Dolap' }, 
-              { id: 'kanaat', icon: '✍️', label: 'Kanaat Notu' } 
+              { id: 'yatak', icon: '🛏️', label: 'Yatak / Dolap' },
+              { id: 'devamsizlik', icon: '📉', label: 'Devamsızlık' }
             ].map(mod => (
               <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
             ))}
@@ -1118,7 +1185,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
             </div> 
         )}
         
-        {((currentModule === 'yoklama' && selectedSession) || ['telefon', 'yatak', 'kanaat'].includes(currentModule)) && renderStudentGrid(roster, 'isleyis')}
+        {((currentModule === 'yoklama' && selectedSession) || ['telefon', 'yatak', 'okul', 'devamsizlik'].includes(currentModule)) && renderStudentGrid(roster, 'isleyis')}
         
         {/* EĞİTİM VE DEĞERLER EKRANLARI */}
         {currentModule === 'class_view' && (
@@ -1198,9 +1265,10 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                             className="elite-input" style={{ marginBottom: '25px', width: '100%', padding: '15px', borderRadius: '15px', border: '2px solid #e2e8f0', outline: 'none', fontWeight: 700 }}
                         >
                             <option value="">-- Denetlenecek WC Seçin --</option>
-                            {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
-                                <option key={key} value={key}>{area.name} ({area.responsibles?.length || 0} Kişi)</option>
-                            ))}
+                            {['wc_1', 'wc_2', 'wc_3', 'wc_4', 'wc_5', 'wc_6'].map(key => {
+                                const area = appData?.hygiene_areas?.[key];
+                                return area ? <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Kişi)</option> : null;
+                            })}
                         </select>
 
                         <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TEMİZLİK DURUMU:</label>
@@ -1230,12 +1298,18 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
 
                         {/* ANLIK ZİMMET LİSTESİ ÖNİZLEME */}
                         <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-                            {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
-                                <div key={key} style={{ background: '#f8fafc', padding: '12px', borderRadius: '15px', border: '1px solid #e2e8f0' }}>
-                                    <div style={{ fontWeight: 900, fontSize: '12px', color: '#0ea5e9', marginBottom: '5px' }}>{area.name}</div>
-                                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>{(area.responsibles || []).join(', ')}</div>
-                                </div>
-                            ))}
+                            {['wc_1', 'wc_2', 'wc_3', 'wc_4', 'wc_5', 'wc_6'].map(key => {
+                                const area = appData?.hygiene_areas?.[key];
+                                if(!area) return null;
+                                return (
+                                    <div key={key} style={{ background: '#f8fafc', padding: '12px', borderRadius: '15px', border: '1px solid #e2e8f0' }}>
+                                        <div style={{ fontWeight: 900, fontSize: '12px', color: '#0ea5e9', marginBottom: '5px' }}>{area.name}</div>
+                                        <div style={{ fontSize: '11px', fontWeight: 700, color: area.responsibles?.length > 0 ? '#64748b' : '#ef4444' }}>
+                                            {area.responsibles?.length > 0 ? area.responsibles.join(', ') : '⚠️ Nöbetçi Atanmadı'}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -1449,12 +1523,19 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
             {isElite(selectedStudent) && <div style={{ fontSize: '13px', background: '#fde047', color: '#b45309', padding: '6px 14px', borderRadius: '12px', fontWeight: 900, marginBottom: '24px', display: 'inline-block' }}>👑 ELİT LİG BONUSU</div>}
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: isElite(selectedStudent) ? '0' : '24px' }}>
+              {currentModule === 'okul' && (
+                <>
+                  <button onClick={() => saveData('okul', 'p', 10)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🏠 DÖNDÜ (+10 M)</button>
+                  <button onClick={() => saveData('okul', 'a', -20)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🚫 GELMEDİ (-20 M + 📉)</button>
+                  <button onClick={() => saveData('okul', 'i', 0)} className="premium-btn" style={{ background: '#64748b', color: 'white', padding: '20px' }}>✉️ İZİNLİ (0 M)</button>
+                </>
+              )}
               {currentModule === 'yoklama' && (
                 <>
                   <button onClick={() => saveData('yoklama', 't', 3)} className="premium-btn" style={{ background: '#d4af37', color: 'white', padding: '20px' }}>👳‍♂️ TAKKELİ (+{getCalculatedPoints(selectedStudent, 3, 'yoklama')} M)</button>
                   <button onClick={() => saveData('yoklama', 'p', 2)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>✅ GELDİ (+{getCalculatedPoints(selectedStudent, 2, 'yoklama')} M)</button>
                   <button onClick={() => saveData('yoklama', 'l', 1)} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '20px' }}>⏳ GEÇ (+{getCalculatedPoints(selectedStudent, 1, 'yoklama')} M)</button>
-                  <button onClick={() => saveData('yoklama', 'a', 0)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>❌ GELMEDİ (Seri Bozar)</button>
+                  <button onClick={() => saveData('yoklama', 'a', -3)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>❌ GELMEDİ (-3 M, Seri Bozar)</button>
                 </>
               )}
               {currentModule === 'telefon' && (
@@ -1470,12 +1551,6 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                   <button onClick={() => saveData('yatak', 'yatak', 0)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🕸️ YATAK BOZUK (Seri Bozar)</button>
                   <button onClick={() => saveData('yatak', 'dolap', 1)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🚪 DOLAP DÜZENLİ (+{getCalculatedPoints(selectedStudent, 1, 'yatak')} M)</button>
                   <button onClick={() => saveData('yatak', 'dolap', 0)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🏚️ DOLAP BOZUK (Seri Bozar)</button>
-                </>
-              )}
-              {currentModule === 'kanaat' && (
-                <>
-                  <input id="kanaatInput" type="number" placeholder="Puan (Örn: 10 veya -5)" className="elite-input" style={{ padding: '20px', fontSize: '20px', textAlign: 'center', marginBottom: '16px' }} />
-                  <button onClick={() => saveData('kanaat', 'k', parseInt(document.getElementById('kanaatInput').value) || 0)} className="premium-btn" style={{ background: '#0f172a', color: 'white', padding: '20px', width: '100%' }}>KAYDET</button>
                 </>
               )}
               <button onClick={() => { setSelectedStudent(null); setModalType(null); }} className="btn-iptal" style={{ marginTop: '10px' }}>İPTAL</button>

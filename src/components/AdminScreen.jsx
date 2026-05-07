@@ -288,11 +288,12 @@ const saveData = (type, status, basePts) => {
     if (!selectedStudent) return;
     const finalPts = getCalculatedPoints(selectedStudent, basePts, type);
     const updates = {};
+    const todayStr = new Date().toDateString();
     const isFail = status === 'a' || status === 'l' || (type === 'yatak' && basePts === 0) || (type === 'telefon' && status === 'a');
     
     if (isFail) {
         const strk = appData?.active_cards?.[selectedStudent]?.streak;
-        if (strk && (strk.date === new Date().toDateString() || (strk.end && strk.end > Date.now()))) { 
+        if (strk && (strk.date === todayStr || (strk.end && strk.end > Date.now()))) { 
             alert(`🛡️ ${selectedStudent} SERİ KORUMA KALKANI kullandı!`); updates[`active_cards/${selectedStudent}/streak`] = null; 
         } else { updates[`streaks/${selectedStudent}`] = 0; updates[`daily_flags/${selectedStudent}/broken`] = true; }
     }
@@ -301,18 +302,29 @@ const saveData = (type, status, basePts) => {
         updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalPts; 
         updates[`xp/${selectedStudent}`] = Math.max(0, (Number(appData?.xp?.[selectedStudent]) || 0) + (basePts * 10)); 
         const tId = `txn_${Date.now()}_${Math.floor(Math.random()*1000)}`;
-        updates[`transactions/${selectedStudent}/${tId}`] = { desc: type === 'kanaat' ? 'Yönetici Kanaat Notu' : (type === 'yoklama' ? 'Yoklama Puanı' : (type === 'telefon' ? 'Telefon Teslim' : 'Yatak/Dolap')), amt: finalPts, date: new Date().toLocaleString('tr-TR') };
+        let desc = type === 'kanaat' ? 'Yönetici Kanaat Notu' : (type === 'yoklama' ? 'Yoklama Puanı' : (type === 'telefon' ? 'Telefon Teslim' : (type === 'okul' ? 'Okul Dönüş Yoklaması' : 'Yatak/Dolap')));
+        updates[`transactions/${selectedStudent}/${tId}`] = { desc, amt: finalPts, date: new Date().toLocaleString('tr-TR') };
     }
     
-    const todayStr = new Date().toDateString();
-    if (type === 'yoklama') updates[`yoklama_d/${todayStr}/${selectedStudent}/sessions/${selectedSession}`] = { st: status, pts: finalPts };
+    if (type === 'okul') {
+        updates[`daily_status/${todayStr}/${selectedStudent}`] = status;
+        if (status === 'a') { 
+            const currentAbs = Number(appData?.absences?.[selectedStudent] || 0) + 1;
+            updates[`absences/${selectedStudent}`] = currentAbs;
+            if (currentAbs % 10 === 0) { 
+                updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalPts - 100;
+                updates[`transactions/${selectedStudent}/abs_fine_${Date.now()}`] = { desc: '🚨 10 Günlük Devamsızlık Cezası', amt: -100, date: new Date().toLocaleString('tr-TR') };
+                alert(`🚨 ${selectedStudent} 10. devamsızlığını yaptı! Hesabından ekstra 100 M-Coin düşüldü.`);
+            }
+        }
+    }
+    else if (type === 'yoklama') updates[`yoklama_d/${todayStr}/${selectedStudent}/sessions/${selectedSession}`] = { st: status, pts: finalPts };
     else if (type === 'telefon') updates[`telefon_d/${todayStr}/${selectedStudent}/sessions/gunluk`] = { st: status, pts: finalPts };
     else if (type === 'kanaat') updates[`kanaat_w/${selectedStudent}`] = (Number(appData?.kanaat_w?.[selectedStudent]) || 0) + finalPts;
     else if (type === 'yatak') updates[`yatak_d/${todayStr}/${selectedStudent}/${status}_pts`] = finalPts; 
     
     db.ref('mavikent_premium').update(updates); setSelectedStudent(null); setModalType(null);
   };
-
 const saveEducationData = () => {
     const todayStr = new Date().toDateString();
     const oldData = appData?.education_d?.[selectedStudent] || {}; 
@@ -808,27 +820,59 @@ const saveEducationData = () => {
 
 const renderStudentGrid = (students, type) => {
     const todayStr = new Date().toDateString();
+    
+    if (currentModule === 'devamsizlik') {
+        return (
+            <div className="fade-in" style={{ gridColumn: '1 / -1', background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px rgba(0,0,0,0.05)' }}>
+                <h3 style={{ marginBottom: '25px', fontWeight: 900, color: '#0f172a', textAlign: 'center', fontSize: '24px' }}>📉 Genel Devamsızlık Çizelgesi</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
+                    {[...students].sort((a,b) => (appData?.absences?.[b] || 0) - (appData?.absences?.[a] || 0)).map((n, index) => (
+                        <div key={n} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', background: '#f8fafc', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                <div style={{ background: '#0f172a', color: '#d4af37', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '13px' }}>{index + 1}</div>
+                                <span style={{ fontWeight: 900, color: '#0f172a', fontSize: '15px' }}>{n}</span>
+                            </div>
+                            <span style={{ fontWeight: 900, fontSize: '14px', background: (appData?.absences?.[n] || 0) >= 8 ? '#fef2f2' : '#f1f5f9', color: (appData?.absences?.[n] || 0) >= 8 ? '#ef4444' : '#0f172a', padding: '8px 16px', borderRadius: '12px' }}>{appData?.absences?.[n] || 0} GÜN</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
     return (
     <div className="grid-mobile-2">
       {students.map(name => {
+        const okulDurumu = appData?.daily_status?.[todayStr]?.[name];
+        const isNotAtYurt = okulDurumu === 'a'; // Okula gelmediyse tüm modüllerde kilitlenir
+        
         let bgColor = '#ffffff'; let subText = ''; let isCompletedToday = false;
         
-        if (currentModule === 'yoklama') { 
+        if (currentModule === 'okul') {
+            if (okulDurumu) { 
+                isCompletedToday = true; 
+                bgColor = okulDurumu === 'p' ? '#ecfdf5' : (okulDurumu === 'a' ? '#fef2f2' : '#f1f5f9'); 
+                subText = okulDurumu === 'p' ? '✅ Döndü (İşlem Yapıldı)' : (okulDurumu === 'a' ? '❌ Gelmedi (İşlem Yapıldı)' : '✉️ İzinli (İşlem Yapıldı)');
+            } else {
+                subText = '⏳ Bekliyor';
+            }
+        }
+        else if (currentModule === 'yoklama') { 
             const st = appData?.yoklama_d?.[todayStr]?.[name]?.sessions?.[selectedSession]?.st; 
-            if (st) isCompletedToday = true;
+            if (st) { isCompletedToday = true; subText = '✅ Yoklama Alındı'; }
             if (st === 'p' || st === 't') bgColor = '#ecfdf5'; 
             if (st === 'a') bgColor = '#fef2f2'; 
             if (st === 'l') bgColor = '#fffbeb'; 
         } 
         else if (currentModule === 'telefon') {
             const st = appData?.telefon_d?.[todayStr]?.[name]?.sessions?.gunluk?.st;
-            if (st) isCompletedToday = true;
+            if (st) { isCompletedToday = true; subText = '✅ İşlem Yapıldı'; }
             if (st === 'p' || st === 'e') bgColor = '#ecfdf5';
             if (st === 'a') bgColor = '#fef2f2';
         }
         else if (currentModule === 'yatak') {
             const yt = appData?.yatak_d?.[todayStr]?.[name];
-            if (yt && yt.yatak_pts !== undefined && yt.dolap_pts !== undefined) isCompletedToday = true;
+            if (yt && yt.yatak_pts !== undefined && yt.dolap_pts !== undefined) { isCompletedToday = true; subText = '✅ İşlem Yapıldı'; }
             if (yt) bgColor = '#f0f9ff';
         }
         else if (currentModule === 'values_view') { 
@@ -851,25 +895,31 @@ const renderStudentGrid = (students, type) => {
         const has2X = (appData?.active_cards?.[name]?.multiplier?.date === todayStr) || (appData?.settings?.global_event === '2x_xp');
         const streakData = appData?.active_cards?.[name]?.streak;
         const hasStreak = streakData && (streakData.date === todayStr || (streakData.end && streakData.end > Date.now()));
+        const isDisabled = isNotAtYurt && currentModule !== 'okul';
 
         return (
           <div key={name} onClick={() => { 
-                if (isCompletedToday) return; // İşlem yapıldıysa TIKLANMAYI İPTAL ET
+                if (isDisabled || isCompletedToday) {
+                    if (isCompletedToday && currentModule === 'okul') alert(`⚠️ ${name} için bugünün Okul Dönüş işlemi zaten yapılmış!\n\nGünde sadece bir kez işlem yapılabilir.`);
+                    return;
+                }
                 setSelectedStudent(name); 
                 if (type === 'isleyis') setModalType('isleyis');
                 else if (type === 'egitim_ders') { setEduData({ lessons: appData?.education_d?.[name]?.lessons || [], pages: appData?.education_d?.[name]?.pages || 0, questions: appData?.education_d?.[name]?.questions || 0 }); setModalType('egitim'); }
                 else if (type === 'egitim_deneme') { setExamData(appData?.exams?.[name]?.deneme || {}); setModalType('deneme'); }
                 else if (type === 'egitim_yazili') { setExamData(appData?.exams?.[name]?.yazili || {}); setModalType('yazili'); }
              }} 
-               className="card-hover" style={{ background: bgColor, border: isEliteStud ? '2px solid #d4af37' : 'none', padding: '24px 16px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', color: '#0f172a', cursor: isCompletedToday ? 'not-allowed' : 'pointer', opacity: isCompletedToday ? 0.6 : 1 }}>
+               className="card-hover" style={{ background: isDisabled ? '#e2e8f0' : bgColor, border: isEliteStud && !isDisabled ? '2px solid #d4af37' : 'none', padding: '24px 16px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', color: '#0f172a', cursor: (isDisabled || isCompletedToday) ? 'not-allowed' : 'pointer', opacity: (isDisabled || isCompletedToday) ? 0.7 : 1, transition: 'all 0.3s' }}>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
                 {isCompletedToday && <span style={{ fontSize: '18px' }} title="Tamamlandı">✅</span>}
-                {isEliteStud && !isCompletedToday && <span style={{ fontSize: '18px' }} title="Elit Lig">👑</span>}
+                {isDisabled && <span style={{ fontSize: '18px' }} title="Kurumda Yok">🚫</span>}
+                {isEliteStud && !isCompletedToday && !isDisabled && <span style={{ fontSize: '18px' }} title="Elit Lig">👑</span>}
                 {has2X && <span style={{ background: 'linear-gradient(135deg, #f59e0b, #b45309)', color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900, boxShadow: '0 2px 4px rgba(245,158,11,0.3)' }}>⚡ 2X</span>}
                 {hasStreak && <span style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900, boxShadow: '0 2px 4px rgba(59,130,246,0.3)' }}>🛡️</span>}
             </div>
             <div style={{ fontWeight: 800, fontSize: '15px', textDecoration: isCompletedToday ? 'line-through' : 'none' }}>{name}</div>
-            {subText && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px', fontWeight: 700 }}>{subText}</div>}
+            {isDisabled && <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 800, marginTop: '5px' }}>Kurumda Değil</div>}
+            {subText && <div style={{ fontSize: '12px', color: (isCompletedToday && currentModule === 'okul') ? '#10b981' : '#64748b', marginTop: '8px', fontWeight: 800 }}>{subText}</div>}
           </div>
         );
       })}
@@ -956,10 +1006,12 @@ const renderStudentGrid = (students, type) => {
             {dashboardView === 'degerler' && levelList.map(lvl => (<div key={lvl} onClick={() => { setCurrentModule('values_view'); setSelectedSession(lvl); }} className="premium-card card-hover"><div className="icon">🕌</div><div className="label">{lvl}</div></div>))}
             
             {dashboardView === 'isleyis' && [ 
+              { id: 'okul', icon: '🏫', label: 'Okul Dönüş' },
               { id: 'yoklama', icon: '📋', label: 'Yoklama' }, 
               { id: 'telefon', icon: '📱', label: 'Telefon' }, 
               { id: 'yatak', icon: '🛏️', label: 'Yatak / Dolap' }, 
-              { id: 'kanaat', icon: '✍️', label: 'Kanaat Notu' } 
+              { id: 'kanaat', icon: '✍️', label: 'Kanaat Notu' },
+              { id: 'devamsizlik', icon: '📉', label: 'Devamsızlık' }
             ].map(mod => (
               <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
             ))}
@@ -1428,7 +1480,7 @@ const renderStudentGrid = (students, type) => {
             </div> 
         )}
         
-        {((currentModule === 'yoklama' && selectedSession) || ['telefon', 'yatak', 'kanaat'].includes(currentModule)) && renderStudentGrid(roster, 'isleyis')}
+        {((currentModule === 'yoklama' && selectedSession) || ['telefon', 'yatak', 'kanaat', 'okul', 'devamsizlik'].includes(currentModule)) && renderStudentGrid(roster, 'isleyis')}
         
         {/* EĞİTİM VE DEĞERLER EKRANLARI */}
         {currentModule === 'class_view' && (
@@ -1552,6 +1604,7 @@ const renderStudentGrid = (students, type) => {
                      <span style={{ color: '#f59e0b', marginLeft: '12px' }}>⭐ {appData?.xp?.[name] || 0} XP</span>
                      <span style={{ color: '#10b981', marginLeft: '12px' }}>⚔️ {appData?.season_score?.[name] || 0} RP</span>
                      <span style={{ color: '#8b5cf6', marginLeft: '12px' }}>🎟️ {appData?.tickets?.[name] || 0} BİLET</span>
+                     <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px' }}>🕒 Son Giriş: {appData?.last_logins?.[name] || 'Hiç Girmedi'}</div>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', width: '100%' }}>
                     <input type="text" placeholder="Kullanıcı" value={creds.username || ''} onChange={e => db.ref(`mavikent_premium/student_credentials/${name}/username`).set(e.target.value)} className="elite-input" style={{ padding: '12px 16px', fontSize: '13px', width: '110px' }} />
@@ -2007,9 +2060,10 @@ const renderStudentGrid = (students, type) => {
                                     className="elite-input" style={{ marginBottom: '25px' }}
                                 >
                                     <option value="">-- Denetlenecek WC Seçin --</option>
-                                    {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
-                                        <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Kişi)</option>
-                                    ))}
+                                    {['wc_1', 'wc_2', 'wc_3', 'wc_4', 'wc_5', 'wc_6'].map(key => {
+                                        const area = appData?.hygiene_areas?.[key];
+                                        return area ? <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Kişi)</option> : null;
+                                    })}
                                 </select>
 
                                 <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TEMİZLİK DURUMU:</label>
@@ -2033,12 +2087,18 @@ const renderStudentGrid = (students, type) => {
                                 </button>
 
                                 <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-                                    {Object.entries(appData?.hygiene_areas || {}).filter(([k, v]) => v.type === 'wc').map(([key, area]) => (
-                                        <div key={key} style={{ background: '#f8fafc', padding: '12px', borderRadius: '15px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ fontWeight: 900, fontSize: '12px', color: '#0ea5e9', marginBottom: '5px' }}>{area.name}</div>
-                                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>{(area.responsibles || []).join(', ')}</div>
-                                        </div>
-                                    ))}
+                                    {['wc_1', 'wc_2', 'wc_3', 'wc_4', 'wc_5', 'wc_6'].map(key => {
+                                        const area = appData?.hygiene_areas?.[key];
+                                        if(!area) return null;
+                                        return (
+                                            <div key={key} style={{ background: '#f8fafc', padding: '12px', borderRadius: '15px', border: '1px solid #e2e8f0' }}>
+                                                <div style={{ fontWeight: 900, fontSize: '12px', color: '#0ea5e9', marginBottom: '5px' }}>{area.name}</div>
+                                                <div style={{ fontSize: '11px', fontWeight: 700, color: area.responsibles?.length > 0 ? '#64748b' : '#ef4444' }}>
+                                                    {area.responsibles?.length > 0 ? area.responsibles.join(', ') : '⚠️ Nöbetçi Atanmadı'}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
@@ -2267,12 +2327,19 @@ const renderStudentGrid = (students, type) => {
             {isElite(selectedStudent) && <div style={{ fontSize: '13px', background: '#fde047', color: '#b45309', padding: '6px 14px', borderRadius: '12px', fontWeight: 900, marginBottom: '24px', display: 'inline-block' }}>👑 ELİT LİG BONUSU</div>}
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: isElite(selectedStudent) ? '0' : '24px' }}>
+                {currentModule === 'okul' && (
+                <>
+                  <button onClick={() => saveData('okul', 'p', 10)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🏠 DÖNDÜ (+10 M)</button>
+                  <button onClick={() => saveData('okul', 'a', -20)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🚫 GELMEDİ (-20 M + 📉)</button>
+                  <button onClick={() => saveData('okul', 'i', 0)} className="premium-btn" style={{ background: '#64748b', color: 'white', padding: '20px' }}>✉️ İZİNLİ (0 M)</button>
+                </>
+              )}
               {currentModule === 'yoklama' && (
                 <>
                   <button onClick={() => saveData('yoklama', 't', 3)} className="premium-btn" style={{ background: '#d4af37', color: 'white', padding: '20px' }}>👳‍♂️ TAKKELİ (+{getCalculatedPoints(selectedStudent, 3, 'yoklama')} M)</button>
                   <button onClick={() => saveData('yoklama', 'p', 2)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>✅ GELDİ (+{getCalculatedPoints(selectedStudent, 2, 'yoklama')} M)</button>
                   <button onClick={() => saveData('yoklama', 'l', 1)} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '20px' }}>⏳ GEÇ (+{getCalculatedPoints(selectedStudent, 1, 'yoklama')} M)</button>
-                  <button onClick={() => saveData('yoklama', 'a', 0)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>❌ GELMEDİ (Seri Bozar)</button>
+                  <button onClick={() => saveData('yoklama', 'a', -3)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>❌ GELMEDİ (-3 M, Seri Bozar)</button>
                 </>
               )}
               {currentModule === 'telefon' && (
