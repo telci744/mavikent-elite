@@ -41,33 +41,40 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   };
 
   const saveRoomInspection = async () => {
-      if(!roomForm.areaId) return alert("Lütfen bir oda seçin!");
-      setIsHygieneSaving(true);
-      const area = appData.room_areas?.[roomForm.areaId];
-      const responsibles = area?.responsibles || [];
-      const coinImpact = getRoomCoinImpact(roomForm.score);
-      const updates = {};
-      const logId = `room_${Date.now()}`;
-      
-      updates[`hygiene_logs/${logId}`] = {
-          ...roomForm, areaName: area?.name || 'Bilinmeyen Oda',
-          responsibles: responsibles, timestamp: Date.now(),
-          inspector: "Personel", coinImpact, type: 'room'
-      };
+      if(!roomForm.areaId) return alert("Lütfen bir oda seçin!");
+      setIsHygieneSaving(true);
+      const area = appData.room_areas?.[roomForm.areaId];
+      const responsibles = area?.responsibles || [];
+      const coinImpact = getRoomCoinImpact(roomForm.score);
+      const updates = {};
+      const logId = `room_${Date.now()}`;
+      const todayStr = new Date().toDateString();
+      
+      updates[`hygiene_logs/${logId}`] = {
+          ...roomForm, areaName: area?.name || 'Bilinmeyen Oda',
+          responsibles: responsibles, timestamp: Date.now(),
+          inspector: "Personel", coinImpact, type: 'room'
+      };
 
-      responsibles.forEach(studentId => {
-          updates[`wallet/${studentId}`] = (Number(appData?.wallet?.[studentId]) || 0) + coinImpact;
-          updates[`transactions/${studentId}/txn_room_${Date.now()}`] = { 
-              desc: `${area?.name || 'Oda'} Denetimi (Personel)`, amt: coinImpact, date: new Date().toLocaleString('tr-TR') 
-          };
-      });
+      responsibles.forEach(studentId => {
+          if (appData?.daily_status?.[todayStr]?.[studentId] === 'a') return; // KURAL 2: O gün kurumda yoksa ödül/ceza puanı işlemez!
+          
+          updates[`wallet/${studentId}`] = (Number(appData?.wallet?.[studentId]) || 0) + coinImpact;
+          updates[`transactions/${studentId}/txn_room_${Date.now()}`] = { 
+              desc: `${area?.name || 'Oda'} Denetimi (Personel)`, amt: coinImpact, date: new Date().toLocaleString('tr-TR') 
+          };
+          
+          if (coinImpact !== 0) {
+              updates[`notifications/${studentId}/notif_${Date.now()}_${Math.floor(Math.random()*1000)}`] = { title: 'Oda Denetimi', message: `Oda denetiminden ${coinImpact > 0 ? '+'+coinImpact : coinImpact} M-Coin aldın!`, isRead: false, timestamp: Date.now() };
+          }
+      });
 
-      try {
-          await db.ref('mavikent_premium').update(updates);
-          alert(`✅ Oda denetimi kaydedildi! Odadaki öğrencilere ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
-          setRoomForm({ areaId: '', score: 5, note: '' });
-      } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
-  };
+      try {
+          await db.ref('mavikent_premium').update(updates);
+          alert(`✅ Oda denetimi kaydedildi! Odadaki öğrencilere ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
+          setRoomForm({ areaId: '', score: 5, note: '' });
+      } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
+  };
 
   const saveInspection = async () => {
       if(!hygieneForm.areaId) return alert("Lütfen bir alan seçin!");
@@ -118,7 +125,8 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   const [newProduct, setNewProduct] = useState({ barcode: '', name: '', price: '', stock: '' });
 
   // OYUN ODASI KONTROL İÇİN YENİ EKLENEN STATELER
-  const [evalForm, setEvalForm] = useState({ 
+const [tutanakTab, setTutanakTab] = useState('odul');
+  const [evalForm, setEvalForm] = useState({
       bookingId: '', student: '', device: '', day: '', slot: '', time: '', 
       attended: true, 
       q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' 
@@ -304,11 +312,16 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   };
 
   const saveData = (type, status, basePts) => {
-    if (!selectedStudent) return;
-    const finalPts = getCalculatedPoints(selectedStudent, basePts, type);
-    const updates = {};
+    if (!selectedStudent) return;
+    
     const todayStr = new Date().toDateString();
-    const isFail = status === 'a' || status === 'x' || status === 'l' || (type === 'yatak' && basePts === 0) || (type === 'telefon' && status === 'a');
+    if (appData?.daily_status?.[todayStr]?.[selectedStudent] === 'a' && type !== 'okul' && type !== 'yoklama') {
+        return alert(`⚠️ ${selectedStudent} adlı öğrenci bugün kurumda değil (İzinli/Gelmedi). Puan işlemi yapılamaz.`);
+    }
+
+    const finalPts = getCalculatedPoints(selectedStudent, basePts, type);
+    const updates = {};
+    const isFail = status === 'a' || status === 'x' || status === 'l' || (type === 'yatak' && basePts === 0) || (type === 'telefon' && status === 'a');
     
     if (isFail) {
         const streakData = appData?.active_cards?.[selectedStudent]?.streak;
@@ -351,44 +364,79 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
     setModalType(null);
   };
   const applyPenaltyCard = (studentName, cardId) => {
-      const card = appData?.penalty_cards?.[cardId];
-      if (!card) return alert("Hata: Kart bulunamadı!");
-      if (!window.confirm(`${studentName} adlı öğrenciye '${card.name}' cezası uygulanacak. Onaylıyor musunuz?`)) return;
+      const card = appData?.penalty_cards?.[cardId];
+      if (!card) return alert("Hata: Kart bulunamadı!");
+      if (!window.confirm(`${studentName} adlı öğrenciye '${card.name}' cezası uygulanacak. Onaylıyor musunuz?`)) return;
+
+      const updates = {};
+      const timestamp = Date.now();
+
+      if (card.mcoin > 0) {
+          updates[`wallet/${studentName}`] = (Number(appData?.wallet?.[studentName]) || 0) - card.mcoin;
+          updates[`transactions/${studentName}/txn_pen_${timestamp}`] = { desc: `⚖️ Disiplin Cezası: ${card.name}`, amt: -card.mcoin, date: new Date().toLocaleString('tr-TR') };
+      }
+
+      if (card.rp > 0) {
+          updates[`season_score/${studentName}`] = (Number(appData?.season_score?.[studentName]) || 0) - card.rp;
+      }
+
+      if (card.banDays > 0) {
+          const expTime = timestamp + (card.banDays * 24 * 60 * 60 * 1000);
+          updates[`game_room_bans/${studentName}`] = { reason: `Disiplin Cezası: ${card.name}`, photoUrl: '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR') };
+          
+          Object.keys(appData?.game_room_appointments || {}).forEach(device => {
+              Object.keys(appData.game_room_appointments[device] || {}).forEach(day => {
+                  Object.keys(appData.game_room_appointments[device][day] || {}).forEach(slotId => {
+                      if (appData.game_room_appointments[device][day][slotId] === studentName) { updates[`game_room_appointments/${device}/${day}/${slotId}`] = null; }
+                  });
+              });
+          });
+      }
+
+      updates[`streaks/${studentName}`] = 0; 
+      updates[`daily_flags/${studentName}/broken`] = true;
+      updates[`notifications/${studentName}/notif_${timestamp}`] = { title: 'Disiplin İhlali!', message: `'${card.name}' kurallarını ihlal ettiğin için ceza aldın.`, isRead: false, timestamp };
+
+      db.ref('mavikent_premium').update(updates).then(() => {
+          alert(`✅ ${studentName} adlı öğrenciye ${card.name} cezası başarıyla uygulandı!`);
+          setSelectedStudent(null);
+          setModalType(null);
+      });
+  };
+
+  const applyRewardCard = (studentName, cardId) => {
+      const card = appData?.reward_cards?.[cardId];
+      if (!card) return alert("Hata: Ödül kartı bulunamadı!");
+      if (!window.confirm(`${studentName} adlı öğrenciye '${card.name}' ödülü verilecek. Onaylıyor musunuz?`)) return;
 
       const updates = {};
       const timestamp = Date.now();
 
-      if (card.mcoin > 0) {
-          updates[`wallet/${studentName}`] = (Number(appData?.wallet?.[studentName]) || 0) - card.mcoin;
-          updates[`transactions/${studentName}/txn_pen_${timestamp}`] = { desc: `⚖️ Disiplin Cezası: ${card.name}`, amt: -card.mcoin, date: new Date().toLocaleString('tr-TR') };
+      if (card.type === 'mcoin') {
+          if (card.amount1 > 0) {
+              updates[`wallet/${studentName}`] = (Number(appData?.wallet?.[studentName]) || 0) + Number(card.amount1);
+              updates[`transactions/${studentName}/txn_rew_${timestamp}`] = { desc: `🎁 Ödül: ${card.name}`, amt: Number(card.amount1), date: new Date().toLocaleString('tr-TR') };
+          }
+          if (card.amount2 > 0) updates[`season_score/${studentName}`] = (Number(appData?.season_score?.[studentName]) || 0) + Number(card.amount2);
+      } else if (card.type === 'joker') {
+          updates[`inventory/${studentName}/joker_ticket`] = (Number(appData?.inventory?.[studentName]?.joker_ticket) || 0) + Number(card.amount1);
+      } else if (card.type === 'box') {
+          const boxType = card.amount2 === '1' ? 'standart_bilet' : card.amount2 === '2' ? 'mega_bilet' : 'elit_bilet';
+          updates[`inventory/${studentName}/${boxType}`] = (Number(appData?.inventory?.[studentName]?.[boxType]) || 0) + Number(card.amount1);
+      } else if (card.type === 'discount') {
+          updates[`inventory/${studentName}/discount_rate`] = Number(card.amount1);
+      } else if (card.type === 'bounty') {
+          updates[`inventory/${studentName}/kings_bounty`] = { count: Number(card.amount1), amount: Number(card.amount2) };
       }
 
-      if (card.rp > 0) {
-          updates[`season_score/${studentName}`] = (Number(appData?.season_score?.[studentName]) || 0) - card.rp;
-      }
-
-      if (card.banDays > 0) {
-          const expTime = timestamp + (card.banDays * 24 * 60 * 60 * 1000);
-          updates[`game_room_bans/${studentName}`] = { reason: `Disiplin Cezası: ${card.name}`, photoUrl: '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR') };
-          
-          Object.keys(appData?.game_room_appointments || {}).forEach(device => {
-              Object.keys(appData.game_room_appointments[device] || {}).forEach(day => {
-                  Object.keys(appData.game_room_appointments[device][day] || {}).forEach(slotId => {
-                      if (appData.game_room_appointments[device][day][slotId] === studentName) { updates[`game_room_appointments/${device}/${day}/${slotId}`] = null; }
-                  });
-              });
-          });
-      }
-
-      updates[`streaks/${studentName}`] = 0; 
-      updates[`daily_flags/${studentName}/broken`] = true;
+      updates[`notifications/${studentName}/notif_${timestamp}`] = { title: 'Ödül Kazandın!', message: `'${card.name}' ödülü hesabına tanımlandı. Harikasın!`, isRead: false, timestamp };
 
       db.ref('mavikent_premium').update(updates).then(() => {
-          alert(`✅ ${studentName} adlı öğrenciye ${card.name} cezası başarıyla uygulandı!`);
+          alert(`✅ ${studentName} adlı öğrenciye ${card.name} ödülü başarıyla tanımlandı!`);
           setSelectedStudent(null);
           setModalType(null);
       });
-  };
+  };    
 
   const saveEducationData = () => {
     const oldData = appData?.education_d?.[selectedStudent] || {}; 
@@ -1565,26 +1613,58 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: isElite(selectedStudent) ? '0' : '24px' }}>
               
               {currentModule === 'tutanak' && (
-                <>
-                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#ef4444', marginBottom: '10px' }}>Uygulanacak Cezayı Seçin:</div>
-                  {Object.keys(appData?.penalty_cards || {}).length === 0 ? (
-                      <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>Sistemde kayıtlı ceza kartı yok. Önce Yönetim panelinden oluşturun.</div>
-                  ) : (
-                      Object.keys(appData?.penalty_cards || {}).map(k => {
-                          const card = appData.penalty_cards[k];
-                          return (
-                              <button key={k} onClick={() => applyPenaltyCard(selectedStudent, k)} className="premium-btn" style={{ background: '#fef2f2', border: '1px solid #fca5a5 !important', color: '#7f1d1d', padding: '15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-                                  <span style={{ fontWeight: 900, fontSize: '16px' }}>{card.name}</span>
-                                  <span style={{ fontSize: '12px', fontWeight: 700 }}>
-                                      {card.mcoin > 0 && `-${card.mcoin} M-Coin `}
-                                      {card.banDays > 0 && ` | ${card.banDays} Gün Ban `}
-                                      {card.rp > 0 && ` | -${card.rp} RP `}
-                                  </span>
-                              </button>
-                          );
-                      })
-                  )}
-                </>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <button onClick={() => setTutanakTab('odul')} className="premium-btn" style={{ flex: 1, background: tutanakTab === 'odul' ? '#10b981' : '#f1f5f9', color: tutanakTab === 'odul' ? 'white' : '#64748b', padding: '12px' }}>🎁 Ödül Ver</button>
+                        <button onClick={() => setTutanakTab('ceza')} className="premium-btn" style={{ flex: 1, background: tutanakTab === 'ceza' ? '#ef4444' : '#f1f5f9', color: tutanakTab === 'ceza' ? 'white' : '#64748b', padding: '12px' }}>⚖️ Ceza Yaz</button>
+                    </div>
+
+                    {tutanakTab === 'odul' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {Object.keys(appData?.reward_cards || {}).length === 0 ? (
+                                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>Kayıtlı ödül yok. Yönetimden ekleyin.</div>
+                            ) : (
+                                Object.keys(appData?.reward_cards || {}).map(k => {
+                                    const card = appData.reward_cards[k];
+                                    return (
+                                        <button key={k} onClick={() => applyRewardCard(selectedStudent, k)} className="premium-btn" style={{ background: '#ecfdf5', border: '1px solid #6ee7b7 !important', color: '#065f46', padding: '15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+                                            <span style={{ fontWeight: 900, fontSize: '16px' }}>{card.name}</span>
+                                            <span style={{ fontSize: '12px', fontWeight: 700 }}>
+                                                {card.type === 'mcoin' && `+${card.amount1} M-Coin | +${card.amount2} RP`}
+                                                {card.type === 'joker' && `${card.amount1}x Altın Bilet`}
+                                                {card.type === 'box' && `${card.amount1}x ${card.amount2 === '1' ? 'Standart' : card.amount2 === '2' ? 'Mega' : 'Elit'} Kutu`}
+                                                {card.type === 'discount' && `%${card.amount1} İndirim`}
+                                                {card.type === 'bounty' && `Kralın İkramı (${card.amount1} Kişi)`}
+                                            </span>
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
+                    )}
+
+                    {tutanakTab === 'ceza' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {Object.keys(appData?.penalty_cards || {}).length === 0 ? (
+                                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>Kayıtlı ceza yok.</div>
+                            ) : (
+                                Object.keys(appData?.penalty_cards || {}).map(k => {
+                                    const card = appData.penalty_cards[k];
+                                    return (
+                                        <button key={k} onClick={() => applyPenaltyCard(selectedStudent, k)} className="premium-btn" style={{ background: '#fef2f2', border: '1px solid #fca5a5 !important', color: '#7f1d1d', padding: '15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+                                            <span style={{ fontWeight: 900, fontSize: '16px' }}>{card.name}</span>
+                                            <span style={{ fontSize: '12px', fontWeight: 700 }}>
+                                                {card.mcoin > 0 && `-${card.mcoin} M-Coin `}
+                                                {card.banDays > 0 && ` | ${card.banDays} Gün Ban `}
+                                                {card.rp > 0 && ` | -${card.rp} RP `}
+                                            </span>
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
+                    )}
+                </div>
               )}
 
               {currentModule === 'okul' && (
@@ -1676,67 +1756,66 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
       {selectedStudent && (modalType === 'deneme' || modalType === 'yazili') && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', animation: 'fadeIn 0.3s ease-out' }}>
           <div style={{ backgroundColor: '#ffffff', padding: '40px', borderRadius: '32px', width: '100%', maxWidth: '450px', maxHeight: '90vh', overflowY: 'auto', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)', animation: 'popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)', position: 'relative' }}>
-             
-             <button onClick={() => {
-                 if(window.confirm(`${selectedStudent} adlı öğrencinin ${modalType === 'deneme' ? 'Deneme' : 'Yazılı'} geçmişi tamamen silinecek. Onaylıyor musun?`)) {
-                     db.ref(`mavikent_premium/exams/${selectedStudent}/${modalType}`).set(null);
-                     setExamData({});
-                     alert('Geçmiş başarıyla temizlendi!');
-                 }
-             }} style={{ position: 'absolute', top: '20px', right: '20px', background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5', padding: '8px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', transition: '0.2s' }}>🗑️ Geçmişi Sil</button>
+              
+              <button onClick={() => {
+                  if(window.confirm(`${selectedStudent} adlı öğrencinin ${modalType === 'deneme' ? 'Deneme' : 'Yazılı'} geçmişi tamamen silinecek. Onaylıyor musun?`)) {
+                      db.ref(`mavikent_premium/exams/${selectedStudent}/${modalType}`).set(null);
+                      setExamData({});
+                      alert('Geçmiş başarıyla temizlendi!');
+                  }
+              }} style={{ position: 'absolute', top: '20px', right: '20px', background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5', padding: '8px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', transition: '0.2s' }}>🗑️ Geçmişi Sil</button>
 
-             <h3 style={{ margin: '0 0 8px 0', color: '#0f172a', fontWeight: 900, fontSize: '28px', letterSpacing: '-0.5px' }}>{selectedStudent}</h3>
-             <div style={{ fontSize: '14px', color: '#0d9488', fontWeight: 900, marginBottom: '30px', letterSpacing: '1px' }}>{modalType === 'deneme' ? 'DETAYLI DENEME SINAVI (OPTİK)' : 'YAZILI GİRİŞİ'}</div>
-             
-             <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '24px', marginBottom: '24px', border: '1px solid #e2e8f0' }}>
-                 {examSubjects.map((sub, idx) => {
-                     const currentD = parseFloat(examData[`d_${idx}`]) || 0;
-                     const currentY = parseFloat(examData[`y_${idx}`]) || 0;
-                     const currentNet = (currentD - (currentY / 3)).toFixed(2);
-                     
-                     return (
-                     <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: idx !== examSubjects.length-1 ? '16px' : '0' }}>
-                         <span style={{ fontWeight: 800, fontSize: '15px', color: '#0f172a', width: '100px', textAlign: 'left' }}>{sub}</span>
-                         {modalType === 'deneme' ? (
-                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                 <input type="number" placeholder="D" value={examData[`d_${idx}`] || ''} onChange={e => setExamData({...examData, [`d_${idx}`]: e.target.value})} className="elite-input" style={{ width: '50px', padding: '10px 0', textAlign: 'center', fontSize: '14px', border: '1px solid #10b981 !important', color: '#047857', background: '#ecfdf5' }} title="Doğru Sayısı" />
-                                 <input type="number" placeholder="Y" value={examData[`y_${idx}`] || ''} onChange={e => setExamData({...examData, [`y_${idx}`]: e.target.value})} className="elite-input" style={{ width: '50px', padding: '10px 0', textAlign: 'center', fontSize: '14px', border: '1px solid #ef4444 !important', color: '#b91c1c', background: '#fef2f2' }} title="Yanlış Sayısı" />
-                                 <input type="number" placeholder="B" value={examData[`b_${idx}`] || ''} onChange={e => setExamData({...examData, [`b_${idx}`]: e.target.value})} className="elite-input" style={{ width: '50px', padding: '10px 0', textAlign: 'center', fontSize: '14px', border: '1px solid #94a3b8 !important', color: '#475569', background: '#f8fafc' }} title="Boş Sayısı" />
-                                 
-                                 <div style={{ width: '65px', padding: '10px 0', background: '#0f172a', color: 'white', borderRadius: '12px', fontWeight: 900, fontSize: '14px', textAlign: 'center' }} title="Ders Neti">
-                                     {currentNet}
-                                 </div>
-                             </div>
-                         ) : (
-                             <input type="number" placeholder="Not" value={examData[`p_${idx}`] || ''} onChange={e => setExamData({...examData, [`p_${idx}`]: e.target.value})} className="elite-input" style={{ width: '90px', padding: '12px 0', textAlign: 'center', fontSize: '16px' }} />
-                         )}
-                     </div>
-                 )})}
-             </div>
+              <h3 style={{ margin: '0 0 8px 0', color: '#0f172a', fontWeight: 900, fontSize: '28px', letterSpacing: '-0.5px' }}>{selectedStudent}</h3>
+              <div style={{ fontSize: '14px', color: '#0d9488', fontWeight: 900, marginBottom: '30px', letterSpacing: '1px' }}>{modalType === 'deneme' ? 'DETAYLI DENEME SINAVI (OPTİK)' : 'YAZILI GİRİŞİ'}</div>
+              
+              <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '24px', marginBottom: '24px', border: '1px solid #e2e8f0' }}>
+                  {examSubjects.map((sub, idx) => {
+                      const currentD = parseFloat(examData[`d_${idx}`]) || 0;
+                      const currentY = parseFloat(examData[`y_${idx}`]) || 0;
+                      const currentNet = (currentD - (currentY / 3)).toFixed(2);
+                      
+                      return (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: idx !== examSubjects.length-1 ? '16px' : '0' }}>
+                          <span style={{ fontWeight: 800, fontSize: '15px', color: '#0f172a', width: '100px', textAlign: 'left' }}>{sub}</span>
+                          {modalType === 'deneme' ? (
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                  <input type="number" placeholder="D" value={examData[`d_${idx}`] || ''} onChange={e => setExamData({...examData, [`d_${idx}`]: e.target.value})} className="elite-input" style={{ width: '50px', padding: '10px 0', textAlign: 'center', fontSize: '14px', border: '1px solid #10b981 !important', color: '#047857', background: '#ecfdf5' }} title="Doğru Sayısı" />
+                                  <input type="number" placeholder="Y" value={examData[`y_${idx}`] || ''} onChange={e => setExamData({...examData, [`y_${idx}`]: e.target.value})} className="elite-input" style={{ width: '50px', padding: '10px 0', textAlign: 'center', fontSize: '14px', border: '1px solid #ef4444 !important', color: '#b91c1c', background: '#fef2f2' }} title="Yanlış Sayısı" />
+                                  <input type="number" placeholder="B" value={examData[`b_${idx}`] || ''} onChange={e => setExamData({...examData, [`b_${idx}`]: e.target.value})} className="elite-input" style={{ width: '50px', padding: '10px 0', textAlign: 'center', fontSize: '14px', border: '1px solid #94a3b8 !important', color: '#475569', background: '#f8fafc' }} title="Boş Sayısı" />
+                                  
+                                  <div style={{ width: '65px', padding: '10px 0', background: '#0f172a', color: 'white', borderRadius: '12px', fontWeight: 900, fontSize: '14px', textAlign: 'center' }} title="Ders Neti">
+                                      {currentNet}
+                                  </div>
+                              </div>
+                          ) : (
+                              <input type="number" placeholder="Not" value={examData[`p_${idx}`] || ''} onChange={e => setExamData({...examData, [`p_${idx}`]: e.target.value})} className="elite-input" style={{ width: '90px', padding: '12px 0', textAlign: 'center', fontSize: '16px' }} />
+                          )}
+                      </div>
+                  )})}
+              </div>
 
-             {modalType === 'deneme' && (
-                 <div style={{ background: '#f0fdfa', border: '2px dashed #0d9488', padding: '15px', borderRadius: '16px', marginBottom: '20px', color: '#0f766e', fontWeight: 900, fontSize: '20px' }}>
-                     TOPLAM NET: {
-                         examSubjects.reduce((total, _, i) => {
-                             const d = parseFloat(examData[`d_${i}`]) || 0;
-                             const y = parseFloat(examData[`y_${i}`]) || 0;
-                             return total + (d - (y / 3));
-                         }, 0).toFixed(2)
-                     }
-                 </div>
-             )}
+              {modalType === 'deneme' && (
+                  <div style={{ background: '#f0fdfa', border: '2px dashed #0d9488', padding: '15px', borderRadius: '16px', marginBottom: '20px', color: '#0f766e', fontWeight: 900, fontSize: '20px' }}>
+                      TOPLAM NET: {
+                          examSubjects.reduce((total, _, i) => {
+                              const d = parseFloat(examData[`d_${i}`]) || 0;
+                              const y = parseFloat(examData[`y_${i}`]) || 0;
+                              return total + (d - (y / 3));
+                          }, 0).toFixed(2)
+                      }
+                  </div>
+              )}
 
-             <div style={{ textAlign: 'left', fontWeight: '900', fontSize: '14px', color: '#64748b', marginBottom: '10px', paddingLeft: '8px' }}>HEDEF {modalType === 'deneme' ? 'NET' : 'ORTALAMA'}:</div>
-             <input type="number" value={examData.target || ''} onChange={e => setExamData({...examData, target: e.target.value})} placeholder="Örn: 85" className="elite-input" style={{ width: '100%', padding: '20px', fontSize: '20px', textAlign: 'center', marginBottom: '35px' }} />
+              <div style={{ textAlign: 'left', fontWeight: '900', fontSize: '14px', color: '#64748b', marginBottom: '10px', paddingLeft: '8px' }}>HEDEF {modalType === 'deneme' ? 'NET' : 'ORTALAMA'}:</div>
+              <input type="number" value={examData.target || ''} onChange={e => setExamData({...examData, target: e.target.value})} placeholder="Örn: 85" className="elite-input" style={{ width: '100%', padding: '20px', fontSize: '20px', textAlign: 'center', marginBottom: '35px' }} />
 
-             <div style={{ display: 'flex', gap: '16px' }}>
-              <button onClick={() => { setSelectedStudent(null); setModalType(null); }} className="btn-iptal" style={{ flex: 1 }}>İPTAL</button>
-              <button onClick={() => saveExamData(modalType)} className="premium-btn" style={{ flex: 2, padding: '20px', background: '#0d9488', color: 'white', fontSize: '16px' }}>KAYDET</button>
-            </div>
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <button onClick={() => { setSelectedStudent(null); setModalType(null); }} className="btn-iptal" style={{ flex: 1 }}>İPTAL</button>
+                <button onClick={() => saveExamData(modalType)} className="premium-btn" style={{ flex: 2, padding: '20px', background: '#0d9488', color: 'white', fontSize: '16px' }}>KAYDET</button>
+              </div>
           </div>
         </div>
       )}
-
     </div>
   );
 };

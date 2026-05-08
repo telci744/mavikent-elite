@@ -226,10 +226,13 @@ const isMatchPlayable = (dateStr, timeStr) => {
 };
 
 const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
-  const safeName = String(studentName || '');
-  
-  const [activeTab, setActiveTab] = useState('home');
-  const [rankTab, setRankTab] = useState('rp');
+  const safeName = String(studentName || '');
+  
+  const [activeTab, setActiveTab] = useState('home');
+  const [rankTab, setRankTab] = useState('rp');
+
+  // Bildirimleri Oku (Sadece okunmamışları filtrele)
+  const unreadNotifications = Object.entries(appData?.notifications?.[safeName] || {}).filter(([id, notif]) => !notif.isRead).sort((a,b) => b[1].timestamp - a[1].timestamp);
   
   const [boxAnim, setBoxAnim] = useState({ active: false, type: '', step: 0, result: null, count: 1 });
   const [actionModal, setActionModal] = useState({ active: false, type: '', data: null });
@@ -611,48 +614,61 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const getJoker = (devId) => Number(appData?.joker_tickets?.[safeName]?.[devId] || 0);
 
   const handleBookGameSlot = (slot, currentBookedStr, capacity) => {
-      if (appData?.game_room_bans?.[safeName] && appData.game_room_bans[safeName].expiry > Date.now()) return alert("⛔ Oyun odasından banlısınız!");
-      
-      const bookedArray = currentBookedStr ? String(currentBookedStr).split(', ') : [];
-      if (bookedArray.includes(safeName)) return alert("Bu seansa zaten kayıtlısınız!");
-      if (bookedArray.length >= capacity) return alert("❌ Bu seans tamamen dolu!");
+      if (appData?.game_room_bans?.[safeName] && appData.game_room_bans[safeName].expiry > Date.now()) return alert("⛔ Oyun odasından banlısınız!");
+      
+      const bookedArray = currentBookedStr ? String(currentBookedStr).split(', ') : [];
+      if (bookedArray.includes(safeName)) return alert("Bu seansa zaten kayıtlısınız!");
+      if (bookedArray.length >= capacity) return alert("❌ Bu seans tamamen dolu!");
 
-      const slotPrice = parseInt(slot.price) || 0;
-      const myJokersForDevice = getJoker(gameDevice);
+      const slotPrice = parseInt(slot.price) || 0;
+      const universalJokers = Number(appData?.inventory?.[safeName]?.joker_ticket || 0);
+      const myJokersForDevice = getJoker(gameDevice);
 
-      let useJoker = false;
-      if (myJokersForDevice > 0) {
-          if (window.confirm(`🎟️ 1 Adet BEDAVA ${gameDevice.toUpperCase()} BİLETİN var! Bu seansı (${slotPrice} M) bedavaya almak için biletini kullanmak ister misin?`)) {
-              useJoker = true;
+      let useUniversalJoker = false;
+      let useDeviceJoker = false;
+
+      if (universalJokers > 0) {
+          if (window.confirm(`🎫 1 Adet ALTIN BİLETİN (Joker) var! Bu seansı (${slotPrice} M) bedavaya almak için Altın Biletini kullanmak ister misin?`)) {
+              useUniversalJoker = true;
           }
-      }
+      } else if (myJokersForDevice > 0) {
+          if (window.confirm(`🎟️ 1 Adet BEDAVA ${gameDevice.toUpperCase()} BİLETİN var! Bu seansı (${slotPrice} M) bedavaya almak için biletini kullanmak ister misin?`)) {
+              useDeviceJoker = true;
+          }
+      }
 
-      if (!useJoker && mCoin < slotPrice) return alert(`❌ Bakiyeniz yetersiz! (${slotPrice} M-Coin gerekli)`);
+      if (!useUniversalJoker && !useDeviceJoker && mCoin < slotPrice) return alert(`❌ Bakiyeniz yetersiz! (${slotPrice} M-Coin gerekli)`);
 
-      if (useJoker || window.confirm(`${gameDay} ${slot.time} seansını ${slotPrice} M-Coin karşılığında rezerve etmek istiyor musun?`)) {
-          const updates = {};
-          if (useJoker) {
-              updates[`joker_tickets/${safeName}/${gameDevice}`] = myJokersForDevice - 1;
-              updates[`transactions/${safeName}/txn_game_${Date.now()}`] = { 
-                  desc: `🎟️ Ücretsiz Rezervasyon (${gameDevice.toUpperCase()} - ${gameDay} ${slot.time})`, 
-                  amt: 0, date: new Date().toLocaleString('tr-TR') 
-              };
-          } else {
-              updates[`wallet/${safeName}`] = mCoin - slotPrice;
-              updates[`transactions/${safeName}/txn_game_${Date.now()}`] = { 
-                  desc: `Oyun Rezervasyonu (${gameDevice.toUpperCase()} - ${gameDay} ${slot.time})`, 
-                  amt: -slotPrice, date: new Date().toLocaleString('tr-TR') 
-              };
-          }
-          
-          const newBooking = bookedArray.length > 0 ? `${currentBookedStr}, ${safeName}` : safeName;
-          updates[`game_room_appointments/${gameDevice}/${gameDay}/${slot.id}`] = newBooking;
-          
-          db.ref('mavikent_premium').update(updates)
-            .then(() => alert(useJoker ? "🎟️ Bilet kullanıldı! Bedava seansın hayırlı olsun." : "🚀 Rezervasyon yapıldı ve M-Coin düştü! İyi eğlenceler."))
-            .catch(() => alert("❌ Bir hata oluştu, internetini kontrol et."));
-      }
-  };
+      if (useUniversalJoker || useDeviceJoker || window.confirm(`${gameDay} ${slot.time} seansını ${slotPrice} M-Coin karşılığında rezerve etmek istiyor musun?`)) {
+          const updates = {};
+          if (useUniversalJoker) {
+              updates[`inventory/${safeName}/joker_ticket`] = universalJokers - 1;
+              updates[`transactions/${safeName}/txn_game_${Date.now()}`] = { 
+                  desc: `🎫 Altın Bilet Kullanımı (${gameDevice.toUpperCase()} - ${gameDay} ${slot.time})`, 
+                  amt: 0, date: new Date().toLocaleString('tr-TR') 
+              };
+          } else if (useDeviceJoker) {
+              updates[`joker_tickets/${safeName}/${gameDevice}`] = myJokersForDevice - 1;
+              updates[`transactions/${safeName}/txn_game_${Date.now()}`] = { 
+                  desc: `🎟️ Ücretsiz Rezervasyon (${gameDevice.toUpperCase()} - ${gameDay} ${slot.time})`, 
+                  amt: 0, date: new Date().toLocaleString('tr-TR') 
+              };
+          } else {
+              updates[`wallet/${safeName}`] = mCoin - slotPrice;
+              updates[`transactions/${safeName}/txn_game_${Date.now()}`] = { 
+                  desc: `Oyun Rezervasyonu (${gameDevice.toUpperCase()} - ${gameDay} ${slot.time})`, 
+                  amt: -slotPrice, date: new Date().toLocaleString('tr-TR') 
+              };
+          }
+          
+          const newBooking = bookedArray.length > 0 ? `${currentBookedStr}, ${safeName}` : safeName;
+          updates[`game_room_appointments/${gameDevice}/${gameDay}/${slot.id}`] = newBooking;
+          
+          db.ref('mavikent_premium').update(updates)
+            .then(() => alert(useUniversalJoker || useDeviceJoker ? "🎟️ Bilet kullanıldı! Bedava seansın hayırlı olsun." : "🚀 Rezervasyon yapıldı ve M-Coin düştü! İyi eğlenceler."))
+            .catch(() => alert("❌ Bir hata oluştu, internetini kontrol et."));
+      }
+  };
 
   const handleJoinTournament = (tId, t) => {
       if (mCoin < t.fee) return alert(`❌ Bakiye yetersiz! Giriş ücreti ${t.fee} M-Coin.`);
@@ -710,10 +726,10 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const xpSorted = getAllRankings('xp');
   
   const myRpRank = rpSorted.findIndex(s => s.n === safeName) + 1 || '-';
-  const myWealthRank = wealthSorted.findIndex(s => s.n === safeName) + 1 || '-';
-  const myXpRank = xpSorted.findIndex(s => s.n === safeName) + 1 || '-';
+  const myWealthRank = wealthSorted.findIndex(s => s.n === safeName) + 1 || '-';
+  const myXpRank = xpSorted.findIndex(s => s.n === safeName) + 1 || '-';
 
-  // --- ZIRHLANMIŞ HESAPLAMALAR ---
+  // --- ZIRHLANMIŞ HESAPLAMALAR ---
   let totalExpected = 0;
   let totalControlled = 0;
   const allBookingsForController = [];
@@ -924,86 +940,67 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
               let sessionsWon = []; 
               let sessionRolled = false;
 
-              for (let i = 0; i < count; i++) {
-                  let rng = Math.floor(Math.random() * 100) + 1;
-                  
-                  if (count === 10 && i === 9 && !sessionRolled) {
-                      rng = 99; 
-                  }
-
-                  if (boxType === 'standart') {
-                      if (rng <= 60) {
-                          let dev = Math.random() < 0.5 ? 'ps4' : 'pc';
-                          shardsWon[dev] += Math.floor(Math.random() * 2) + 1;
-                      } else if (rng <= 80) totalMcoinWon += 3;
-                      else if (rng <= 95) totalMcoinWon += 7;
-                      else { sessionsWon.push({ devs: ['ps4'], fallback: 5 }); sessionRolled = true; }
-                  } else if (boxType === 'mega') {
-                      if (rng <= 60) {
-                          let dev = Math.random() < 0.5 ? 'pc' : 'ps5';
-                          shardsWon[dev] += Math.floor(Math.random() * 2) + 2;
-                      } else if (rng <= 80) totalMcoinWon += 5;
-                      else if (rng <= 95) totalMcoinWon += 12;
-                      else { sessionsWon.push({ devs: ['ps5', 'pc'], fallback: 8 }); sessionRolled = true; }
-                  } else if (boxType === 'elit') {
-                      if (rng <= 60) {
-                          let dev = Math.random() < 0.5 ? 'ps5' : 'vr';
-                          shardsWon[dev] += Math.floor(Math.random() * 2) + 2;
-                      } else if (rng <= 80) totalMcoinWon += 7;
-                      else if (rng <= 95) totalMcoinWon += 18;
-                      else { sessionsWon.push({ devs: ['vr'], fallback: 10 }); sessionRolled = true; }
-                  }
-              }
-
-              let actualSessionsBooked = [];
-              let sessionFallbackMcoin = 0;
+              let jokersWon = [];
               const updates = {};
 
-              sessionsWon.forEach(seansObj => {
-                  let foundSlot = null;
-                  for (let d of seansObj.devs) {
-                      const slots = GAME_SLOTS[d] || [];
-                      for (let s of slots) {
-                          if (!appData?.game_room_appointments?.[d]?.[todayStrTR]?.[s.id] && !updates[`game_room_appointments/${d}/${todayStrTR}/${s.id}`]) {
-                              foundSlot = { d, s }; break;
-                          }
-                      }
-                      if (foundSlot) break;
-                  }
-                  if (foundSlot) {
-                      updates[`game_room_appointments/${foundSlot.d}/${todayStrTR}/${foundSlot.s.id}`] = safeName;
-                      actualSessionsBooked.push(`${foundSlot.s.time} ${String(foundSlot.d).toUpperCase()}`);
-                  } else {
-                      sessionFallbackMcoin += seansObj.fallback;
-                  }
+              for (let i = 0; i < count; i++) {
+                  let rng = Math.floor(Math.random() * 100) + 1;
+                  
+                  if (count === 10 && i === 9 && !sessionRolled) {
+                      rng = 99; 
+                  }
+
+                  if (boxType === 'standart') {
+                      if (rng <= 60) {
+                          let dev = Math.random() < 0.5 ? 'ps4' : 'pc';
+                          shardsWon[dev] += Math.floor(Math.random() * 2) + 1;
+                      } else if (rng <= 80) totalMcoinWon += 3;
+                      else if (rng <= 95) totalMcoinWon += 7;
+                      else { jokersWon.push('ps4'); sessionRolled = true; }
+                  } else if (boxType === 'mega') {
+                      if (rng <= 60) {
+                          let dev = Math.random() < 0.5 ? 'pc' : 'ps5';
+                          shardsWon[dev] += Math.floor(Math.random() * 2) + 2;
+                      } else if (rng <= 80) totalMcoinWon += 5;
+                      else if (rng <= 95) totalMcoinWon += 12;
+                      else { jokersWon.push(Math.random() < 0.5 ? 'ps5' : 'pc'); sessionRolled = true; }
+                  } else if (boxType === 'elit') {
+                      if (rng <= 60) {
+                          let dev = Math.random() < 0.5 ? 'ps5' : 'vr';
+                          shardsWon[dev] += Math.floor(Math.random() * 2) + 2;
+                      } else if (rng <= 80) totalMcoinWon += 7;
+                      else if (rng <= 95) totalMcoinWon += 18;
+                      else { jokersWon.push('vr'); sessionRolled = true; }
+                  }
+              }
+
+              jokersWon.forEach(dev => {
+                  updates[`joker_tickets/${safeName}/${dev}`] = getJoker(dev) + 1;
               });
 
-              totalMcoinWon += sessionFallbackMcoin;
+              updates[`wallet/${safeName}`] = mCoin - totalCost + totalMcoinWon;
+              Object.keys(shardsWon).forEach(dev => {
+                  if (shardsWon[dev] > 0) updates[`shards/${safeName}/${dev}`] = getShard(dev) + shardsWon[dev];
+              });
 
-              updates[`wallet/${safeName}`] = mCoin - totalCost + totalMcoinWon;
-              Object.keys(shardsWon).forEach(dev => {
-                  if (shardsWon[dev] > 0) updates[`shards/${safeName}/${dev}`] = getShard(dev) + shardsWon[dev];
-              });
+              let finalDesc = "";
+              let finalIcon = count === 10 ? '🎊' : '🎁';
 
-              let finalDesc = "";
-              let finalIcon = count === 10 ? '🎊' : '🎁';
+              if (count === 1) {
+                  if (jokersWon.length > 0) { finalDesc = `🔥 İNANILMAZ! Bedava ${jokersWon[0].toUpperCase()} Seans Bileti Kaptın!`; finalIcon = '🎫'; }
+                  else if (totalMcoinWon > 0) { finalDesc = `+${totalMcoinWon} M-Coin Kazandın!`; finalIcon = '💰'; }
+                  else {
+                      let sText = [];
+                      Object.keys(shardsWon).forEach(d => { if(shardsWon[d]>0) sText.push(`+${shardsWon[d]} ${d.toUpperCase()}`) });
+                      finalDesc = sText.join(', ') + " Parçası!"; finalIcon = '🧩';
+                  }
+              } else {
+                  let sText = [];
+                  Object.keys(shardsWon).forEach(d => { if(shardsWon[d]>0) sText.push(`${shardsWon[d]} ${d.toUpperCase()}`) });
+                  finalDesc = `📦 10'LU KUTU ÖZETİ:\n\n${sText.length > 0 ? sText.join(' | ') + ' Parçası\n' : ''}${totalMcoinWon > 0 ? `💰 +${totalMcoinWon} M-Coin\n` : ''}${jokersWon.length > 0 ? `🎫 KAZANILAN BİLETLER: ${jokersWon.map(d=>d.toUpperCase()).join(', ')}\n` : ''}`;
+              }
 
-              if (count === 1) {
-                  if (actualSessionsBooked.length > 0) { finalDesc = `🔥 İNANILMAZ! Bu akşam ${actualSessionsBooked[0]} Seansını Kaptın!`; finalIcon = '🎮'; }
-                  else if (sessionFallbackMcoin > 0) { finalDesc = `Seanslar doluydu, teselli olarak ${sessionFallbackMcoin} M kazandın!`; finalIcon = '🪙'; }
-                  else if (totalMcoinWon > 0) { finalDesc = `+${totalMcoinWon} M-Coin Kazandın!`; finalIcon = '💰'; }
-                  else {
-                      let sText = [];
-                      Object.keys(shardsWon).forEach(d => { if(shardsWon[d]>0) sText.push(`+${shardsWon[d]} ${d.toUpperCase()}`) });
-                      finalDesc = sText.join(', ') + " Parçası!"; finalIcon = '🧩';
-                  }
-              } else {
-                  let sText = [];
-                  Object.keys(shardsWon).forEach(d => { if(shardsWon[d]>0) sText.push(`${shardsWon[d]} ${d.toUpperCase()}`) });
-                  finalDesc = `📦 10'LU KUTU ÖZETİ:\n\n${sText.length > 0 ? sText.join(' | ') + ' Parçası\n' : ''}${totalMcoinWon > 0 ? `💰 +${totalMcoinWon} M-Coin\n` : ''}${actualSessionsBooked.length > 0 ? `🎮 KAZANILAN SEANS: ${actualSessionsBooked.join(', ')}\n` : ''}${sessionFallbackMcoin > 0 ? `(Seans dolu tesellisi: +${sessionFallbackMcoin} M)` : ''}`;
-              }
-
-              updates[`transactions/${safeName}/txn_box_${Date.now()}`] = { desc: `${count}x Kutu (${boxType.toUpperCase()}) Açılımı`, amt: -totalCost + totalMcoinWon, date: new Date().toLocaleString('tr-TR') };
+              updates[`transactions/${safeName}/txn_box_${Date.now()}`] = { desc: `${count}x Kutu (${boxType.toUpperCase()}) Açılımı`, amt: -totalCost + totalMcoinWon, date: new Date().toLocaleString('tr-TR') };
               
               db.ref('mavikent_premium').update(updates);
               setBoxAnim({ active: true, type: boxType, step: 2, result: { desc: finalDesc, icon: finalIcon }, count });
@@ -1120,11 +1117,79 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   };
 
 
-  const getNavStyle = (tab) => ({ flex: 1, border: 'none', background: activeTab === tab ? '#ffffff' : 'transparent', color: activeTab === tab ? '#0f172a' : '#64748b', fontWeight: activeTab === tab ? 900 : 700, cursor: 'pointer', padding: '14px 0', borderRadius: '50px', fontSize: '11px', outline: 'none', boxShadow: activeTab === tab ? '0 10px 20px -5px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.3s', whiteSpace: 'nowrap' });
+  let myResponsibilities = [];
+  if (appData?.hygiene_assignments?.[safeName]) myResponsibilities.push(`🧹 ${appData.hygiene_assignments[safeName]}`);
+  Object.entries(appData?.room_areas || {}).forEach(([k, v]) => {
+      if ((v.responsibles || []).includes(safeName)) myResponsibilities.push(`🛏️ ${v.name}`);
+  });
+  Object.entries(appData?.hygiene_areas || {}).forEach(([k, v]) => {
+      if ((v.responsibles || []).includes(safeName)) myResponsibilities.push(`🚽 ${v.name}`);
+  });
 
-  return (
-    <div className="fade-in" style={{ background: '#f8fafc', minHeight: '100vh', padding: '20px', paddingBottom: '140px', fontFamily: "'Plus Jakarta Sans', sans-serif", outline: 'none' }}>
-      <style>{`
+  const getNavStyle = (tab) => ({ flex: 1, border: 'none', background: activeTab === tab ? '#ffffff' : 'transparent', color: activeTab === tab ? '#0f172a' : '#64748b', fontWeight: activeTab === tab ? 900 : 700, cursor: 'pointer', padding: '14px 0', borderRadius: '50px', fontSize: '11px', outline: 'none', boxShadow: activeTab === tab ? '0 10px 20px -5px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.3s', whiteSpace: 'nowrap' });
+
+  return (
+    <div className="fade-in" style={{ background: '#f8fafc', minHeight: '100vh', padding: '20px', paddingBottom: '140px', fontFamily: "'Plus Jakarta Sans', sans-serif", outline: 'none' }}>
+      
+      {unreadNotifications.length > 0 && (
+        <div className="popIn-anim" style={{ position: 'fixed', top: '15px', left: '50%', transform: 'translateX(-50%)', zIndex: 999999, width: '90%', maxWidth: '400px', background: 'linear-gradient(135deg, #0f172a, #1e293b)', color: 'white', padding: '20px', borderRadius: '24px', boxShadow: '0 15px 40px rgba(0,0,0,0.6)', border: '1px solid #334155' }}>
+          {unreadNotifications.slice(0, 1).map(([id, notif]) => (
+            <div key={id}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '20px' }}>{notif.title.includes('Ceza') || notif.title.includes('İhlal') ? '🚨' : '🎁'}</span>
+                <span style={{ fontWeight: 900, color: notif.title.includes('Ceza') || notif.title.includes('İhlal') ? '#ef4444' : '#10b981', fontSize: '16px', letterSpacing: '0.5px' }}>{notif.title}</span>
+              </div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0', marginBottom: '15px', lineHeight: '1.4' }}>{notif.message}</div>
+              <button onClick={() => db.ref(`mavikent_premium/notifications/${safeName}/${id}/isRead`).set(true)} className="profile-btn" style={{ width: '100%', background: 'rgba(255,255,255,0.1)', color: 'white', padding: '12px', fontSize: '13px', fontWeight: 800 }}>Okudum, Gizle</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <style>{`
+        @keyframes badgePulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); } 70% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(212, 175, 55, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); } }
+        .badge-glow { animation: badgePulse 2s infinite; border: 2px solid #d4af37 !important; background: #fffbeb !important; }
+        .profile-btn { border: none; cursor: pointer; transition: all 0.2s; outline: none; border-radius: 50px; display:inline-flex; align-items:center; justify-content:center; font-weight:800;}
+        .profile-btn:active { transform: scale(0.95); }
+        .elite-input { outline: none !important; border: 1px solid #e2e8f0 !important; transition: all 0.2s ease-in-out; padding: 14px 20px; border-radius: 16px; width: 100%; font-weight: 600; color: #0f172a; background: #f8fafc; }
+        .elite-input:focus { border-color: #3b82f6 !important; background: #ffffff; box-shadow: 0 0 0 3px rgba(59,130,246,0.1) !important; }
+        .elite-input::placeholder { color: #94a3b8; font-weight: 500; }
+        .clean-scroll::-webkit-scrollbar { width: 6px; } .clean-scroll::-webkit-scrollbar-track { background: transparent; } .clean-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .grid-mobile-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+        
+        @keyframes popIn { 0% { opacity: 0; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
+        @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+        @keyframes boxShake { 0% { transform: rotate(0deg); } 25% { transform: rotate(15deg); } 50% { transform: rotate(-15deg); } 75% { transform: rotate(10deg); } 100% { transform: rotate(0deg); } }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        .popIn-anim { animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .shake-anim { animation: boxShake 1.5s infinite; }
+        
+        .chat-bubble { padding: 12px 16px; border-radius: 20px; max-width: 85%; font-size: 14px; line-height: 1.4; word-break: break-word; font-weight: 600; }
+        .chat-me { background: #0f172a; color: white; border-bottom-right-radius: 4px; }
+        .chat-other { background: #ffffff; color: #334155; border: 1px solid #e2e8f0; border-bottom-left-radius: 4px; }
+        
+        @keyframes scrollChat { 0% { transform: translateY(0); } 100% { transform: translateY(-50%); } }
+        .auto-scroll-chat { animation: scrollChat 20s linear infinite; }
+        .auto-scroll-chat:hover { animation-play-state: paused; }
+      `}</style>
+      
+      {/* 🔔 YENİ: BİLDİRİM (POP-UP) SİSTEMİ */}
+      {unreadNotifications.length > 0 && (
+        <div className="popIn-anim" style={{ position: 'fixed', top: '15px', left: '50%', transform: 'translateX(-50%)', zIndex: 999999, width: '90%', maxWidth: '400px', background: 'linear-gradient(135deg, #0f172a, #1e293b)', color: 'white', padding: '20px', borderRadius: '24px', boxShadow: '0 15px 40px rgba(0,0,0,0.6)', border: '1px solid #334155' }}>
+          {unreadNotifications.slice(0, 1).map(([id, notif]) => (
+            <div key={id}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '20px' }}>{notif.title.includes('Ceza') || notif.title.includes('İhlal') ? '🚨' : '🎁'}</span>
+                <span style={{ fontWeight: 900, color: notif.title.includes('Ceza') || notif.title.includes('İhlal') ? '#ef4444' : '#10b981', fontSize: '16px', letterSpacing: '0.5px' }}>{notif.title}</span>
+              </div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0', marginBottom: '15px', lineHeight: '1.4' }}>{notif.message}</div>
+              <button onClick={() => db.ref(`mavikent_premium/notifications/${safeName}/${id}/isRead`).set(true)} className="profile-btn" style={{ width: '100%', background: 'rgba(255,255,255,0.1)', color: 'white', padding: '12px', fontSize: '13px', fontWeight: 800 }}>Okudum, Gizle</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <style>{`
         @keyframes badgePulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); } 70% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(212, 175, 55, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); } }
         .badge-glow { animation: badgePulse 2s infinite; border: 2px solid #d4af37 !important; background: #fffbeb !important; }
         .profile-btn { border: none; cursor: pointer; transition: all 0.2s; outline: none; border-radius: 50px; display:inline-flex; align-items:center; justify-content:center; font-weight:800;}
@@ -1365,8 +1430,19 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                    </div>
                 </div>
 
-                <div className="grid-mobile-2" style={{ marginBottom: '25px', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
-                    <div style={{ background: '#fef3c7', borderRadius: '20px', padding: '20px', border: '1px solid #fde68a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#b45309' }}>🏆 RP SIRASI</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#92400e' }}>{myRpRank}.</span></div>
+                {myResponsibilities.length > 0 && (
+                    <div style={{ background: '#f0f9ff', borderRadius: '24px', padding: '20px', border: '1px solid #bae6fd', marginBottom: '25px' }}>
+                        <div style={{ fontSize: '14px', fontWeight: 900, color: '#0369a1', marginBottom: '10px' }}>📍 SORUMLULUK ALANLARIM</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                            {myResponsibilities.map((res, i) => (
+                                <div key={i} style={{ background: 'white', padding: '8px 16px', borderRadius: '12px', fontSize: '13px', fontWeight: 800, color: '#0f172a', border: '1px solid #e0f2fe' }}>{res}</div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                
+                <div className="grid-mobile-2" style={{ marginBottom: '25px', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
+                    <div style={{ background: '#fef3c7', borderRadius: '20px', padding: '20px', border: '1px solid #fde68a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#b45309' }}>🏆 RP SIRASI</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#92400e' }}>{myRpRank}.</span></div>
                     <div style={{ background: '#ecfdf5', borderRadius: '20px', padding: '20px', border: '1px solid #a7f3d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#047857' }}>💳 ZENGİNLİK</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#064e3b' }}>{myWealthRank}.</span></div>
                    <div style={{ background: '#eff6ff', borderRadius: '20px', padding: '20px', border: '1px solid #bfdbfe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#1d4ed8' }}>🏅 KATILIM</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#1e3a8a' }}>{myXpRank}.</span></div>
                     <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '20px', border: '1px solid #fecaca', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gridColumn: '1 / -1' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#991b1b' }}>📉 TOPLAM DEVAMSIZLIK</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#ef4444' }}>{appData?.absences?.[safeName] || 0} GÜN</span></div>
@@ -1988,7 +2064,13 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
                           <p style={{ margin: 0, fontSize: '15px', fontWeight: 600, opacity: 0.9 }}>Bakiye ile istediğin cihazı şimdiden rezerve et, sıranı garantile!</p>
                           
                           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '15px' }}>
-                              {SHARD_TYPES.map(st => {
+                              {Number(appData?.inventory?.[safeName]?.joker_ticket || 0) > 0 && (
+                                  <div style={{ background: `linear-gradient(135deg, #d4af37, #0f172a)`, padding: '8px 14px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px', border: `2px solid #fef08a`, boxShadow: `0 4px 15px rgba(212,175,55,0.5)` }}>
+                                      <span style={{ fontSize: '20px', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))' }}>🎫</span>
+                                      <span style={{ fontSize: '14px', fontWeight: 900, color: 'white', letterSpacing: '0.5px' }}>{Number(appData?.inventory?.[safeName]?.joker_ticket)}x ALTIN BİLET (JOKER)</span>
+                                  </div>
+                              )}
+                              {SHARD_TYPES.map(st => {
                                   const jCount = getJoker(st.id);
                                   if (jCount > 0) {
                                       return (
