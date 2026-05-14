@@ -10,103 +10,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   const [generalCleaningList, setGeneralCleaningList] = useState({}); 
   const [isHygieneSaving, setIsHygieneSaving] = useState(false);
   const [roomForm, setRoomForm] = useState({ areaId: '', score: 5, note: '' });
-  // Yönetici tarafından kaydedilen görev yerlerini Personel ekranına otomatik yükler
-  useEffect(() => {
-    if (appData?.hygiene_assignments) {
-      const savedTasks = {};
-      Object.entries(appData.hygiene_assignments).forEach(([name, area]) => {
-        if (roster.includes(name)) {
-          savedTasks[name] = { area: area, score: (generalCleaningList[name]?.score || 0) };
-        }
-      });
-      setGeneralCleaningList(prev => ({ ...prev, ...savedTasks }));
-    }
-  }, [appData?.hygiene_assignments, appData?.roster]);
-
-  const getCoinImpact = (score) => {
-      if (score === 5) return 30;
-      if (score === 4) return 20;
-      if (score === 3) return 10;
-      if (score === 2) return -30;
-      if (score === 1) return -60;
-      return 0;
-  };
-  const getRoomCoinImpact = (score) => {
-      if (score === 5) return 50;
-      if (score === 4) return 40;
-      if (score === 3) return 30;
-      if (score === 2) return -10;
-      if (score === 1) return -20;
-      return 0;
-  };
-
-  const saveRoomInspection = async () => {
-      if(!roomForm.areaId) return alert("Lütfen bir oda seçin!");
-      setIsHygieneSaving(true);
-      const area = appData.room_areas?.[roomForm.areaId];
-      const responsibles = area?.responsibles || [];
-      const coinImpact = getRoomCoinImpact(roomForm.score);
-      const updates = {};
-      const logId = `room_${Date.now()}`;
-      const todayStr = new Date().toDateString();
-      
-      updates[`hygiene_logs/${logId}`] = {
-          ...roomForm, areaName: area?.name || 'Bilinmeyen Oda',
-          responsibles: responsibles, timestamp: Date.now(),
-          inspector: "Personel", coinImpact, type: 'room'
-      };
-
-      responsibles.forEach(studentId => {
-          if (appData?.daily_status?.[todayStr]?.[studentId] === 'a') return; // KURAL 2: O gün kurumda yoksa ödül/ceza puanı işlemez!
-          
-          updates[`wallet/${studentId}`] = (Number(appData?.wallet?.[studentId]) || 0) + coinImpact;
-          updates[`transactions/${studentId}/txn_room_${Date.now()}`] = { 
-              desc: `${area?.name || 'Oda'} Denetimi (Personel)`, amt: coinImpact, date: new Date().toLocaleString('tr-TR') 
-          };
-          
-          if (coinImpact !== 0) {
-              updates[`notifications/${studentId}/notif_${Date.now()}_${Math.floor(Math.random()*1000)}`] = { title: 'Oda Denetimi', message: `Oda denetiminden ${coinImpact > 0 ? '+'+coinImpact : coinImpact} M-Coin aldın!`, isRead: false, timestamp: Date.now() };
-          }
-      });
-
-      try {
-          await db.ref('mavikent_premium').update(updates);
-          alert(`✅ Oda denetimi kaydedildi! Odadaki öğrencilere ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
-          setRoomForm({ areaId: '', score: 5, note: '' });
-      } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
-  };
-
-  const saveInspection = async () => {
-      if(!hygieneForm.areaId) return alert("Lütfen bir alan seçin!");
-      setIsHygieneSaving(true);
-      
-      const area = appData.hygiene_areas?.[hygieneForm.areaId];
-      const responsibles = area?.responsibles || [];
-      const coinImpact = getCoinImpact(hygieneForm.score);
-
-      const updates = {};
-      const logId = `hyg_${Date.now()}`;
-      
-      updates[`hygiene_logs/${logId}`] = {
-          ...hygieneForm, areaName: area?.name || 'Bilinmeyen Alan',
-          responsibles: responsibles, timestamp: Date.now(),
-          inspector: "Personel", coinImpact, type: 'wc'
-      };
-
-      responsibles.forEach(studentId => {
-          updates[`wallet/${studentId}`] = (Number(appData?.wallet?.[studentId]) || 0) + coinImpact;
-          updates[`transactions/${studentId}/txn_hyg_${Date.now()}_${Math.floor(Math.random()*1000)}`] = { 
-              desc: `${area?.name || 'Alan'} WC Denetimi (Personel)`, amt: coinImpact, date: new Date().toLocaleString('tr-TR') 
-          };
-      });
-
-      try {
-          await db.ref('mavikent_premium').update(updates);
-          alert(`✅ Denetim kaydedildi! ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
-          setHygieneForm({ areaId: '', score: 5, note: '' });
-      } catch (e) { console.error(e); alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
-  };
-
+  
   const [selectedSession, setSelectedSession] = useState(''); 
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [modalType, setModalType] = useState(null); 
@@ -124,13 +28,13 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   const [scannerActive, setScannerActive] = useState(false);
   const [newProduct, setNewProduct] = useState({ barcode: '', name: '', price: '', stock: '' });
 
-  // OYUN ODASI KONTROL İÇİN YENİ EKLENEN STATELER
-const [tutanakTab, setTutanakTab] = useState('odul');
-  const [evalForm, setEvalForm] = useState({
+  // OYUN ODASI VE TUTANAK STATELERİ
+  const [tutanakTab, setTutanakTab] = useState('odul');
+  const [evalForm, setEvalForm] = useState({
       bookingId: '', student: '', device: '', day: '', slot: '', time: '', 
-      attended: true, 
-      q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' 
+      attended: true, q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' 
   });
+  
   const csvDenemeRef = useRef(null);
   const csvYaziliRef = useRef(null);
 
@@ -138,6 +42,7 @@ const [tutanakTab, setTutanakTab] = useState('odul');
   const eduClassList = ["5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf", "ELİT", "STANDART"];
   const levelList = ["SEVİYE 1/A", "SEVİYE 1/B", "SEVİYE 2"];
   const examSubjects = ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din Kültürü"];
+  const valuesSubjectsList = ["K.Kerim", "İlmihal", "Siyer-i Nebi", "Adabı Muaşeret", "Tecvid"];
   
   const rawRoster = appData?.roster || [];
   const roster = Array.isArray(rawRoster) ? rawRoster : Object.values(rawRoster || {});
@@ -151,9 +56,7 @@ const [tutanakTab, setTutanakTab] = useState('odul');
       "ELİT": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"], 
       "STANDART": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"] 
   };
-  const valuesSubjectsList = ["K.Kerim", "İlmihal", "Siyer-i Nebi", "Adabı Muaşeret", "Tecvid"];
 
-  // OYUN ODASI SABİTLERİ
   const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
   const GAME_DEVICES = [{ id: 'ps4', name: 'PS4' }, { id: 'ps5', name: 'PS5' }, { id: 'vr', name: 'VR' }, { id: 'pc', name: 'Bilgisayar' }];
   const GAME_SLOTS = {
@@ -167,7 +70,18 @@ const [tutanakTab, setTutanakTab] = useState('odul');
   const liveDayIdx = now.getDay() === 0 ? 6 : now.getDay() - 1;
   const todayStrTR = DAYS[liveDayIdx] || 'Pazartesi';
 
-  // BUGÜNÜN RANDEVULARINI ÇEKME MANTIĞI
+  useEffect(() => {
+    if (appData?.hygiene_assignments) {
+      const savedTasks = {};
+      Object.entries(appData.hygiene_assignments).forEach(([name, area]) => {
+        if (roster.includes(name)) {
+          savedTasks[name] = { area: area, score: (generalCleaningList[name]?.score || 0) };
+        }
+      });
+      setGeneralCleaningList(prev => ({ ...prev, ...savedTasks }));
+    }
+  }, [appData?.hygiene_assignments, appData?.roster]);
+
   const allBookingsForController = [];
   Object.keys(appData?.game_room_appointments || {}).forEach(device => {
       const deviceData = appData?.game_room_appointments?.[device];
@@ -190,6 +104,88 @@ const [tutanakTab, setTutanakTab] = useState('odul');
           });
       });
   });
+
+  const getCoinImpact = (score) => {
+      if (score === 5) return 30;
+      if (score === 4) return 20;
+      if (score === 3) return 10;
+      if (score === 2) return -30;
+      if (score === 1) return -60;
+      return 0;
+  };
+  const getRoomCoinImpact = (score) => {
+      if (score === 5) return 50;
+      if (score === 4) return 40;
+      if (score === 3) return 30;
+      if (score === 2) return -10;
+      if (score === 1) return -20;
+      return 0;
+  };
+
+  const saveRoomInspection = async () => {
+      if(!roomForm.areaId) return alert("Lütfen bir oda seçin!");
+      setIsHygieneSaving(true);
+      const area = appData.room_areas?.[roomForm.areaId];
+      const responsibles = area?.responsibles || [];
+      const coinImpact = getRoomCoinImpact(roomForm.score);
+      const updates = {};
+      const logId = `room_${Date.now()}`;
+      const todayStr = new Date().toDateString();
+      
+      updates[`hygiene_logs/${logId}`] = {
+          ...roomForm, areaName: area?.name || 'Bilinmeyen Oda',
+          responsibles: responsibles, timestamp: Date.now(),
+          inspector: "Personel", coinImpact, type: 'room'
+      };
+
+      responsibles.forEach(studentId => {
+          if (appData?.daily_status?.[todayStr]?.[studentId] === 'a') return; 
+          
+          updates[`wallet/${studentId}`] = (Number(appData?.wallet?.[studentId]) || 0) + coinImpact;
+          updates[`transactions/${studentId}/txn_room_${Date.now()}`] = { 
+              desc: `${area?.name || 'Oda'} Denetimi (Personel)`, amt: coinImpact, date: new Date().toLocaleString('tr-TR') 
+          };
+          if (coinImpact !== 0) {
+              updates[`notifications/${studentId}/notif_${Date.now()}_${Math.floor(Math.random()*1000)}`] = { title: 'Oda Denetimi', message: `Oda denetiminden ${coinImpact > 0 ? '+'+coinImpact : coinImpact} M-Coin aldın!`, isRead: false, timestamp: Date.now() };
+          }
+      });
+
+      try {
+          await db.ref('mavikent_premium').update(updates);
+          alert(`✅ Oda denetimi kaydedildi!`);
+          setRoomForm({ areaId: '', score: 5, note: '' });
+      } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
+  };
+
+  const saveInspection = async () => {
+      if(!hygieneForm.areaId) return alert("Lütfen bir alan seçin!");
+      setIsHygieneSaving(true);
+      
+      const area = appData.hygiene_areas?.[hygieneForm.areaId];
+      const responsibles = area?.responsibles || [];
+      const coinImpact = getCoinImpact(hygieneForm.score);
+      const updates = {};
+      const logId = `hyg_${Date.now()}`;
+      
+      updates[`hygiene_logs/${logId}`] = {
+          ...hygieneForm, areaName: area?.name || 'Bilinmeyen Alan',
+          responsibles: responsibles, timestamp: Date.now(),
+          inspector: "Personel", coinImpact, type: 'wc'
+      };
+
+      responsibles.forEach(studentId => {
+          updates[`wallet/${studentId}`] = (Number(appData?.wallet?.[studentId]) || 0) + coinImpact;
+          updates[`transactions/${studentId}/txn_hyg_${Date.now()}_${Math.floor(Math.random()*1000)}`] = { 
+              desc: `${area?.name || 'Alan'} WC Denetimi (Personel)`, amt: coinImpact, date: new Date().toLocaleString('tr-TR') 
+          };
+      });
+
+      try {
+          await db.ref('mavikent_premium').update(updates);
+          alert(`✅ Denetim kaydedildi! ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
+          setHygieneForm({ areaId: '', score: 5, note: '' });
+      } catch (e) { console.error(e); alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
+  };
 
   const handlePhotoUpload = (e) => {
       const file = e.target.files[0];
@@ -312,16 +308,16 @@ const [tutanakTab, setTutanakTab] = useState('odul');
   };
 
   const saveData = (type, status, basePts) => {
-    if (!selectedStudent) return;
+    if (!selectedStudent) return;
     
     const todayStr = new Date().toDateString();
     if (appData?.daily_status?.[todayStr]?.[selectedStudent] === 'a' && type !== 'okul' && type !== 'yoklama') {
         return alert(`⚠️ ${selectedStudent} adlı öğrenci bugün kurumda değil (İzinli/Gelmedi). Puan işlemi yapılamaz.`);
     }
 
-    const finalPts = getCalculatedPoints(selectedStudent, basePts, type);
-    const updates = {};
-    const isFail = status === 'a' || status === 'x' || status === 'l' || (type === 'yatak' && basePts === 0) || (type === 'telefon' && status === 'a');
+    const finalPts = getCalculatedPoints(selectedStudent, basePts, type);
+    const updates = {};
+    const isFail = status === 'a' || status === 'x' || status === 'l' || (type === 'yatak' && basePts === 0) || (type === 'telefon' && status === 'a');
     
     if (isFail) {
         const streakData = appData?.active_cards?.[selectedStudent]?.streak;
@@ -363,46 +359,47 @@ const [tutanakTab, setTutanakTab] = useState('odul');
     setSelectedStudent(null); 
     setModalType(null);
   };
+
   const applyPenaltyCard = (studentName, cardId) => {
-      const card = appData?.penalty_cards?.[cardId];
-      if (!card) return alert("Hata: Kart bulunamadı!");
-      if (!window.confirm(`${studentName} adlı öğrenciye '${card.name}' cezası uygulanacak. Onaylıyor musunuz?`)) return;
+      const card = appData?.penalty_cards?.[cardId];
+      if (!card) return alert("Hata: Kart bulunamadı!");
+      if (!window.confirm(`${studentName} adlı öğrenciye '${card.name}' cezası uygulanacak. Onaylıyor musunuz?`)) return;
 
-      const updates = {};
-      const timestamp = Date.now();
+      const updates = {};
+      const timestamp = Date.now();
 
-      if (card.mcoin > 0) {
-          updates[`wallet/${studentName}`] = (Number(appData?.wallet?.[studentName]) || 0) - card.mcoin;
-          updates[`transactions/${studentName}/txn_pen_${timestamp}`] = { desc: `⚖️ Disiplin Cezası: ${card.name}`, amt: -card.mcoin, date: new Date().toLocaleString('tr-TR') };
-      }
+      if (card.mcoin > 0) {
+          updates[`wallet/${studentName}`] = (Number(appData?.wallet?.[studentName]) || 0) - card.mcoin;
+          updates[`transactions/${studentName}/txn_pen_${timestamp}`] = { desc: `⚖️ Disiplin Cezası: ${card.name}`, amt: -card.mcoin, date: new Date().toLocaleString('tr-TR') };
+      }
 
-      if (card.rp > 0) {
-          updates[`season_score/${studentName}`] = (Number(appData?.season_score?.[studentName]) || 0) - card.rp;
-      }
+      if (card.rp > 0) {
+          updates[`season_score/${studentName}`] = (Number(appData?.season_score?.[studentName]) || 0) - card.rp;
+      }
 
-      if (card.banDays > 0) {
-          const expTime = timestamp + (card.banDays * 24 * 60 * 60 * 1000);
-          updates[`game_room_bans/${studentName}`] = { reason: `Disiplin Cezası: ${card.name}`, photoUrl: '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR') };
-          
-          Object.keys(appData?.game_room_appointments || {}).forEach(device => {
-              Object.keys(appData.game_room_appointments[device] || {}).forEach(day => {
-                  Object.keys(appData.game_room_appointments[device][day] || {}).forEach(slotId => {
-                      if (appData.game_room_appointments[device][day][slotId] === studentName) { updates[`game_room_appointments/${device}/${day}/${slotId}`] = null; }
-                  });
-              });
-          });
-      }
+      if (card.banDays > 0) {
+          const expTime = timestamp + (card.banDays * 24 * 60 * 60 * 1000);
+          updates[`game_room_bans/${studentName}`] = { reason: `Disiplin Cezası: ${card.name}`, photoUrl: '', expiry: expTime, date: new Date().toLocaleDateString('tr-TR') };
+          
+          Object.keys(appData?.game_room_appointments || {}).forEach(device => {
+              Object.keys(appData.game_room_appointments[device] || {}).forEach(day => {
+                  Object.keys(appData.game_room_appointments[device][day] || {}).forEach(slotId => {
+                      if (appData.game_room_appointments[device][day][slotId] === studentName) { updates[`game_room_appointments/${device}/${day}/${slotId}`] = null; }
+                  });
+              });
+          });
+      }
 
-      updates[`streaks/${studentName}`] = 0; 
-      updates[`daily_flags/${studentName}/broken`] = true;
+      updates[`streaks/${studentName}`] = 0; 
+      updates[`daily_flags/${studentName}/broken`] = true;
       updates[`notifications/${studentName}/notif_${timestamp}`] = { title: 'Disiplin İhlali!', message: `'${card.name}' kurallarını ihlal ettiğin için ceza aldın.`, isRead: false, timestamp };
 
-      db.ref('mavikent_premium').update(updates).then(() => {
-          alert(`✅ ${studentName} adlı öğrenciye ${card.name} cezası başarıyla uygulandı!`);
-          setSelectedStudent(null);
-          setModalType(null);
-      });
-  };
+      db.ref('mavikent_premium').update(updates).then(() => {
+          alert(`✅ ${studentName} adlı öğrenciye ${card.name} cezası başarıyla uygulandı!`);
+          setSelectedStudent(null);
+          setModalType(null);
+      });
+  };
 
   const applyRewardCard = (studentName, cardId) => {
       const card = appData?.reward_cards?.[cardId];
@@ -499,67 +496,6 @@ const [tutanakTab, setTutanakTab] = useState('odul');
     setSelectedStudent(null); setModalType(null); alert(`${type.toUpperCase()} Kaydedildi!`);
   };
 
-  const downloadCSVTemplate = (type) => {
-      let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
-      if (type === 'deneme') {
-          csvContent += "Ogrenci_Adi,Turkce_D,Turkce_Y,Turkce_B,Matematik_D,Matematik_Y,Matematik_B,Fen_D,Fen_Y,Fen_B,Sosyal_D,Sosyal_Y,Sosyal_B,Ingilizce_D,Ingilizce_Y,Ingilizce_B,Din_D,Din_Y,Din_B,Hedef_Net\n";
-          getFilteredRoster(selectedSession).forEach(name => { csvContent += `${name},0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n`; });
-      } else if (type === 'yazili') {
-          csvContent += "Ogrenci_Adi,Turkce,Matematik,Fen,Sosyal,Ingilizce,Din,Hedef_Ortalama\n";
-          getFilteredRoster(selectedSession).forEach(name => { csvContent += `${name},0,0,0,0,0,0,0\n`; });
-      }
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `Mavikent_${selectedSession}_${type}_Sablon.csv`);
-      document.body.appendChild(link); link.click(); document.body.removeChild(link);
-  };
-
-  const handleCSVUpload = (e, type) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-          alert("⚠️ Lütfen Excel'de dosyanızı doldurduktan sonra 'Farklı Kaydet' diyerek 'CSV (Virgülle ayrılmış)' formatında kaydedip sisteme yükleyin.");
-          e.target.value = null; return;
-      }
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-          const text = evt.target.result;
-          const rows = text.split(/\r?\n/).map(row => row.split(/[,;]/));
-          const updates = {}; let matchCount = 0;
-          const normalize = (str) => String(str).toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ').trim();
-          
-          for (let i = 1; i < rows.length; i++) { 
-              const cols = rows[i];
-              if (cols.length < 2) continue; 
-              const rawName = cols[0];
-              const matchedStudent = roster.find(n => normalize(n) === normalize(rawName));
-              if (matchedStudent) {
-                  matchCount++;
-                  if (type === 'deneme') {
-                      let totalNet = 0; let subjectsData = {};
-                      for (let j = 0; j < 6; j++) {
-                          const d = parseFloat(cols[1 + j*3]) || 0; const y = parseFloat(cols[2 + j*3]) || 0; const b = parseFloat(cols[3 + j*3]) || 0;
-                          const net = d - (y/3); totalNet += net; subjectsData[j] = { d, y, b, net };
-                      }
-                      updates[`exams/${matchedStudent}/deneme`] = { subjects: subjectsData, net: totalNet, target: parseFloat(cols[19]) || 0, date: new Date().toDateString() };
-                  } else if (type === 'yazili') {
-                      let total = 0; let count = 0; let writeData = {};
-                      for (let j = 0; j < 6; j++) {
-                          const val = cols[1 + j];
-                          if (val !== undefined && val !== '' && !isNaN(parseFloat(val))) { total += parseFloat(val); count++; writeData[`p_${j}`] = parseFloat(val); }
-                      }
-                      updates[`exams/${matchedStudent}/yazili`] = { ...writeData, avg: count > 0 ? (total / count) : 0, target: parseFloat(cols[7]) || 0, date: new Date().toDateString() };
-                  }
-              }
-          }
-          if (Object.keys(updates).length > 0) { db.ref('mavikent_premium').update(updates); alert(`✅ Başarılı! ${matchCount} öğrencinin sınav verisi aktarıldı.`); } 
-          else { alert('⚠️ Hata: İsimler eşleşmedi.'); }
-          e.target.value = null; 
-      };
-      reader.readAsText(file, 'UTF-8');
-  };
-
   const loadHtml2Canvas = async () => {
       if (window.html2canvas) return window.html2canvas;
       return new Promise((resolve) => { const script = document.createElement('script'); script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; script.onload = () => resolve(window.html2canvas); document.head.appendChild(script); });
@@ -643,7 +579,6 @@ const [tutanakTab, setTutanakTab] = useState('odul');
           const html5QrCode = new window.Html5Qrcode("reader");
           window.currentScanner = html5QrCode;
           html5QrCode.start(
-              // iPhone'un (iOS Safari) hata vermemesi için advanced (odak) zorlamasını kaldırdık
               { facingMode: "environment" },
               { 
                   fps: 20, 
@@ -698,7 +633,7 @@ const [tutanakTab, setTutanakTab] = useState('odul');
     <div className="grid-mobile-2">
       {students.map(name => {
         const okulDurumu = appData?.daily_status?.[todayStr]?.[name];
-        const isNotAtYurt = okulDurumu === 'a'; // Okula gelmediyse tüm modüllerde kilitlenir
+        const isNotAtYurt = okulDurumu === 'a'; 
         
         let bgColor = '#ffffff'; let subText = ''; let isCompletedToday = false;
         
@@ -1325,284 +1260,193 @@ const [tutanakTab, setTutanakTab] = useState('odul');
           </>
         )}
 
-      </div> 
-{/* --- HİJYEN DENETİM MERKEZİ --- */}
-        {currentModule === 'hygiene' && (
-          <div style={{ padding: '20px', animation: 'fadeIn 0.3s ease-out' }}>
-            {/* ÜST SEKME MENÜSÜ */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', background: 'white', padding: '10px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
-                <button onClick={() => setHygieneTab('wc')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'wc' ? '#0ea5e9' : 'transparent', color: hygieneTab === 'wc' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🚽 WC Paneli</button>
-                <button onClick={() => setHygieneTab('general')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'general' ? '#10b981' : 'transparent', color: hygieneTab === 'general' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🧹 Temizlik Kontrol</button>
-                <button onClick={() => setHygieneTab('rooms')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'rooms' ? '#8b5cf6' : 'transparent', color: hygieneTab === 'rooms' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>🛏️ Oda Kontrol</button>
-                <button onClick={() => setHygieneTab('history')} style={{ flex: 1, padding: '14px', borderRadius: '20px', border: 'none', background: hygieneTab === 'history' ? '#f59e0b' : 'transparent', color: hygieneTab === 'history' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>📜 Geçmiş</button>
-                <button onClick={() => setCurrentModule(null)} style={{ padding: '12px 20px', borderRadius: '20px', border: 'none', background: '#f1f5f9', color: '#475569', fontWeight: 900, cursor: 'pointer' }}>🔙</button>
-            </div>
+      {/* --- HİJYEN DENETİM MERKEZİ (HATASIZ & DARK PREMIUM) --- */}
+      {currentModule === 'hygiene' && (
+          <div className="fade-in" style={{ animation: 'fadeIn 0.4s ease-out' }}>
+              
+              {/* ŞIK ÜST SEKME MENÜSÜ */}
+              <div className="clean-scroll" style={{ display: 'flex', gap: '10px', overflowX: 'auto', background: 'white', padding: '12px', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.03)', marginBottom: '25px', border: '1px solid #f1f5f9' }}>
+                  <button onClick={() => setHygieneTab('wc')} style={{ flexShrink: 0, padding: '14px 24px', borderRadius: '16px', border: 'none', background: hygieneTab === 'wc' ? '#1e3a8a' : 'transparent', color: hygieneTab === 'wc' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '18px' }}>🚽</span> WC Paneli
+                  </button>
+                  <button onClick={() => setHygieneTab('general')} style={{ flexShrink: 0, padding: '14px 24px', borderRadius: '16px', border: 'none', background: hygieneTab === 'general' ? '#065f46' : 'transparent', color: hygieneTab === 'general' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '18px' }}>🧹</span> Temizlik Kontrol
+                  </button>
+                  <button onClick={() => setHygieneTab('rooms')} style={{ flexShrink: 0, padding: '14px 24px', borderRadius: '16px', border: 'none', background: hygieneTab === 'rooms' ? '#4c1d95' : 'transparent', color: hygieneTab === 'rooms' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '18px' }}>🛏️</span> Oda Düzeni
+                  </button>
+                  <button onClick={() => setHygieneTab('history')} style={{ flexShrink: 0, padding: '14px 24px', borderRadius: '16px', border: 'none', background: hygieneTab === 'history' ? '#0f172a' : 'transparent', color: hygieneTab === 'history' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '18px' }}>📜</span> Geçmiş
+                  </button>
+              </div>
 
-            {/* 1. PANEL: WC DENETİM */}
-            {hygieneTab === 'wc' && (
-                <div className="fade-in">
-                    <div style={{ background: '#ffffff', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
-                        <div style={{ marginBottom: '25px', borderBottom: '2px dashed #f1f5f9', paddingBottom: '15px' }}>
-                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🚽 WC Zimmet & Denetim (6 Tuvalet)</h3>
-                        </div>
+              {/* 1. PANEL: WC DENETİM */}
+              {hygieneTab === 'wc' && (
+                  <div className="fade-in" style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 10px 40px rgba(15,23,42,0.04)', border: '1px solid #f8fafc' }}>
+                      <div style={{ marginBottom: '25px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
+                          <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a', fontSize: '22px' }}>WC Denetim Paneli</h3>
+                          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, marginTop: '4px' }}>Bugünkü tuvalet temizliklerini değerlendirin.</div>
+                      </div>
 
-                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TUVALET SEÇİN:</label>
-                        <select 
-                            value={hygieneForm.areaId} 
-                            onChange={(e) => setHygieneForm({...hygieneForm, areaId: e.target.value})}
-                            className="elite-input" style={{ marginBottom: '25px', width: '100%', padding: '15px', borderRadius: '15px', border: '2px solid #e2e8f0', outline: 'none', fontWeight: 700 }}
-                        >
-                            <option value="">-- Denetlenecek WC Seçin --</option>
-                            {['wc_1', 'wc_2', 'wc_3', 'wc_4', 'wc_5', 'wc_6'].map(key => {
-                                const area = appData?.hygiene_areas?.[key];
-                                return area ? <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Kişi)</option> : null;
-                            })}
-                        </select>
+                      <div className="fade-in">
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '30px' }}>
+                              {['wc_1', 'wc_2', 'wc_3', 'wc_4', 'wc_5', 'wc_6'].map(key => {
+                                  const area = appData?.hygiene_areas?.[key];
+                                  if(!area) return null;
+                                  const isSelected = hygieneForm.areaId === key;
+                                  return (
+                                      <div key={key} onClick={() => setHygieneForm({...hygieneForm, areaId: key})} className="card-hover" style={{ background: isSelected ? '#1e3a8a' : '#f8fafc', border: `2px solid ${isSelected ? '#1e3a8a' : '#e2e8f0'}`, padding: '16px', borderRadius: '20px', cursor: 'pointer', textAlign: 'center', transition: '0.2s', boxShadow: isSelected ? '0 10px 20px rgba(30,58,138,0.3)' : 'none' }}>
+                                          <div style={{ fontSize: '24px', marginBottom: '6px', opacity: isSelected ? 1 : 0.6 }}>🚽</div>
+                                          <div style={{ fontWeight: 900, fontSize: '14px', color: isSelected ? 'white' : '#0f172a' }}>{area.name}</div>
+                                          <div style={{ fontSize: '11px', fontWeight: 700, color: isSelected ? '#bfdbfe' : '#64748b', marginTop: '4px' }}>{(area.responsibles || []).length} Nöbetçi</div>
+                                      </div>
+                                  );
+                              })}
+                          </div>
 
-                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>TEMİZLİK DURUMU:</label>
-                        <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
-                            {[1, 2, 3, 4, 5].map(star => (
-                                <button 
-                                    key={star}
-                                    onClick={() => setHygieneForm({...hygieneForm, score: star})}
-                                    style={{ 
-                                        flex: 1, padding: '20px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer',
-                                        background: hygieneForm.score >= star ? '#fbbf24' : '#f8fafc',
-                                        color: hygieneForm.score >= star ? '#fff' : '#cbd5e1',
-                                        transition: '0.2s'
-                                    }}
-                                >★</button>
-                            ))}
-                        </div>
+                          <div style={{ background: '#f8fafc', borderRadius: '24px', padding: '25px', border: '1px solid #e2e8f0' }}>
+                              <div style={{ textAlign: 'center', fontWeight: 900, color: '#1e3a8a', fontSize: '16px', marginBottom: '15px' }}>TEMİZLİK PUANI</div>
+                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '25px' }}>
+                                  {[1, 2, 3, 4, 5].map(star => (
+                                      <button key={star} onClick={() => setHygieneForm({...hygieneForm, score: star})} style={{ flex: 1, maxWidth: '70px', padding: '15px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer', background: hygieneForm.score >= star ? 'linear-gradient(135deg, #1e3a8a, #0f172a)' : '#ffffff', color: hygieneForm.score >= star ? '#fff' : '#cbd5e1', transition: 'all 0.2s', boxShadow: hygieneForm.score >= star ? '0 8px 15px rgba(30,58,138,0.3)' : 'none' }}>
+                                          ★
+                                      </button>
+                                  ))}
+                              </div>
+                              <button onClick={saveInspection} disabled={isHygieneSaving} className="premium-btn badge-glow" style={{ width: '100%', padding: '20px', background: 'linear-gradient(135deg, #1e3a8a, #0f172a)', color: 'white', fontWeight: 900, fontSize: '16px', border: 'none', boxShadow: '0 10px 20px rgba(30,58,138,0.4)' }}>
+                                  {isHygieneSaving ? '⏳ İşleniyor...' : '✅ WC DENETİMİNİ KAYDET'}
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              )}
 
-                        <button 
-                            onClick={saveInspection} 
-                            disabled={isHygieneSaving}
-                            className="premium-btn" 
-                            style={{ width: '100%', padding: '20px', borderRadius: '20px', border: 'none', background: '#0ea5e9', color: 'white', fontWeight: 900, fontSize: '16px', cursor: 'pointer' }}
-                        >
-                            {isHygieneSaving ? '⏳ İşleniyor...' : '✅ WC DENETİMİNİ KAYDET'}
-                        </button>
+              {/* 2. PANEL: ODA DENETİMİ */}
+              {hygieneTab === 'rooms' && (
+                  <div className="fade-in" style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 10px 40px rgba(15,23,42,0.04)', border: '1px solid #f8fafc' }}>
+                      <div style={{ marginBottom: '25px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
+                          <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a', fontSize: '22px' }}>Oda Düzeni Paneli</h3>
+                          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, marginTop: '4px' }}>Bugünkü yatak ve dolap düzenlerini değerlendirin.</div>
+                      </div>
 
-                        {/* ANLIK ZİMMET LİSTESİ ÖNİZLEME */}
-                        <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-                            {['wc_1', 'wc_2', 'wc_3', 'wc_4', 'wc_5', 'wc_6'].map(key => {
-                                const area = appData?.hygiene_areas?.[key];
-                                if(!area) return null;
-                                return (
-                                    <div key={key} style={{ background: '#f8fafc', padding: '12px', borderRadius: '15px', border: '1px solid #e2e8f0' }}>
-                                        <div style={{ fontWeight: 900, fontSize: '12px', color: '#0ea5e9', marginBottom: '5px' }}>{area.name}</div>
-                                        <div style={{ fontSize: '11px', fontWeight: 700, color: area.responsibles?.length > 0 ? '#64748b' : '#ef4444' }}>
-                                            {area.responsibles?.length > 0 ? area.responsibles.join(', ') : '⚠️ Nöbetçi Atanmadı'}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-            )}
+                      <div className="fade-in">
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '30px' }}>
+                              {Object.entries(appData?.room_areas || {}).filter(([k, v]) => v.responsibles?.length > 0).map(([key, area]) => {
+                                  const isSelected = roomForm.areaId === key;
+                                  return (
+                                      <div key={key} onClick={() => setRoomForm({...roomForm, areaId: key})} className="card-hover" style={{ background: isSelected ? '#4c1d95' : '#f8fafc', border: `2px solid ${isSelected ? '#4c1d95' : '#e2e8f0'}`, padding: '16px', borderRadius: '20px', cursor: 'pointer', textAlign: 'center', transition: '0.2s', boxShadow: isSelected ? '0 10px 20px rgba(76,29,149,0.3)' : 'none' }}>
+                                          <div style={{ fontSize: '24px', marginBottom: '6px', opacity: isSelected ? 1 : 0.6 }}>🛏️</div>
+                                          <div style={{ fontWeight: 900, fontSize: '14px', color: isSelected ? 'white' : '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{area.name}</div>
+                                          <div style={{ fontSize: '11px', fontWeight: 700, color: isSelected ? '#ddd6fe' : '#64748b', marginTop: '4px' }}>{(area.responsibles || []).length} Öğrenci</div>
+                                      </div>
+                                  )
+                              })}
+                          </div>
 
-            {/* PERSONEL ODA DENETİM PANELİ */}
-            {hygieneTab === 'rooms' && (
-                <div className="fade-in">
-                    <div style={{ background: '#ffffff', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
-                        <div style={{ marginBottom: '25px', borderBottom: '2px dashed #f1f5f9', paddingBottom: '15px' }}>
-                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🛏️ Oda Düzeni Denetimi</h3>
-                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '5px', fontWeight: 700 }}>Oda isimleri ve atamaları sistem yöneticisi tarafından belirlenir.</div>
-                        </div>
+                          <div style={{ background: '#f8fafc', borderRadius: '24px', padding: '25px', border: '1px solid #e2e8f0' }}>
+                              <div style={{ textAlign: 'center', fontWeight: 900, color: '#4c1d95', fontSize: '16px', marginBottom: '15px' }}>DÜZEN PUANI</div>
+                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '25px' }}>
+                                  {[1, 2, 3, 4, 5].map(star => (
+                                      <button key={star} onClick={() => setRoomForm({...roomForm, score: star})} style={{ flex: 1, maxWidth: '70px', padding: '15px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer', background: roomForm.score >= star ? 'linear-gradient(135deg, #4c1d95, #2e1065)' : '#ffffff', color: roomForm.score >= star ? '#fff' : '#cbd5e1', transition: 'all 0.2s', boxShadow: roomForm.score >= star ? '0 8px 15px rgba(76,29,149,0.3)' : 'none' }}>
+                                          ★
+                                      </button>
+                                  ))}
+                              </div>
+                              <button onClick={saveRoomInspection} disabled={isHygieneSaving} className="premium-btn badge-glow" style={{ width: '100%', padding: '20px', background: 'linear-gradient(135deg, #4c1d95, #2e1065)', color: 'white', fontWeight: 900, fontSize: '16px', border: 'none', boxShadow: '0 10px 20px rgba(76,29,149,0.4)' }}>
+                                  {isHygieneSaving ? '⏳ İşleniyor...' : '✅ ODA DENETİMİNİ KAYDET'}
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              )}
 
-                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>ODA SEÇİN:</label>
-                        <select 
-                            value={roomForm.areaId} 
-                            onChange={(e) => setRoomForm({...roomForm, areaId: e.target.value})}
-                            className="elite-input" style={{ marginBottom: '25px', width: '100%', padding: '15px', borderRadius: '15px', border: '2px solid #e2e8f0', outline: 'none', fontWeight: 700 }}
-                        >
-                            <option value="">-- Denetlenecek Odayı Seçin --</option>
-                            {Object.entries(appData?.room_areas || {}).filter(([k, v]) => v.responsibles?.length > 0).map(([key, area]) => (
-                                <option key={key} value={key}>{area.name} ({(area.responsibles || []).length} Öğrenci)</option>
-                            ))}
-                        </select>
+              {/* 3. PANEL: GENEL TEMİZLİK (DARK PREMIUM) */}
+              {hygieneTab === 'general' && (
+                  <div className="fade-in" style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 10px 40px rgba(15,23,42,0.04)', border: '1px solid #f8fafc' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px', flexWrap: 'wrap', gap: '15px' }}>
+                          <div>
+                              <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a', fontSize: '22px' }}>🧹 Temizlik Kontrolü</h3>
+                              <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Öğrencilerin günlük görev yerlerini puanlayın.</p>
+                          </div>
+                          <div style={{ display: 'flex', gap: '10px', width: '100%', justifyContent: 'flex-end' }}>
+                              <button onClick={async () => {
+                                      const entries = Object.entries(generalCleaningList).filter(([name, data]) => data.area && data.score);
+                                      if(entries.length === 0) return alert("En az bir öğrenci için alan ve puan girmelisiniz!");
+                                      if(!window.confirm(`${entries.length} öğrencinin puanı kaydedilecek. Onaylıyor musun?`)) return;
+                                      
+                                      setIsHygieneSaving(true);
+                                      const updates = {};
+                                      const now = Date.now();
+                                      
+                                      entries.forEach(([student, data]) => {
+                                          const impact = getCoinImpact(data.score);
+                                          const logId = `gen_${student}_${now}`;
+                                          updates[`hygiene_logs/${logId}`] = { student, areaName: data.area, score: data.score, timestamp: now, coinImpact: impact, type: 'general', inspector: 'Personel' };
+                                          updates[`wallet/${student}`] = (Number(appData?.wallet?.[student]) || 0) + impact;
+                                          updates[`transactions/${student}/txn_${logId}`] = { desc: `${data.area} Temizlik Kontrolü`, amt: impact, date: new Date().toLocaleString('tr-TR') };
+                                      });
 
-                        <label style={{ display: 'block', fontWeight: 900, marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>ODA DÜZENİ PUANI:</label>
-                        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                            {[1, 2, 3, 4, 5].map(star => (
-                                <button 
-                                    key={star}
-                                    onClick={() => setRoomForm({...roomForm, score: star})}
-                                    style={{ 
-                                        flex: 1, padding: '20px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer',
-                                        background: roomForm.score >= star ? '#8b5cf6' : '#f8fafc',
-                                        color: roomForm.score >= star ? '#fff' : '#cbd5e1',
-                                        transition: '0.2s'
-                                    }}
-                                >★</button>
-                            ))}
-                        </div>
-                        
-                        <div style={{ textAlign: 'center', marginBottom: '20px', fontSize: '13px', fontWeight: 800, color: roomForm.score >= 3 ? '#10b981' : '#ef4444' }}>
-                            Bu puana göre odadaki öğrencilere 
-                            {roomForm.score === 5 ? ' +50 M-Coin eklenecek.' : 
-                             roomForm.score === 4 ? ' +40 M-Coin eklenecek.' : 
-                             roomForm.score === 3 ? ' +30 M-Coin eklenecek.' : 
-                             roomForm.score === 2 ? ' -10 M-Coin (Ceza) kesilecek.' : 
-                             ' -20 M-Coin (Ceza) kesilecek.'}
-                        </div>
+                                      try {
+                                          await db.ref('mavikent_premium').update(updates);
+                                          alert("✅ Puanlar başarıyla dağıtıldı!");
+                                          setGeneralCleaningList({}); 
+                                      } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
+                                  }} 
+                                  disabled={isHygieneSaving} className="premium-btn badge-glow" style={{ background: 'linear-gradient(135deg, #065f46, #022c22)', color: 'white', padding: '12px 24px', fontSize: '14px', border: 'none', boxShadow: '0 8px 15px rgba(6,78,59,0.4)' }}>
+                                  {isHygieneSaving ? '⏳...' : '🚀 KAYDET VE DAĞIT'}
+                              </button>
+                          </div>
+                      </div>
 
-                        <button 
-                            onClick={saveRoomInspection} 
-                            disabled={isHygieneSaving}
-                            className="premium-btn" 
-                            style={{ width: '100%', padding: '20px', borderRadius: '20px', border: 'none', background: '#8b5cf6', color: 'white', fontWeight: 900, fontSize: '16px', cursor: 'pointer' }}
-                        >
-                            {isHygieneSaving ? '⏳ İşleniyor...' : '✅ ODA DENETİMİNİ KAYDET'}
-                        </button>
-                    </div>
-                </div>
-            )}
+                      <div className="clean-scroll" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px', maxHeight: '500px', overflowY: 'auto', paddingRight: '10px' }}>
+                          {roster.map(student => {
+                              const data = generalCleaningList[student] || {};
+                              return (
+                                  <div key={student} style={{ background: data.score > 0 ? '#f0fdf4' : '#f8fafc', border: `1px solid ${data.score > 0 ? '#10b981' : '#e2e8f0'}`, borderRadius: '20px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', transition: 'all 0.2s', boxShadow: data.score > 0 ? '0 4px 10px rgba(16,185,129,0.1)' : 'none' }}>
+                                      <div style={{ fontWeight: 900, fontSize: '15px', color: '#0f172a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <span>{student}</span>
+                                          {data.score > 0 && <span style={{ fontSize: '12px', background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: '8px' }}>Hazır</span>}
+                                      </div>
+                                      <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800, background: 'white', padding: '8px 12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>📍 {data.area || 'Görev Atanmamış'}</div>
+                                      <div style={{ display: 'flex', gap: '4px' }}>
+                                          {[1,2,3,4,5].map(s => (
+                                              <button key={s} onClick={() => setGeneralCleaningList({...generalCleaningList, [student]: {...data, score: s}})} style={{ flex: 1, padding: '10px 0', border: 'none', borderRadius: '10px', cursor: 'pointer', background: (data.score || 0) >= s ? '#10b981' : '#e2e8f0', color: (data.score || 0) >= s ? 'white' : '#94a3b8', fontSize: '16px', transition: '0.2s' }}>★</button>
+                                          ))}
+                                      </div>
+                                  </div>
+                              );
+                          })}
+                      </div>
+                  </div>
+              )}
 
-            {/* 2. PANEL: TEMİZLİK KONTROL (ÖĞRENCİ LİSTESİ) */}
-            {hygieneTab === 'general' && (
-                <div className="fade-in">
-                    <div style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
-                        <div style={{ marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
-                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a' }}>🧹 Günlük Temizlik Kontrolü</h3>
-                            <p style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, marginTop: '5px' }}>Tüm öğrencilerin görev alanlarını girin ve puanlayın.</p>
-                        </div>
-
-                        <div className="clean-scroll" style={{ maxHeight: '500px', overflowY: 'auto', marginBottom: '25px', paddingRight: '5px' }}>
-                            {(Object.keys(appData?.students || {})).length > 0 ? (Object.keys(appData.students)).map(student => (
-                                <div key={student} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', background: generalCleaningList[student]?.score ? '#f8fafc' : 'transparent', borderRadius: '15px', marginBottom: '5px' }}>
-                                    <div style={{ flex: '1 1 120px', fontWeight: 900, fontSize: '14px', color: '#0f172a' }}>{student}</div>
-                                    
-                                    <input 
-                                        placeholder="Temizlik Alanı (Örn: Mescid)" 
-                                        value={generalCleaningList[student]?.area || ''}
-                                        onChange={(e) => setGeneralCleaningList({...generalCleaningList, [student]: {...(generalCleaningList[student] || {}), area: e.target.value}})}
-                                        className="elite-input" style={{ flex: '2 1 180px', padding: '12px 15px', fontSize: '13px', background: 'white', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none' }}
-                                    />
-                                    
-                                    <div style={{ flex: '1 1 180px', display: 'flex', gap: '4px' }}>
-                                        {[1,2,3,4,5].map(s => (
-                                            <button 
-                                                key={s} 
-                                                onClick={() => setGeneralCleaningList({...generalCleaningList, [student]: {...(generalCleaningList[student] || {}), score: s}})} 
-                                                style={{ 
-                                                    flex: 1, padding: '10px 0', border: 'none', borderRadius: '10px', cursor: 'pointer',
-                                                    background: (generalCleaningList[student]?.score || 0) >= s ? '#10b981' : '#f1f5f9', 
-                                                    color: (generalCleaningList[student]?.score || 0) >= s ? 'white' : '#cbd5e1', 
-                                                    fontSize: '14px', transition: '0.2s'
-                                                }}
-                                            >★</button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )) : roster.map(student => (
-                                <div key={student} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', background: generalCleaningList[student]?.score ? '#f8fafc' : 'transparent', borderRadius: '15px', marginBottom: '5px' }}>
-                                    <div style={{ flex: '1 1 120px', fontWeight: 900, fontSize: '14px', color: '#0f172a' }}>{student}</div>
-                                    
-                                    <input 
-                                        placeholder="Temizlik Alanı (Örn: Mescid)" 
-                                        value={generalCleaningList[student]?.area || ''}
-                                        onChange={(e) => setGeneralCleaningList({...generalCleaningList, [student]: {...(generalCleaningList[student] || {}), area: e.target.value}})}
-                                        className="elite-input" style={{ flex: '2 1 180px', padding: '12px 15px', fontSize: '13px', background: 'white', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none' }}
-                                    />
-                                    
-                                    <div style={{ flex: '1 1 180px', display: 'flex', gap: '4px' }}>
-                                        {[1,2,3,4,5].map(s => (
-                                            <button 
-                                                key={s} 
-                                                onClick={() => setGeneralCleaningList({...generalCleaningList, [student]: {...(generalCleaningList[student] || {}), score: s}})} 
-                                                style={{ 
-                                                    flex: 1, padding: '10px 0', border: 'none', borderRadius: '10px', cursor: 'pointer',
-                                                    background: (generalCleaningList[student]?.score || 0) >= s ? '#10b981' : '#f1f5f9', 
-                                                    color: (generalCleaningList[student]?.score || 0) >= s ? 'white' : '#cbd5e1', 
-                                                    fontSize: '14px', transition: '0.2s'
-                                                }}
-                                            >★</button>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        <button 
-                            onClick={async () => {
-                                const entries = Object.entries(generalCleaningList).filter(([name, data]) => data.area && data.score);
-                                if(entries.length === 0) return alert("En az bir öğrenci için alan ve puan girmelisiniz!");
-                                if(!window.confirm(`${entries.length} öğrencinin puanı kaydedilecek. Onaylıyor musun?`)) return;
-                                
-                                setIsHygieneSaving(true);
-                                const updates = {};
-                                const now = Date.now();
-                                
-                                entries.forEach(([student, data]) => {
-                                    const impact = getCoinImpact(data.score);
-                                    const logId = `gen_${student}_${now}`;
-                                    
-                                    updates[`hygiene_logs/${logId}`] = { 
-                                        student, areaName: data.area, score: data.score, 
-                                        timestamp: now, coinImpact: impact, type: 'general', inspector: 'Personel' 
-                                    };
-                                    updates[`wallet/${student}`] = (Number(appData?.wallet?.[student]) || 0) + impact;
-                                    updates[`transactions/${student}/txn_${logId}`] = { 
-                                        desc: `${data.area} Temizlik Kontrolü`, 
-                                        amt: impact, 
-                                        date: new Date().toLocaleString('tr-TR') 
-                                    };
-                                });
-
-                                try {
-                                    await db.ref('mavikent_premium').update(updates);
-                                    alert("✅ Günlük temizlik kontrolleri kaydedildi ve M-Coin'ler dağıtıldı!");
-                                    setGeneralCleaningList({}); 
-                                } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
-                            }} 
-                            disabled={isHygieneSaving}
-                            className="premium-btn" 
-                            style={{ width: '100%', padding: '20px', borderRadius: '20px', border: 'none', background: '#10b981', color: 'white', fontWeight: 900, fontSize: '16px', cursor: 'pointer' }}
-                        >
-                            {isHygieneSaving ? '⏳ Toplu Kayıt Yapılıyor...' : '🚀 TÜMÜNÜ KAYDET VE M-COIN DAĞIT'}
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* 3. PANEL: GEÇMİŞ (LOGLAR) */}
-            {hygieneTab === 'history' && (
-                <div className="fade-in">
-                    <div style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h3 style={{ margin: 0, fontWeight: 900 }}>📜 Son Denetim Kayıtları</h3>
-                        </div>
-                        
-                        <div className="clean-scroll" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                            {Object.values(appData?.hygiene_logs || {}).length === 0 ? (
-                                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontWeight: 700 }}>Henüz kayıt bulunmuyor.</div>
-                            ) : (
-                                Object.values(appData.hygiene_logs).sort((a,b) => b.timestamp - a.timestamp).slice(0, 50).map((log, i) => (
-                                    <div key={i} style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div>
-                                            <div style={{ fontWeight: 900, fontSize: '14px', color: '#0f172a' }}>{log.areaName}</div>
-                                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, marginTop: '3px' }}>
-                                                {log.student || log.responsibles?.join(', ')} • {new Date(log.timestamp).toLocaleTimeString('tr-TR')}
-                                            </div>
-                                        </div>
-                                        <div style={{ textAlign: 'right' }}>
-                                            <div style={{ fontWeight: 900, color: log.coinImpact >= 0 ? '#10b981' : '#ef4444', fontSize: '15px' }}>
-                                                {log.coinImpact >= 0 ? '+' : ''}{log.coinImpact} M
-                                            </div>
-                                            <div style={{ fontSize: '12px', color: '#fbbf24', marginTop: '2px' }}>{'★'.repeat(log.score)}</div>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
+              {/* 4. PANEL: GEÇMİŞ */}
+              {hygieneTab === 'history' && (
+                  <div className="fade-in" style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 10px 40px rgba(15,23,42,0.04)', border: '1px solid #f8fafc' }}>
+                      <h3 style={{ margin: '0 0 25px 0', fontWeight: 900, color: '#0f172a', fontSize: '22px' }}>📜 Son Denetimler</h3>
+                      <div className="clean-scroll" style={{ maxHeight: '500px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {Object.values(appData?.hygiene_logs || {}).length === 0 ? (
+                              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontWeight: 700 }}>Kayıt bulunmuyor.</div>
+                          ) : (
+                              Object.values(appData.hygiene_logs).sort((a,b) => b.timestamp - a.timestamp).slice(0, 30).map((log, i) => (
+                                  <div key={i} style={{ padding: '16px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <div>
+                                          <div style={{ fontWeight: 900, fontSize: '15px', color: '#0f172a' }}>{log.areaName}</div>
+                                          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>{log.student || log.responsibles?.join(', ')}</div>
+                                      </div>
+                                      <div style={{ textAlign: 'right' }}>
+                                          <div style={{ fontWeight: 900, color: log.coinImpact >= 0 ? '#10b981' : '#ef4444', fontSize: '18px' }}>{log.coinImpact >= 0 ? '+' : ''}{log.coinImpact} M</div>
+                                          <div style={{ fontSize: '12px', color: '#fbbf24' }}>{'★'.repeat(log.score)}</div>
+                                      </div>
+                                  </div>
+                              ))
+                          )}
+                      </div>
+                  </div>
+              )}
           </div>
-        )}
+      )}
+
       {/* --- AÇILIR PENCERELER (MODALLAR) --- */}
       {selectedStudent && modalType === 'isleyis' && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', animation: 'fadeIn 0.3s ease-out' }}>
@@ -1816,7 +1660,9 @@ const [tutanakTab, setTutanakTab] = useState('odul');
           </div>
         </div>
       )}
-    </div>
+      
+      </div> 
+    </div> 
   );
 };
 

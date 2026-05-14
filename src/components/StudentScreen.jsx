@@ -230,6 +230,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   
   const [activeTab, setActiveTab] = useState('home');
   const [rankTab, setRankTab] = useState('rp');
+const [walletTab, setWalletTab] = useState('plus');
 
   // Bildirimleri Oku (Sadece okunmamışları filtrele)
   const unreadNotifications = Object.entries(appData?.notifications?.[safeName] || {}).filter(([id, notif]) => !notif.isRead).sort((a,b) => b[1].timestamp - a[1].timestamp);
