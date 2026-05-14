@@ -231,6 +231,7 @@ const StudentScreen = ({ studentName, appData, goBackToRoles }) => {
   const [activeTab, setActiveTab] = useState('home');
   const [rankTab, setRankTab] = useState('rp');
 const [walletTab, setWalletTab] = useState('plus');
+const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtrelemesi için eklendi
 
   // Bildirimleri Oku (Sadece okunmamışları filtrele)
   const unreadNotifications = Object.entries(appData?.notifications?.[safeName] || {}).filter(([id, notif]) => !notif.isRead).sort((a,b) => b[1].timestamp - a[1].timestamp);
@@ -1390,210 +1391,242 @@ const [walletTab, setWalletTab] = useState('plus');
         <div className="fade-in" key={activeTab}>
           
           {activeTab === 'home' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
-            {/* Hijyen ve Temizlik Bildirim Sistemi */}
-            {Object.values(appData?.hygiene_logs || {})
-                .filter(log => log.student === safeName || log.responsibles?.includes(safeName))
-                .sort((a,b) => b.timestamp - a.timestamp)
-                .slice(0, 1)
-                .map((lastLog, index) => (
-                <div key={index} style={{ 
-                    background: lastLog.coinImpact > 0 ? '#ecfdf5' : '#fef2f2', 
-                    border: `2px solid ${lastLog.coinImpact > 0 ? '#10b981' : '#ef4444'}`,
-                    padding: '20px', borderRadius: '24px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)',
-                    animation: 'popIn 0.5s forwards'
-                }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <span style={{ fontWeight: 900, fontSize: '16px', color: lastLog.coinImpact > 0 ? '#065f46' : '#991b1b' }}>
-                            📢 {lastLog.areaName} Denetimi Sonuçlandı
-                        </span>
-                        <span style={{ fontSize: '24px' }}>{lastLog.coinImpact > 0 ? '✅' : '⚠️'}</span>
-                    </div>
-                    <p style={{ fontSize: '14px', color: '#475569', margin: 0, fontWeight: 700 }}>
-                        {lastLog.coinImpact > 0 
-                            ? `Tebrikler! Dünkü ${lastLog.areaName} denetiminden ${'★'.repeat(lastLog.score)} aldın ve ${lastLog.coinImpact} M-Coin kazandın.` 
-                            : `Dikkat! ${lastLog.areaName} denetiminden maalesef ${'★'.repeat(lastLog.score)} aldığın için hesabından ${Math.abs(lastLog.coinImpact)} M-Coin kesildi.`}
-                    </p>
-                </div>
-            ))}
-
-            <div style={{ background: '#ffffff', borderRadius: '32px', padding: '35px', border: '1px solid #f1f5f9', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '30px' }}>
+            {/* 1. AD SOYAD VE PROFİL BÖLÜMÜ */}
+            <div style={{ background: '#ffffff', borderRadius: '32px', padding: '30px', border: '1px solid #f1f5f9', boxShadow: '0 15px 40px -10px rgba(15,23,42,0.08)', animation: 'fadeIn 0.5s ease' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
                    <div style={avatarStyle}>{(myCosmetics.avatar && myCosmetics.avatar.val) ? myCosmetics.avatar.val : '🎓'}</div>
                    <div>
-                     <div style={{ fontSize: '26px', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.5px' }}>{safeName}</div>
-                     <div style={{ fontSize: '15px', color: '#64748b', fontWeight: 700, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}><span style={{ background: myBadge.color, color: 'white', padding: '4px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 900 }}>{myBadge.icon} {myBadge.name}</span><TitleBadge title={getStudentTitle(safeName)} /></div>
-                     <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
-                        {is2XActive && <span style={{ color: 'white', fontWeight: 900, fontSize: '11px', background: 'linear-gradient(135deg, #f59e0b, #b45309)', padding: '6px 12px', borderRadius: '10px' }}>⚡ {isGlobal2X ? 'TÜM YURT 2X' : '2X AKTİF'}</span>}
-                        {hasStreak && <span style={{ color: 'white', fontWeight: 900, fontSize: '11px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', padding: '6px 12px', borderRadius: '10px' }}>🛡️ KORUMA</span>}
+                     <div style={{ fontSize: '26px', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.8px' }}>{safeName}</div>
+                     <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 700, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ background: myBadge.color, color: 'white', padding: '4px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>{myBadge.icon} {myBadge.name}</span>
+                        <TitleBadge title={getStudentTitle(safeName)} />
+                     </div>
+                     <div style={{ display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
+                        {is2XActive && <span style={{ color: 'white', fontWeight: 900, fontSize: '10px', background: 'linear-gradient(135deg, #f59e0b, #b45309)', padding: '5px 10px', borderRadius: '8px' }}>⚡ 2X XP</span>}
+                        {hasStreak && <span style={{ color: 'white', fontWeight: 900, fontSize: '10px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', padding: '5px 10px', borderRadius: '8px' }}>🛡️ KORUMA</span>}
                      </div>
                    </div>
                 </div>
+            </div>
 
-                {myResponsibilities.length > 0 && (
-                    <div style={{ background: '#f0f9ff', borderRadius: '24px', padding: '20px', border: '1px solid #bae6fd', marginBottom: '25px' }}>
-                        <div style={{ fontSize: '14px', fontWeight: 900, color: '#0369a1', marginBottom: '10px' }}>📍 SORUMLULUK ALANLARIM</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                            {myResponsibilities.map((res, i) => (
-                                <div key={i} style={{ background: 'white', padding: '8px 16px', borderRadius: '12px', fontSize: '13px', fontWeight: 800, color: '#0f172a', border: '1px solid #e0f2fe' }}>{res}</div>
-                            ))}
-                        </div>
+            {/* 2. SORUMLULUK ALANLARI BÖLÜMÜ */}
+            {myResponsibilities.length > 0 && (
+                <div style={{ background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', borderRadius: '28px', padding: '20px', border: '1px solid #bae6fd', boxShadow: '0 10px 20px -5px rgba(186,230,253,0.3)', animation: 'popIn 0.5s forwards' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 900, color: '#0369a1', marginBottom: '12px', letterSpacing: '1px' }}>📍 AKTİF SORUMLULUKLARIM</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                        {myResponsibilities.map((res, i) => (
+                            <div key={i} style={{ background: 'white', padding: '10px 18px', borderRadius: '16px', fontSize: '13px', fontWeight: 800, color: '#0369a1', border: '1px solid rgba(3,105,161,0.1)', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>{res}</div>
+                        ))}
                     </div>
-                )}
-                
-                <div className="grid-mobile-2" style={{ marginBottom: '25px', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
-                    <div style={{ background: '#fef3c7', borderRadius: '20px', padding: '20px', border: '1px solid #fde68a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#b45309' }}>🏆 RP SIRASI</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#92400e' }}>{myRpRank}.</span></div>
-                    <div style={{ background: '#ecfdf5', borderRadius: '20px', padding: '20px', border: '1px solid #a7f3d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#047857' }}>💳 ZENGİNLİK</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#064e3b' }}>{myWealthRank}.</span></div>
-                   <div style={{ background: '#eff6ff', borderRadius: '20px', padding: '20px', border: '1px solid #bfdbfe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#1d4ed8' }}>🏅 KATILIM</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#1e3a8a' }}>{myXpRank}.</span></div>
-                    <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '20px', border: '1px solid #fecaca', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gridColumn: '1 / -1' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#991b1b' }}>📉 TOPLAM DEVAMSIZLIK</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#ef4444' }}>{appData?.absences?.[safeName] || 0} GÜN</span></div>
                 </div>
+            )}
 
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '24px', padding: '24px' }}>
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}><span style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a' }}>Seviye {xpDetail.level}</span><span style={{ fontSize: '14px', fontWeight: 800, color: '#64748b' }}>Seviye {xpDetail.level + 1}</span></div>
-                   <div style={{ width: '100%', height: '16px', background: '#e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '12px' }}><div style={{ background: 'linear-gradient(90deg, #3b82f6, #0ea5e9)', width: `${xpDetail.progress}%`, height: '100%', borderRadius: '10px', transition: 'width 0.5s ease-out' }}></div></div>
-                   <div style={{ textAlign: 'center', fontSize: '14px', fontWeight: 700, color: '#94a3b8' }}><span style={{ color: '#0f172a', fontWeight: 900 }}>{xpDetail.currentXp} XP</span> / {xpDetail.nextLevelXp} XP</div>
-                </div>
+            {/* 3. DENETİM SONUÇLARI (3'LÜ PANEL) */}
+            {(() => {
+                const allMyLogs = Object.values(appData?.hygiene_logs || {})
+                    .filter(log => log.student === safeName || log.responsibles?.includes(safeName))
+                    .sort((a, b) => b.timestamp - a.timestamp);
 
-                {/* 🍽️ ZAMAN KİLİTLİ 3 ÖĞÜNLÜ YEMEK PUANLAMA BİLEŞENİ BURADA! */}
-                <YemekPuanlama ogrenciAdi={safeName} />
+                const wcLog = allMyLogs.find(l => l.category === 'wc' || /wc|tuvalet|banyo/i.test(l.areaName));
+                const etutLog = allMyLogs.find(l => l.category === 'room' || /etüt|oda|yatak/i.test(l.areaName));
+                const temizlikLog = allMyLogs.find(l => l.category === 'general' || /temizlik|görev|mıntıka/i.test(l.areaName));
 
-                <button onClick={() => setShowTxnModal(true)} className="premium-btn card-hover" style={{ width: '100%', background: 'linear-gradient(135deg, #1e293b, #0f172a)', color: 'white', padding: '18px', borderRadius: '24px', marginTop: '25px', fontSize: '15px', fontWeight: 900, border: '1px solid #334155', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
-                    📜 DETAYLI PUAN VE HESAP GEÇMİŞİM
-                </button>
+                const renderControlCard = (title, icon, log) => {
+                    const isSuccess = log && log.coinImpact > 0;
+                    const isFail = log && log.coinImpact < 0;
+                    const isNeutral = log && log.coinImpact === 0;
+                    const bg = isSuccess ? '#ecfdf5' : (isFail ? '#fef2f2' : (isNeutral ? '#f8fafc' : '#ffffff'));
+                    const border = isSuccess ? '#10b981' : (isFail ? '#ef4444' : (isNeutral ? '#cbd5e1' : '#e2e8f0'));
+                    const titleColor = isSuccess ? '#064e3b' : (isFail ? '#7f1d1d' : '#0f172a');
+                    const dateStr = log ? (log.date || new Date(log.timestamp).toLocaleDateString('tr-TR')) : '-';
 
-                {myGameAppointments.length > 0 && (
-                    <div style={{ background: '#fffbeb', border: '2px solid #fde047', borderRadius: '24px', padding: '25px', marginTop: '25px' }}>
-                       <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', fontWeight: 900, color: '#b45309' }}>🎮 Haftalık Oyun Odası Randevuların</h3>
-                       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                          {myGameAppointments.map((appt, idx) => (
-                              <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'white', padding: '16px', borderRadius: '16px', border: '1px solid #fde68a' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                      <span style={{ fontSize: '24px' }}>{appt.icon}</span>
-                                      <div>
-                                          <div style={{ fontWeight: 900, color: '#92400e', fontSize: '15px' }}>{appt.device}</div>
-                                          <div style={{ fontSize: '13px', color: '#b45309', fontWeight: 700 }}>{appt.day} • {appt.time}</div>
-                                      </div>
-                                  </div>
-                                  <div style={{ background: '#10b981', color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900 }}>ONAYLI</div>
-                              </div>
-                          ))}
-                       </div>
-                    </div>
-                )}
-
-                <div style={{ background: 'white', border: '2px dashed #cbd5e1', borderRadius: '24px', padding: '25px', marginTop: '25px' }}>
-                   <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>🎯 Aktif Görevler</h3>
-                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {['q1', 'q2', 'q3'].map(qId => {
-                         const q = quests[qId]; 
-                         if (!q || !q.text) return null; 
-                         const isPart = (q.participants || []).includes(safeName);
-                         return (
-                            <div key={qId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isPart ? '#f0fdf4' : '#f8fafc', padding: '16px', borderRadius: '16px', border: `1px solid ${isPart ? '#10b981' : '#e2e8f0'}` }}>
-                               <div><div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{q.text}</div><div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>Ödül: +{q.amt} {q.type}</div></div>
-                               {isPart ? <div style={{ color: '#10b981', fontWeight: 900, fontSize: '12px' }}>KATILDIN</div> : <button onClick={() => { db.ref(`mavikent_premium/quests/${qId}/participants`).set([...(q.participants||[]), safeName]); alert("Göreve katıldın!"); }} className="profile-btn" style={{ background: '#0f172a', color: 'white', padding: '8px 16px', fontSize: '12px' }}>Katıl</button>}
-                            </div>
-                         )
-                      })}
-                   </div>
-                </div>
-
-                <div style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', borderRadius: '32px', padding: '30px', marginTop: '25px', color: 'white', boxShadow: '0 15px 30px rgba(49,46,129,0.3)', border: '1px solid #4338ca' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
-                        <div>
-                            <h3 style={{ margin: '0 0 5px 0', fontSize: '22px', fontWeight: 900, color: '#e0e7ff' }}>🎁 Ganimet Odası</h3>
-                            <div style={{ fontSize: '13px', color: '#a5b4fc', fontWeight: 600 }}>10'lu açılımlarda %10 indirim ve 1 GARANTİ SEANS!</div>
-                        </div>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '20px' }}>
-                        {SHARD_TYPES.map(st => {
-                            const count = getShard(st.id);
-                            const progress = Math.min(100, (count / 20) * 100);
-                            const isReady = count >= 20;
-                            return (
-                                <div key={st.id} onClick={() => isReady && redeemShards(st.id, st.name, st.icon)} style={{ background: st.bg, border: `1px solid ${st.color}`, borderRadius: '16px', padding: '12px', textAlign: 'center', cursor: isReady ? 'pointer' : 'default', opacity: isReady ? 1 : 0.8 }}>
-                                    <div style={{ fontSize: '24px', marginBottom: '5px' }}>{st.icon}</div>
-                                    <div style={{ fontSize: '12px', fontWeight: 900, color: st.color }}>{st.name} PARÇASI</div>
-                                    <div style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', margin: '5px 0' }}>{count} / 20</div>
-                                    <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.1)', borderRadius: '10px', overflow: 'hidden' }}>
-                                        <div style={{ width: `${progress}%`, height: '100%', background: st.color, transition: '0.3s' }}></div>
-                                    </div>
-                                    {isReady && <div className="badge-glow" style={{ fontSize: '10px', background: st.color, color: 'white', padding: '4px', borderRadius: '6px', marginTop: '8px', fontWeight: 900 }}>BİRLEŞTİR</div>}
+                    return (
+                        <div style={{ 
+                            background: bg, border: `2px solid ${border}`, borderRadius: '24px', 
+                            padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px',
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.03)', flex: 1, minWidth: '140px',
+                            animation: 'popIn 0.5s forwards'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div>
+                                    <div style={{ fontSize: '24px', marginBottom: '4px' }}>{icon}</div>
+                                    <div style={{ fontWeight: 900, fontSize: '13px', color: titleColor, lineHeight: '1.2' }}>{title}</div>
                                 </div>
-                            )
-                        })}
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '15px' }}>
-                        <div style={{ background: 'linear-gradient(135deg, #334155, #1e293b)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #475569' }}>
-                            <div style={{ fontSize: '40px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>📦</div>
-                            <div style={{ fontSize: '13px', fontWeight: 900, color: 'white', marginBottom: '15px' }}>STANDART KUTU</div>
-                            <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
-                                <button onClick={() => openLootBox('standart', 1)} className="profile-btn card-hover" style={{ background: '#0f172a', color: '#94a3b8', padding: '8px', fontSize: '11px', flex: 1 }}>1x<br/>(7 M)</button>
-                                <button onClick={() => openLootBox('standart', 10)} className="profile-btn card-hover" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '8px', fontSize: '11px', flex: 1, border: 'none', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' }}>10x<br/>(63 M)</button>
+                                {log && <span style={{ fontSize: '18px' }}>{isSuccess ? '✅' : (isFail ? '⚠️' : '➖')}</span>}
                             </div>
-                        </div>
-                        <div style={{ background: 'linear-gradient(135deg, #d97706, #92400e)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #f59e0b' }}>
-                            <div style={{ fontSize: '40px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>🧰</div>
-                            <div style={{ fontSize: '13px', fontWeight: 900, color: 'white', marginBottom: '15px' }}>MEGA KUTU</div>
-                            <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
-                                <button onClick={() => openLootBox('mega', 1)} className="profile-btn card-hover" style={{ background: '#78350f', color: '#fde68a', padding: '8px', fontSize: '11px', flex: 1 }}>1x<br/>(10 M)</button>
-                                <button onClick={() => openLootBox('mega', 10)} className="profile-btn card-hover" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '8px', fontSize: '11px', flex: 1, border: 'none', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' }}>10x<br/>(90 M)</button>
-                            </div>
-                        </div>
-                        <div style={{ background: 'linear-gradient(135deg, #0284c7, #0369a1)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #38bdf8' }}>
-                            <div style={{ fontSize: '40px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>💎</div>
-                            <div style={{ fontSize: '13px', fontWeight: 900, color: 'white', marginBottom: '15px' }}>ELİT SANDIK</div>
-                            <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
-                                <button onClick={() => openLootBox('elit', 1)} className="profile-btn card-hover" style={{ background: '#075985', color: '#bae6fd', padding: '8px', fontSize: '11px', flex: 1 }}>1x<br/>(15 M)</button>
-                                <button onClick={() => openLootBox('elit', 10)} className="profile-btn card-hover" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '8px', fontSize: '11px', flex: 1, border: 'none', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' }}>10x<br/>(135 M)</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div style={{ background: '#0f172a', borderRadius: '24px', padding: '20px', marginTop: '25px', position: 'relative', overflow: 'hidden' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                        <h3 style={{ margin: '0', fontSize: '18px', fontWeight: 900, color: 'white' }}>💬 Canlı Meydan Özeti</h3>
-                        <button onClick={() => setActiveTab('chat')} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '4px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>Sohbete Git</button>
-                    </div>
-                    
-                    <div style={{ height: '140px', overflow: 'hidden', position: 'relative' }}>
-                        <div className="auto-scroll-chat" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {Object.keys(appData?.global_chat || {}).length === 0 ? <div style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', marginTop: '20px' }}>Henüz mesaj yok...</div> : (
-                                Object.keys(appData.global_chat).slice(-15).map(k => { 
-                                    const msg = appData.global_chat[k];
-                                    const isSystem = msg.type === 'system';
-                                    const isAdmin = msg.type === 'admin';
-                                    const msgTitle = getStudentTitle(msg.s);
-                                    
-                                    if (isAdmin) {
-                                        return (
-                                            <div key={k} style={{ background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)', padding: '10px 15px', borderRadius: '12px', borderLeft: `3px solid #fca5a5`, display: 'flex', flexDirection: 'column' }}>
-                                                <div style={{ fontSize: '11px', color: '#fecaca', fontWeight: 900, marginBottom: '4px' }}>👑 {msg.s}</div>
-                                                <div style={{ fontSize: '13px', color: 'white', fontWeight: 700 }}>{msg.t}</div>
-                                            </div>
-                                        );
-                                    }
-
-                                    return (
-                                        <div key={k} style={{ background: isSystem ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.05)', padding: '10px 15px', borderRadius: '12px', borderLeft: `3px solid ${isSystem ? '#10b981' : '#3b82f6'}`, display: 'flex', flexDirection: 'column' }}>
-                                            <div style={{ fontSize: '11px', color: isSystem ? '#10b981' : '#94a3b8', fontWeight: 900, marginBottom: '4px' }}>{msg.s} <TitleBadge title={msgTitle && !isSystem ? msgTitle : null} /></div>
-                                            <div style={{ fontSize: '13px', color: 'white', fontWeight: 500 }}>{msg.t}</div>
-                                        </div>
-                                    );
-                                })
+                            {log ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 800, background: 'rgba(255,255,255,0.6)', padding: '3px 8px', borderRadius: '6px', alignSelf: 'flex-start' }}>📅 {dateStr}</div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ color: '#f59e0b', fontSize: '15px' }}>{'★'.repeat(log.score || 0)}{'☆'.repeat(5 - (log.score || 0))}</div>
+                                        <div style={{ fontWeight: 900, fontSize: '15px', color: isSuccess ? '#10b981' : (isFail ? '#ef4444' : '#64748b') }}>{log.coinImpact > 0 ? `+${log.coinImpact}` : log.coinImpact} M</div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, textAlign: 'center', padding: '10px 0' }}>Kayıt Yok</div>
                             )}
                         </div>
+                    );
+                };
+
+                return (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '10px' }}>
+                        {renderControlCard('WC Kontrol', '🚽', wcLog)}
+                        {renderControlCard('Etüt Kontrol', '📚', etutLog)}
+                        {renderControlCard('Görev Kontrol', '🧹', temizlikLog)}
                     </div>
-                    <div style={{ position: 'absolute', top: 50, left: 0, width: '100%', height: '20px', background: 'linear-gradient(to bottom, #0f172a, transparent)', zIndex: 2 }}></div>
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '20px', background: 'linear-gradient(to top, #0f172a, transparent)', zIndex: 2 }}></div>
+                );
+            })()}
+
+            <div className="grid-mobile-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
+                <div style={{ background: '#fef3c7', borderRadius: '20px', padding: '20px', border: '1px solid #fde68a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#b45309' }}>🏆 RP SIRASI</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#92400e' }}>{myRpRank}.</span></div>
+                <div style={{ background: '#ecfdf5', borderRadius: '20px', padding: '20px', border: '1px solid #a7f3d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#047857' }}>💳 ZENGİNLİK</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#064e3b' }}>{myWealthRank}.</span></div>
+               <div style={{ background: '#eff6ff', borderRadius: '20px', padding: '20px', border: '1px solid #bfdbfe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#1d4ed8' }}>🏅 KATILIM</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#1e3a8a' }}>{myXpRank}.</span></div>
+                <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '20px', border: '1px solid #fecaca', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gridColumn: '1 / -1' }}><span style={{ fontSize: '13px', fontWeight: 800, color: '#991b1b' }}>📉 TOPLAM DEVAMSIZLIK</span><span style={{ fontSize: '24px', fontWeight: 900, color: '#ef4444' }}>{appData?.absences?.[safeName] || 0} GÜN</span></div>
+            </div>
+
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '24px', padding: '24px' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}><span style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a' }}>Seviye {xpDetail.level}</span><span style={{ fontSize: '14px', fontWeight: 800, color: '#64748b' }}>Seviye {xpDetail.level + 1}</span></div>
+               <div style={{ width: '100%', height: '16px', background: '#e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '12px' }}><div style={{ background: 'linear-gradient(90deg, #3b82f6, #0ea5e9)', width: `${xpDetail.progress}%`, height: '100%', borderRadius: '10px', transition: 'width 0.5s ease-out' }}></div></div>
+               <div style={{ textAlign: 'center', fontSize: '14px', fontWeight: 700, color: '#94a3b8' }}><span style={{ color: '#0f172a', fontWeight: 900 }}>{xpDetail.currentXp} XP</span> / {xpDetail.nextLevelXp} XP</div>
+            </div>
+
+            {/* 🍽️ ZAMAN KİLİTLİ 3 ÖĞÜNLÜ YEMEK PUANLAMA BİLEŞENİ BURADA! */}
+            <YemekPuanlama ogrenciAdi={safeName} />
+
+            {myGameAppointments.length > 0 && (
+                <div style={{ background: '#fffbeb', border: '2px solid #fde047', borderRadius: '24px', padding: '25px' }}>
+                   <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', fontWeight: 900, color: '#b45309' }}>🎮 Haftalık Oyun Odası Randevuların</h3>
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {myGameAppointments.map((appt, idx) => (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'white', padding: '16px', borderRadius: '16px', border: '1px solid #fde68a' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                  <span style={{ fontSize: '24px' }}>{appt.icon}</span>
+                                  <div>
+                                      <div style={{ fontWeight: 900, color: '#92400e', fontSize: '15px' }}>{appt.device}</div>
+                                      <div style={{ fontSize: '13px', color: '#b45309', fontWeight: 700 }}>{appt.day} • {appt.time}</div>
+                                  </div>
+                              </div>
+                              <div style={{ background: '#10b981', color: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 900 }}>ONAYLI</div>
+                          </div>
+                      ))}
+                   </div>
+                </div>
+            )}
+
+            <div style={{ background: 'white', border: '2px dashed #cbd5e1', borderRadius: '24px', padding: '25px' }}>
+               <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>🎯 Aktif Görevler</h3>
+               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {['q1', 'q2', 'q3'].map(qId => {
+                     const q = quests[qId]; 
+                     if (!q || !q.text) return null; 
+                     const isPart = (q.participants || []).includes(safeName);
+                     return (
+                        <div key={qId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isPart ? '#f0fdf4' : '#f8fafc', padding: '16px', borderRadius: '16px', border: `1px solid ${isPart ? '#10b981' : '#e2e8f0'}` }}>
+                           <div><div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{q.text}</div><div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>Ödül: +{q.amt} {q.type}</div></div>
+                           {isPart ? <div style={{ color: '#10b981', fontWeight: 900, fontSize: '12px' }}>KATILDIN</div> : <button onClick={() => { db.ref(`mavikent_premium/quests/${qId}/participants`).set([...(q.participants||[]), safeName]); alert("Göreve katıldın!"); }} className="profile-btn" style={{ background: '#0f172a', color: 'white', padding: '8px 16px', fontSize: '12px' }}>Katıl</button>}
+                        </div>
+                     )
+                  })}
+               </div>
+            </div>
+
+            <div style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', borderRadius: '32px', padding: '30px', color: 'white', boxShadow: '0 15px 30px rgba(49,46,129,0.3)', border: '1px solid #4338ca' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+                    <div>
+                        <h3 style={{ margin: '0 0 5px 0', fontSize: '22px', fontWeight: 900, color: '#e0e7ff' }}>🎁 Ganimet Odası</h3>
+                        <div style={{ fontSize: '13px', color: '#a5b4fc', fontWeight: 600 }}>10'lu açılımlarda %10 indirim ve 1 GARANTİ SEANS!</div>
+                    </div>
                 </div>
 
-              </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '20px' }}>
+                    {SHARD_TYPES.map(st => {
+                        const count = getShard(st.id);
+                        const progress = Math.min(100, (count / 20) * 100);
+                        const isReady = count >= 20;
+                        return (
+                            <div key={st.id} onClick={() => isReady && redeemShards(st.id, st.name, st.icon)} style={{ background: st.bg, border: `1px solid ${st.color}`, borderRadius: '16px', padding: '12px', textAlign: 'center', cursor: isReady ? 'pointer' : 'default', opacity: isReady ? 1 : 0.8 }}>
+                                <div style={{ fontSize: '24px', marginBottom: '5px' }}>{st.icon}</div>
+                                <div style={{ fontSize: '12px', fontWeight: 900, color: st.color }}>{st.name} PARÇASI</div>
+                                <div style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', margin: '5px 0' }}>{count} / 20</div>
+                                <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.1)', borderRadius: '10px', overflow: 'hidden' }}>
+                                    <div style={{ width: `${progress}%`, height: '100%', background: st.color, transition: '0.3s' }}></div>
+                                </div>
+                                {isReady && <div className="badge-glow" style={{ fontSize: '10px', background: st.color, color: 'white', padding: '4px', borderRadius: '6px', marginTop: '8px', fontWeight: 900 }}>BİRLEŞTİR</div>}
+                            </div>
+                        )
+                    })}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '15px' }}>
+                    <div style={{ background: 'linear-gradient(135deg, #334155, #1e293b)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #475569' }}>
+                        <div style={{ fontSize: '40px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>📦</div>
+                        <div style={{ fontSize: '13px', fontWeight: 900, color: 'white', marginBottom: '15px' }}>STANDART KUTU</div>
+                        <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                            <button onClick={() => openLootBox('standart', 1)} className="profile-btn card-hover" style={{ background: '#0f172a', color: '#94a3b8', padding: '8px', fontSize: '11px', flex: 1 }}>1x<br/>(7 M)</button>
+                            <button onClick={() => openLootBox('standart', 10)} className="profile-btn card-hover" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '8px', fontSize: '11px', flex: 1, border: 'none', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' }}>10x<br/>(63 M)</button>
+                        </div>
+                    </div>
+                    <div style={{ background: 'linear-gradient(135deg, #d97706, #92400e)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #f59e0b' }}>
+                        <div style={{ fontSize: '40px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>🧰</div>
+                        <div style={{ fontSize: '13px', fontWeight: 900, color: 'white', marginBottom: '15px' }}>MEGA KUTU</div>
+                        <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                            <button onClick={() => openLootBox('mega', 1)} className="profile-btn card-hover" style={{ background: '#78350f', color: '#fde68a', padding: '8px', fontSize: '11px', flex: 1 }}>1x<br/>(10 M)</button>
+                            <button onClick={() => openLootBox('mega', 10)} className="profile-btn card-hover" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '8px', fontSize: '11px', flex: 1, border: 'none', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' }}>10x<br/>(90 M)</button>
+                        </div>
+                    </div>
+                    <div style={{ background: 'linear-gradient(135deg, #0284c7, #0369a1)', borderRadius: '20px', padding: '20px 10px', textAlign: 'center', border: '2px solid #38bdf8' }}>
+                        <div style={{ fontSize: '40px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>💎</div>
+                        <div style={{ fontSize: '13px', fontWeight: 900, color: 'white', marginBottom: '15px' }}>ELİT SANDIK</div>
+                        <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                            <button onClick={() => openLootBox('elit', 1)} className="profile-btn card-hover" style={{ background: '#075985', color: '#bae6fd', padding: '8px', fontSize: '11px', flex: 1 }}>1x<br/>(15 M)</button>
+                            <button onClick={() => openLootBox('elit', 10)} className="profile-btn card-hover" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '8px', fontSize: '11px', flex: 1, border: 'none', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' }}>10x<br/>(135 M)</button>
+                        </div>
+                    </div>
+                </div>
             </div>
+
+            <div style={{ background: '#0f172a', borderRadius: '24px', padding: '20px', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                    <h3 style={{ margin: '0', fontSize: '18px', fontWeight: 900, color: 'white' }}>💬 Canlı Meydan Özeti</h3>
+                    <button onClick={() => setActiveTab('chat')} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '4px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>Sohbete Git</button>
+                </div>
+                
+                <div style={{ height: '140px', overflow: 'hidden', position: 'relative' }}>
+                    <div className="auto-scroll-chat" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {Object.keys(appData?.global_chat || {}).length === 0 ? <div style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', marginTop: '20px' }}>Henüz mesaj yok...</div> : (
+                            Object.keys(appData.global_chat).slice(-15).map(k => { 
+                                const msg = appData.global_chat[k];
+                                const isSystem = msg.type === 'system';
+                                const isAdmin = msg.type === 'admin';
+                                const msgTitle = getStudentTitle(msg.s);
+                                
+                                if (isAdmin) {
+                                    return (
+                                        <div key={k} style={{ background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)', padding: '10px 15px', borderRadius: '12px', borderLeft: `3px solid #fca5a5`, display: 'flex', flexDirection: 'column' }}>
+                                            <div style={{ fontSize: '11px', color: '#fecaca', fontWeight: 900, marginBottom: '4px' }}>👑 {msg.s}</div>
+                                            <div style={{ fontSize: '13px', color: 'white', fontWeight: 700 }}>{msg.t}</div>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div key={k} style={{ background: isSystem ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.05)', padding: '10px 15px', borderRadius: '12px', borderLeft: `3px solid ${isSystem ? '#10b981' : '#3b82f6'}`, display: 'flex', flexDirection: 'column' }}>
+                                        <div style={{ fontSize: '11px', color: isSystem ? '#10b981' : '#94a3b8', fontWeight: 900, marginBottom: '4px' }}>{msg.s} <TitleBadge title={msgTitle && !isSystem ? msgTitle : null} /></div>
+                                        <div style={{ fontSize: '13px', color: 'white', fontWeight: 500 }}>{msg.t}</div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+                <div style={{ position: 'absolute', top: 50, left: 0, width: '100%', height: '20px', background: 'linear-gradient(to bottom, #0f172a, transparent)', zIndex: 2 }}></div>
+                <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '20px', background: 'linear-gradient(to top, #0f172a, transparent)', zIndex: 2 }}></div>
+            </div>
+
+          </div>
           )}
 
           {activeTab === 'chat' && (
@@ -2159,132 +2192,139 @@ const [walletTab, setWalletTab] = useState('plus');
             </div>
           )}
 
-          {activeTab === 'clan' && (
-            <div className="fade-in">
-               {!myClanId ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                     <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', padding: '35px', borderRadius: '32px', color: 'white', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 20px 40px -10px rgba(15,23,42,0.3)', gap: '15px' }}>
-                        <div><h2 style={{ margin: '0 0 8px 0', fontSize: '26px', fontWeight: 900, letterSpacing: '-0.5px' }}>🛡️ Klanlara Katıl</h2><p style={{ margin: 0, fontSize: '14px', color: '#cbd5e1', fontWeight: 600 }}>Kendi klanını kur ve haftalık savaşlarda liderliğe oyna.</p></div>
-                        <button onClick={() => setShowCreateClan(true)} className="profile-btn" style={{ background: '#d4af37', color: 'white', padding: '16px 24px', fontSize: '15px' }}>Klan Kur (Ücretsiz)</button>
-                     </div>
+          {activeTab === 'banka' && (() => {
+              // Tarih Filtreleme Mantığı
+              const now = new Date();
+              const isToday = (dStr) => {
+                  if(!dStr) return false;
+                  const d = new Date(dStr.split(' ')[0].split('.').reverse().join('-'));
+                  return d.toDateString() === now.toDateString();
+              };
+              const isThisWeek = (dStr) => {
+                  if(!dStr) return false;
+                  const d = new Date(dStr.split(' ')[0].split('.').reverse().join('-'));
+                  const weekAgo = new Date(); weekAgo.setDate(now.getDate() - 7);
+                  return d >= weekAgo;
+              };
+              const isThisMonth = (dStr) => {
+                  if(!dStr) return false;
+                  const d = new Date(dStr.split(' ')[0].split('.').reverse().join('-'));
+                  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+              };
 
-                     {appData?.clan_invites?.[safeName] && Object.keys(appData.clan_invites[safeName]).length > 0 && (
-                        <div style={{ background: '#fffbeb', border: '2px solid #fde047', borderRadius: '24px', padding: '25px' }}>
-                           <h4 style={{ margin: '0 0 15px 0', color: '#b45309', fontWeight: 900, fontSize: '16px' }}>📬 Gelen Davetler</h4>
-                           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                              {Object.keys(appData.clan_invites[safeName]).map(cId => {
-                                 const inv = appData.clan_invites[safeName][cId];
-                                 return (
-                                    <div key={cId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '16px', borderRadius: '16px' }}>
-                                       <div style={{ fontWeight: 800, color: '#0f172a' }}>{inv.icon} {inv.clanName}</div>
-                                       <div style={{ display: 'flex', gap: '8px' }}>
-                                          <button onClick={() => acceptInvite(cId)} className="profile-btn" style={{ background: '#10b981', color: 'white', padding: '8px 16px' }}>Katıl</button>
-                                          <button onClick={() => rejectInvite(cId)} className="profile-btn" style={{ background: '#ef4444', color: 'white', padding: '8px 16px' }}>Reddet</button>
-                                       </div>
-                                    </div>
-                                 )
-                              })}
-                           </div>
-                        </div>
-                     )}
+              // Seçili filtreye göre işlemleri süz
+              const filteredTxns = sortedTxns.filter(t => {
+                  if (bankTimeFilter === 'today') return isToday(t.date);
+                  if (bankTimeFilter === 'week') return isThisWeek(t.date);
+                  if (bankTimeFilter === 'month') return isThisMonth(t.date);
+                  return true;
+              });
 
-                     <div style={{ background: '#fefce8', border: '1px solid #fde047', borderRadius: '24px', padding: '25px' }}>
-                         <h4 style={{ margin: '0 0 15px 0', color: '#b45309', fontWeight: 900, fontSize: '18px' }}>🤝 Ortak İmece Fırsatları</h4>
-                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                             {Object.keys(appData?.group_buys || {}).filter(k => appData.group_buys[k].active).map(k => {
-                                 const gb = appData.group_buys[k];
-                                 const parts = gb.participants || [];
-                                 const progress = (parts.length / gb.mp) * 100;
-                                 return (
-                                     <div key={k} style={{ background: 'white', padding: '16px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                                             <div style={{ fontWeight: 900, fontSize: '16px', color: '#0f172a' }}>{gb.i} {gb.n}</div>
-                                             <div style={{ fontSize: '12px', background: '#f1f5f9', padding: '4px 8px', borderRadius: '6px', fontWeight: 800 }}>Kişi Başı: {gb.pp} M</div>
-                                         </div>
-                                         <div style={{ width: '100%', height: '8px', background: '#f1f5f9', borderRadius: '10px', overflow: 'hidden', marginBottom: '10px' }}><div style={{ background: '#f59e0b', width: `${progress}%`, height: '100%', transition: '0.3s' }}></div></div>
-                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                             <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>{parts.length} / {gb.mp} Kişi Katıldı</div>
-                                             <button onClick={() => handleJoinGroupBuy(k, gb)} className="profile-btn" style={{ background: parts.includes(safeName) ? '#fef2f2' : '#0f172a', color: parts.includes(safeName) ? '#ef4444' : 'white', padding: '6px 12px', fontSize: '12px' }}>
-                                                 {parts.includes(safeName) ? 'ORTAK OLDUN' : 'ORTAK OL'}
-                                             </button>
-                                         </div>
-                                     </div>
-                                 )
-                             })}
-                             {Object.keys(appData?.group_buys || {}).filter(k => appData.group_buys[k].active).length === 0 && <div style={{ fontSize: '13px', color: '#b45309', fontWeight: 600 }}>Şu an aktif bir imece bulunmuyor.</div>}
-                         </div>
-                     </div>
+              const plusTxns = filteredTxns.filter(t => t.amt > 0);
+              const minusTxns = filteredTxns.filter(t => t.amt < 0);
 
-                     <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#0f172a', marginBottom: '5px' }}>🚩 Genel Klan Sıralaması</h3>
-                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        {clanScores.map((c, idx) => (
-                           <div key={c.id} onClick={() => setSelectedClan(c)} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor:'pointer' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                 <span style={{ fontSize: '20px', fontWeight: 900, color: idx===0 ? '#f59e0b' : '#94a3b8' }}>#{idx+1}</span>
-                                 <span style={{ fontSize: '32px' }}>{c.icon}</span>
-                                 <div>
-                                    <div style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>{c.name} <span style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '6px', fontSize: '12px', color: '#64748b' }}>{c.tag}</span></div>
-                                    <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, marginTop: '4px' }}>Üyeler: {(c.members||[]).length}/3</div>
-                                 </div>
-                              </div>
-                              <div style={{ textAlign: 'right' }}>
-                                 <div style={{ fontSize: '22px', fontWeight: 900, color: '#0f172a' }}>{c.warScore} <span style={{ fontSize: '12px', color: '#64748b' }}>SAVAŞ P.</span></div>
-                              </div>
-                           </div>
-                        ))}
-                     </div>
+              const totalIn = plusTxns.reduce((sum, t) => sum + t.amt, 0);
+              const totalOut = minusTxns.reduce((sum, t) => sum + Math.abs(t.amt), 0);
+
+              const plusStatsMap = {}; const minusStatsMap = {};
+              filteredTxns.forEach(t => {
+                  let genericDesc = (t.desc || 'Diğer').split('(')[0].trim();
+                  if (t.amt > 0) plusStatsMap[genericDesc] = (plusStatsMap[genericDesc] || 0) + t.amt;
+                  else if (t.amt < 0) minusStatsMap[genericDesc] = (minusStatsMap[genericDesc] || 0) + Math.abs(t.amt);
+              });
+
+              const topPlus = Object.entries(plusStatsMap).sort((a,b) => b[1] - a[1]).slice(0, 5);
+              const topMinus = Object.entries(minusStatsMap).sort((a,b) => b[1] - a[1]).slice(0, 5);
+
+              return (
+                <div className="fade-in" style={{ padding: '0px', paddingBottom: '100px' }}>
+                  <h2 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '20px', color: '#0f172a', letterSpacing: '-0.5px' }}>🏦 Elite Banka</h2>
+                  
+                  <div style={{ background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', padding: '35px', borderRadius: '32px', color: 'white', marginBottom: '20px', boxShadow: '0 20px 40px -10px rgba(15, 23, 42, 0.4)', position: 'relative', overflow: 'hidden' }}>
+                      <div style={{ fontSize: '14px', opacity: 0.7, fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>Kullanılabilir Bakiye</div>
+                      <div style={{ fontSize: '42px', fontWeight: 900 }}>{mCoin} <span style={{ fontSize: '16px', opacity: 0.6 }}>M</span></div>
                   </div>
-               ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                     <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', padding: '40px', borderRadius: '32px', color: 'white', textAlign: 'center', position: 'relative', boxShadow: '0 20px 40px -10px rgba(15,23,42,0.3)' }}>
-                        <button onClick={leaveClan} className="profile-btn" style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(239,68,68,0.2)', color: '#fca5a5', padding: '8px 16px', fontSize: '12px' }}>Klandan Ayrıl</button>
-                        <div style={{ fontSize: '70px', marginBottom: '10px' }}>{myClan?.icon}</div>
-                        <h2 style={{ margin: '0 0 5px 0', fontSize: '32px', fontWeight: 900, letterSpacing: '-1px' }}>{myClan?.name} <span style={{ fontSize: '16px', background: '#d4af37', padding: '4px 8px', borderRadius: '8px', verticalAlign: 'middle', marginLeft: '5px' }}>{myClan?.tag}</span></h2>
-                        <p style={{ color: '#cbd5e1', fontSize: '15px', fontWeight: 500, fontStyle: 'italic', marginBottom: '25px' }}>"{myClan?.desc}"</p>
 
-                        {!appData?.clan_war_participants?.[safeName] ? (
-                           <button onClick={joinWar} disabled={(myClan?.members||[]).length < 3} className={`profile-btn ${(myClan?.members||[]).length >= 3 ? 'badge-glow' : ''}`} style={{ background: (myClan?.members||[]).length >= 3 ? 'linear-gradient(135deg, #ef4444, #b91c1c)' : '#475569', color: (myClan?.members||[]).length >= 3 ? 'white' : '#94a3b8', padding: '20px 40px', fontSize: '18px', width: '100%', maxWidth: '300px', cursor: (myClan?.members||[]).length >= 3 ? 'pointer' : 'not-allowed' }}>⚔️ SAVAŞA GİR (-10 M)</button>
-                        ) : (
-                           <div style={{ background: 'rgba(16,185,129,0.2)', color: '#6ee7b7', border: '2px solid #10b981', padding: '16px', borderRadius: '50px', fontWeight: 900, fontSize: '16px', display: 'inline-block' }}>⚔️ BU HAFTAKİ SAVAŞTASIN</div>
-                        )}
-                        {(myClan?.members || []).length < 3 && !appData?.clan_war_participants?.[safeName] && <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '10px', fontWeight: 600 }}>Savaşa girmek için klan 3 kişi olmalıdır.</div>}
-                     </div>
-
-                     <div style={{ background: 'white', borderRadius: '24px', padding: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                        <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '20px' }}>👥 Klan Üyeleri ({(myClan?.members||[]).length}/3)</h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                           {(myClan?.members||[]).map(m => {
-                              const rp = Number(appData?.season_score?.[m] || 0);
-                              const isWarPart = appData?.clan_war_participants?.[m];
-                              const title = getStudentTitle(m);
-                              return (
-                                 <div key={m} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                       <span style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>{String(m)}</span>
-                                       {myClan?.leader === m && <span style={{ fontSize: '14px' }}>👑</span>}
-                                       <TitleBadge title={title} />
-                                       {isWarPart && <span style={{ background: '#fef2f2', color: '#ef4444', padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 900 }}>SAVAŞTA</span>}
-                                    </div>
-                                    <div style={{ fontWeight: 900, color: '#3b82f6', fontSize: '16px' }}>{rp} RP</div>
-                                 </div>
-                              )
-                           })}
-                        </div>
-                        
-                        {myClan?.leader === safeName && (myClan?.members||[]).length < 3 && (
-                           <div style={{ marginTop: '20px', borderTop: '2px dashed #e2e8f0', paddingTop: '20px' }}>
-                              <h5 style={{ margin: '0 0 10px 0', color: '#64748b', fontSize: '13px', fontWeight: 800 }}>Oyuncu Davet Et</h5>
-                              <div style={{ display: 'flex', gap: '10px' }}>
-                                 <input type="text" value={inviteUser} onChange={e => setInviteUser(e.target.value)} placeholder="Kullanıcı Adı" className="elite-input" style={{ flex: 1, textAlign: 'left' }} />
-                                 <button onClick={handleInviteUser} className="profile-btn" style={{ background: '#0f172a', color: 'white', padding: '0 20px' }}>Davet</button>
-                              </div>
-                           </div>
-                        )}
-                     </div>
+                  {/* ZAMAN FİLTRESİ BUTONLARI */}
+                  <div className="clean-scroll" style={{ display: 'flex', gap: '8px', overflowX: 'auto', marginBottom: '20px', paddingBottom: '5px' }}>
+                      {[
+                          {id:'all', n:'Tümü'}, {id:'today', n:'Bugün'}, {id:'week', n:'Bu Hafta'}, {id:'month', n:'Bu Ay'}
+                      ].map(f => (
+                          <button key={f.id} onClick={() => setBankTimeFilter(f.id)} className="profile-btn" style={{ 
+                              background: bankTimeFilter === f.id ? '#0f172a' : 'white', 
+                              color: bankTimeFilter === f.id ? 'white' : '#64748b',
+                              border: '1px solid #e2e8f0', padding: '8px 16px', fontSize: '12px', flexShrink: 0
+                          }}>{f.n}</button>
+                      ))}
                   </div>
-               )}
-            </div>
-          )}
+
+                  {/* ÖZET PANELİ */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '25px' }}>
+                      <div style={{ background: '#ecfdf5', padding: '15px', borderRadius: '20px', border: '1px solid #a7f3d0' }}>
+                          <div style={{ fontSize: '10px', fontWeight: 900, color: '#047857' }}>TOPLAM GİRİŞ</div>
+                          <div style={{ fontSize: '18px', fontWeight: 900, color: '#10b981' }}>+{totalIn} M</div>
+                      </div>
+                      <div style={{ background: '#fef2f2', padding: '15px', borderRadius: '20px', border: '1px solid #fecaca' }}>
+                          <div style={{ fontSize: '10px', fontWeight: 900, color: '#991b1b' }}>TOPLAM ÇIKIŞ</div>
+                          <div style={{ fontSize: '18px', fontWeight: 900, color: '#ef4444' }}>-{totalOut} M</div>
+                      </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '25px', background: '#f1f5f9', padding: '6px', borderRadius: '20px' }}>
+                      <button onClick={() => setWalletTab('plus')} className="profile-btn" style={{ flex: 1, padding: '10px', borderRadius: '15px', background: walletTab === 'plus' ? 'white' : 'transparent', color: walletTab === 'plus' ? '#10b981' : '#64748b', boxShadow: walletTab === 'plus' ? '0 4px 10px rgba(0,0,0,0.05)' : 'none' }}>Gelen</button>
+                      <button onClick={() => setWalletTab('minus')} className="profile-btn" style={{ flex: 1, padding: '10px', borderRadius: '15px', background: walletTab === 'minus' ? 'white' : 'transparent', color: walletTab === 'minus' ? '#ef4444' : '#64748b', boxShadow: walletTab === 'minus' ? '0 4px 10px rgba(0,0,0,0.05)' : 'none' }}>Giden</button>
+                      <button onClick={() => setWalletTab('stats')} className="profile-btn" style={{ flex: 1, padding: '10px', borderRadius: '15px', background: walletTab === 'stats' ? 'white' : 'transparent', color: walletTab === 'stats' ? '#0f172a' : '#64748b', boxShadow: walletTab === 'stats' ? '0 4px 10px rgba(0,0,0,0.05)' : 'none' }}>Analiz</button>
+                  </div>
+
+                  <div className="fade-in">
+                      {walletTab === 'plus' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                              {plusTxns.length > 0 ? plusTxns.map((item, i) => (
+                                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '18px', borderRadius: '22px', border: '1px solid #f1f5f9' }}>
+                                      <div><div style={{ fontWeight: 800, color: '#0f172a', fontSize: '14px' }}>{item.desc}</div><div style={{ fontSize: '11px', color: '#94a3b8' }}>{item.date}</div></div>
+                                      <div style={{ fontWeight: 900, color: '#10b981' }}>+{item.amt}</div>
+                                  </div>
+                              )) : <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Kayıt bulunamadı.</div>}
+                          </div>
+                      )}
+
+                      {walletTab === 'minus' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                              {minusTxns.length > 0 ? minusTxns.map((item, i) => (
+                                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '18px', borderRadius: '22px', border: '1px solid #f1f5f9' }}>
+                                      <div><div style={{ fontWeight: 800, color: '#0f172a', fontSize: '14px' }}>{item.desc}</div><div style={{ fontSize: '11px', color: '#94a3b8' }}>{item.date}</div></div>
+                                      <div style={{ fontWeight: 900, color: '#ef4444' }}>{item.amt}</div>
+                                  </div>
+                              )) : <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Kayıt bulunamadı.</div>}
+                          </div>
+                      )}
+
+                      {walletTab === 'stats' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                              <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '24px', border: '1px solid #e2e8f0' }}>
+                                  <div style={{ fontSize: '13px', fontWeight: 900, color: '#0f172a', marginBottom: '15px' }}>📈 EN ÇOK KAZANDIRANLAR</div>
+                                  {topPlus.map((s, i) => (
+                                      <div key={i} style={{ display:'flex', justifyContent:'space-between', marginBottom:'10px', fontSize:'14px', fontWeight:700 }}>
+                                          <span style={{color:'#64748b'}}>{s[0]}</span>
+                                          <span style={{color:'#10b981'}}>+{s[1]} M</span>
+                                      </div>
+                                  ))}
+                              </div>
+                              <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '24px', border: '1px solid #e2e8f0' }}>
+                                  <div style={{ fontSize: '13px', fontWeight: 900, color: '#0f172a', marginBottom: '15px' }}>📉 EN ÇOK HARCATANLAR</div>
+                                  {topMinus.map((s, i) => (
+                                      <div key={i} style={{ display:'flex', justifyContent:'space-between', marginBottom:'10px', fontSize:'14px', fontWeight:700 }}>
+                                          <span style={{color:'#64748b'}}>{s[0]}</span>
+                                          <span style={{color:'#ef4444'}}>-{s[1]} M</span>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                      )}
+                  </div>
+                </div>
+              );
+          })()}
 
           {activeTab === 'market' && (
             <div className="fade-in">
@@ -2379,31 +2419,24 @@ const [walletTab, setWalletTab] = useState('plus');
 
           {activeTab === 'rank' && (
             <div className="fade-in">
-               <h2 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '20px', color: '#0f172a', letterSpacing: '-0.5px' }}>🏆 Sıralamalar</h2>
-               <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '10px' }} className="clean-scroll">
-                   <button onClick={() => setRankTab('rp')} className="profile-btn" style={{ background: rankTab === 'rp' ? '#0f172a' : '#f1f5f9', color: rankTab === 'rp' ? 'white' : '#64748b', padding: '12px 20px', flexShrink: 0 }}>⚔️ RP Ligi</button>
-                   <button onClick={() => setRankTab('wealth')} className="profile-btn" style={{ background: rankTab === 'wealth' ? '#10b981' : '#f1f5f9', color: rankTab === 'wealth' ? 'white' : '#64748b', padding: '12px 20px', flexShrink: 0 }}>💳 M-Coin</button>
-                   <button onClick={() => setRankTab('xp')} className="profile-btn" style={{ background: rankTab === 'xp' ? '#3b82f6' : '#f1f5f9', color: rankTab === 'xp' ? 'white' : '#64748b', padding: '12px 20px', flexShrink: 0 }}>🏅 Katılım (XP)</button>
-               </div>
+               <h2 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '20px', color: '#0f172a', letterSpacing: '-0.5px' }}>💳 M-Coin Sıralaması</h2>
 
                <div style={{ background: '#ffffff', borderRadius: '32px', padding: '20px', boxShadow: '0 15px 40px -10px rgba(0,0,0,0.08)', border: '1px solid #f1f5f9' }}>
-                 {(rankTab === 'rp' ? rpSorted : rankTab === 'wealth' ? wealthSorted : xpSorted).map((s, idx) => {
-                   const currentBadge = rankTab === 'rp' ? getRankBadge(s.val) : null; 
+                 {wealthSorted.map((s, idx) => {
                    const isMe = s.n === safeName; 
                    const pinned = appData?.pinned_badges?.[s.n] || [];
                    const title = getStudentTitle(s.n);
                    return (
-                     <div key={s.n} onClick={() => setViewProfile(s.n)} style={{ display: 'flex', alignItems: 'center', padding: '16px', borderBottom: idx < (rankTab === 'rp' ? rpSorted : rankTab === 'wealth' ? wealthSorted : xpSorted).length-1 ? '1px solid #e2e8f0' : 'none', background: isMe ? '#f8fafc' : 'transparent', borderRadius: isMe ? '20px' : '0', cursor: 'pointer', transition: 'all 0.2s' }}>
-                       <div style={{ width: '35px', fontWeight: 900, color: idx<3 ? '#0f172a' : '#94a3b8', fontSize: '18px' }}>{idx+1}.</div>
+                     <div key={s.n} onClick={() => setViewProfile(s.n)} style={{ display: 'flex', alignItems: 'center', padding: '16px', borderBottom: idx < wealthSorted.length - 1 ? '1px solid #e2e8f0' : 'none', background: isMe ? '#f8fafc' : 'transparent', borderRadius: isMe ? '20px' : '0', cursor: 'pointer', transition: 'all 0.2s' }}>
+                       <div style={{ width: '35px', fontWeight: 900, color: idx < 3 ? '#0f172a' : '#94a3b8', fontSize: '18px' }}>{idx+1}.</div>
                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontWeight: 900, fontSize: '16px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontWeight: 900, fontSize: '16px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                              {s.n} 
                              <TitleBadge title={title} />
                              {pinned.map(bId => <span key={bId} style={{fontSize: '14px'}}>{BADGES[bId]?.icon}</span>)}
                           </span>
-                          {currentBadge && <span style={{ fontSize: '12px', color: currentBadge.color, fontWeight: 900, marginTop: '6px' }}>{currentBadge.icon} {currentBadge.name}</span>}
                        </div>
-                       <div style={{ color: '#0f172a', fontWeight: 900, fontSize: '20px' }}>{s.val} <span style={{ fontSize: '11px', color: '#64748b' }}>{rankTab.toUpperCase()}</span></div>
+                       <div style={{ color: '#10b981', fontWeight: 900, fontSize: '20px' }}>{s.val} <span style={{ fontSize: '11px', color: '#64748b' }}>M-COIN</span></div>
                      </div>
                    )
                  })}
@@ -2416,7 +2449,7 @@ const [walletTab, setWalletTab] = useState('plus');
       <div style={{ position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px)', borderRadius: '50px', display: 'flex', padding: '10px', width: '98%', maxWidth: '600px', zIndex: 1000, boxShadow: '0 20px 50px -10px rgba(0,0,0,0.2)', border: '1px solid rgba(226,232,240,0.8)' }}>
          <button onClick={() => setActiveTab('home')} style={getNavStyle('home')}>Özet</button>
          <button onClick={() => setActiveTab('chat')} style={getNavStyle('chat')}>💬 Meydan</button>
-         <button onClick={() => setActiveTab('clan')} style={getNavStyle('clan')}>Klan</button>
+         <button onClick={() => setActiveTab('banka')} style={getNavStyle('banka')}>🏦 Banka</button>
          <button onClick={() => setActiveTab('market')} style={getNavStyle('market')}>Market</button>
          <button onClick={() => setActiveTab('game')} style={getNavStyle('game')}>🎮 Oyun</button>
          <button onClick={() => setActiveTab('inventory')} style={getNavStyle('inventory')}>Çanta</button>
