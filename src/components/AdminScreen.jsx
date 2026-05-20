@@ -1815,56 +1815,111 @@ const renderStudentGrid = (students, type) => {
         )}
 
         {/* DİSİPLİN VE ÖDÜL YÖNETİMİ */}
-        {currentModule === 'admin_discipline' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {currentModule === 'admin_discipline' && (() => {
+          const rewardCards = appData?.reward_cards || {};
+          const penaltyCards = appData?.penalty_cards || {};
+          const rewardCount = Object.keys(rewardCards).length;
+          const penaltyCount = Object.keys(penaltyCards).length;
+          return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
 
-            {/* ÖDÜL KARTLARI */}
-            <div style={{ background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.04)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h4 style={{ margin: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px' }}>🎁 Ödül Kartları</h4>
-                <button onClick={() => { setNewRewardCard({ name: '', type: 'mcoin', amount1: '', amount2: '' }); setRewardCardModal(true); }} className="premium-btn" style={{ background: '#0f172a', color: 'white', padding: '10px 20px', fontWeight: 900 }}>+ Yeni Ekle</button>
+            {/* HERO BANNER */}
+            <div style={{ background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', padding: '32px', borderRadius: '28px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', boxShadow: '0 10px 40px rgba(15,23,42,0.2)' }}>
+              <div>
+                <h3 style={{ margin: '0 0 6px 0', fontSize: '26px', fontWeight: 900, letterSpacing: '-0.5px' }}>📜 Disiplin Kurulu</h3>
+                <p style={{ margin: 0, fontSize: '14px', fontWeight: 600, opacity: 0.7 }}>Ödül ve ceza kartlarını yönet, uygula.</p>
               </div>
-              {Object.keys(appData?.reward_cards || {}).length === 0 ? (
-                <div style={{ color: '#94a3b8', fontWeight: 700, fontSize: '14px', textAlign: 'center', padding: '30px 0' }}>Henüz ödül kartı oluşturulmadı.</div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '14px' }}>
-                  {Object.entries(appData.reward_cards).map(([id, card]) => (
-                    <div key={id} style={{ background: '#ecfdf5', borderRadius: '20px', padding: '18px', border: '1.5px solid #6ee7b7' }}>
-                      <div style={{ fontSize: '22px', marginBottom: '8px' }}>🎁</div>
-                      <div style={{ fontWeight: 900, color: '#065f46', fontSize: '14px', marginBottom: '6px', lineHeight: 1.3 }}>{card.name}</div>
-                      <div style={{ fontSize: '11px', color: '#047857', fontWeight: 800, background: '#d1fae5', padding: '3px 10px', borderRadius: '8px', display: 'inline-block', marginBottom: '12px' }}>{card.type.toUpperCase()}</div>
-                      <button onClick={() => { if(window.confirm('Ödülü silmek istediğine emin misin?')) db.ref(`mavikent_premium/reward_cards/${id}`).remove(); }} style={{ width: '100%', background: 'white', color: '#ef4444', border: '1px solid #fca5a5', padding: '8px', borderRadius: '12px', cursor: 'pointer', fontWeight: 800, fontSize: '13px' }}>🗑️ Sil</button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button onClick={() => { setNewRewardCard({ name: '', type: 'mcoin', amount1: '', amount2: '' }); setRewardCardModal(true); }} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '14px 22px', fontWeight: 900 }}>🎁 Ödül Ekle</button>
+                <button onClick={() => { setNewPenaltyCard({ name: '', mcoin: 0, banDays: 0, rp: 0 }); setPenaltyCardModal(true); }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '14px 22px', fontWeight: 900 }}>📜 Ceza Ekle</button>
+              </div>
             </div>
 
-            {/* CEZA KARTLARI */}
-            <div style={{ background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.04)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h4 style={{ margin: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px' }}>📜 Ceza Kartları</h4>
-                <button onClick={() => { setNewPenaltyCard({ name: '', mcoin: 0, banDays: 0, rp: 0 }); setPenaltyCardModal(true); }} className="premium-btn" style={{ background: '#0f172a', color: 'white', padding: '10px 20px', fontWeight: 900 }}>+ Yeni Ekle</button>
-              </div>
-              {Object.keys(appData?.penalty_cards || {}).length === 0 ? (
-                <div style={{ color: '#94a3b8', fontWeight: 700, fontSize: '14px', textAlign: 'center', padding: '30px 0' }}>Henüz ceza kartı oluşturulmadı.</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {Object.entries(appData.penalty_cards).map(([k, card]) => (
-                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fef2f2', padding: '16px 20px', borderRadius: '16px', border: '1.5px solid #fca5a5' }}>
-                      <div>
-                        <div style={{ fontWeight: 900, color: '#7f1d1d', fontSize: '15px' }}>{card.name}</div>
-                        <div style={{ fontSize: '13px', color: '#ef4444', fontWeight: 700, marginTop: '4px', display: 'flex', gap: '10px' }}>
-                          {card.mcoin > 0 && <span>-{card.mcoin} M-Coin</span>}
-                          {card.banDays > 0 && <span>{card.banDays} Gün Ban</span>}
-                          {card.rp > 0 && <span>-{card.rp} RP</span>}
-                        </div>
-                      </div>
-                      <button onClick={() => { if(window.confirm('Bu ceza kartı tamamen silinsin mi?')) db.ref(`mavikent_premium/penalty_cards/${k}`).remove(); }} className="premium-btn" style={{ background: 'white', color: '#ef4444', padding: '10px 15px', border: '1px solid #fca5a5' }}>🗑️</button>
-                    </div>
-                  ))}
+            {/* STATS BAR */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+              {[
+                { label: 'Ödül Kartı',  value: rewardCount,                icon: '🎁', color: '#10b981', bg: '#ecfdf5' },
+                { label: 'Ceza Kartı',  value: penaltyCount,               icon: '📜', color: '#ef4444', bg: '#fef2f2' },
+                { label: 'Toplam Kart', value: rewardCount + penaltyCount, icon: '📊', color: '#3b82f6', bg: '#eff6ff' },
+              ].map(stat => (
+                <div key={stat.label} style={{ background: stat.bg, borderRadius: '20px', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: '16px', border: `1px solid ${stat.color}20` }}>
+                  <div style={{ fontSize: '28px' }}>{stat.icon}</div>
+                  <div>
+                    <div style={{ fontSize: '28px', fontWeight: 900, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', marginTop: '4px' }}>{stat.label}</div>
+                  </div>
                 </div>
-              )}
+              ))}
+            </div>
+
+            {/* 2 KOLON */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
+              <div style={{ background: 'white', padding: '28px', borderRadius: '28px', boxShadow: '0 8px 32px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '44px', height: '44px', background: '#ecfdf5', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>🎁</div>
+                    <div>
+                      <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>Ödül Kartları</div>
+                      <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>{rewardCount} tanımlı kart</div>
+                    </div>
+                  </div>
+                  <button onClick={() => { setNewRewardCard({ name: '', type: 'mcoin', amount1: '', amount2: '' }); setRewardCardModal(true); }} className="premium-btn" style={{ background: '#ecfdf5', color: '#059669', padding: '10px 18px', fontWeight: 900, fontSize: '13px' }}>+ Ekle</button>
+                </div>
+                {rewardCount === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
+                    <div style={{ fontSize: '40px', marginBottom: '10px' }}>🎁</div>
+                    <div style={{ fontWeight: 700, fontSize: '13px' }}>Henüz ödül kartı oluşturulmadı.</div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {Object.entries(rewardCards).map(([id, card]) => (
+                      <div key={id} style={{ display: 'flex', alignItems: 'center', gap: '14px', background: '#f0fdf4', padding: '14px 16px', borderRadius: '16px', border: '1.5px solid #bbf7d0' }}>
+                        <div style={{ width: '38px', height: '38px', background: '#d1fae5', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>🎁</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 900, color: '#065f46', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</div>
+                          <div style={{ fontSize: '11px', color: '#059669', fontWeight: 800, marginTop: '2px' }}>{card.type?.toUpperCase()}</div>
+                        </div>
+                        <button onClick={() => { if(window.confirm('Ödülü silmek istediğine emin misin?')) db.ref(`mavikent_premium/reward_cards/${id}`).remove(); }} style={{ background: 'white', color: '#ef4444', border: '1px solid #fca5a5', padding: '6px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 800, fontSize: '12px', flexShrink: 0 }}>🗑️</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={{ background: 'white', padding: '28px', borderRadius: '28px', boxShadow: '0 8px 32px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '44px', height: '44px', background: '#fef2f2', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>📜</div>
+                    <div>
+                      <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>Ceza Kartları</div>
+                      <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>{penaltyCount} tanımlı kart</div>
+                    </div>
+                  </div>
+                  <button onClick={() => { setNewPenaltyCard({ name: '', mcoin: 0, banDays: 0, rp: 0 }); setPenaltyCardModal(true); }} className="premium-btn" style={{ background: '#fef2f2', color: '#ef4444', padding: '10px 18px', fontWeight: 900, fontSize: '13px' }}>+ Ekle</button>
+                </div>
+                {penaltyCount === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
+                    <div style={{ fontSize: '40px', marginBottom: '10px' }}>📜</div>
+                    <div style={{ fontWeight: 700, fontSize: '13px' }}>Henüz ceza kartı oluşturulmadı.</div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {Object.entries(penaltyCards).map(([k, card]) => (
+                      <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '14px', background: '#fff5f5', padding: '14px 16px', borderRadius: '16px', border: '1.5px solid #fca5a5' }}>
+                        <div style={{ width: '38px', height: '38px', background: '#fee2e2', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>📜</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 900, color: '#7f1d1d', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</div>
+                          <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 800, marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            {card.mcoin > 0 && <span>-{card.mcoin} M-Coin</span>}
+                            {card.banDays > 0 && <span>{card.banDays}g Ban</span>}
+                            {card.rp > 0 && <span>-{card.rp} RP</span>}
+                          </div>
+                        </div>
+                        <button onClick={() => { if(window.confirm('Bu ceza kartı tamamen silinsin mi?')) db.ref(`mavikent_premium/penalty_cards/${k}`).remove(); }} className="premium-btn" style={{ background: 'white', color: '#ef4444', padding: '6px 12px', border: '1px solid #fca5a5', flexShrink: 0 }}>🗑️</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* ÖDÜL KARTI OLUŞTURMA MODALİ */}
@@ -1917,7 +1972,9 @@ const renderStudentGrid = (students, type) => {
             )}
 
           </div>
-        )}
+          );
+        })()}
+
 
           {/* ÖĞRENCİ YÖNETİMİ */}
         {currentModule === 'admin_students' && (
@@ -2279,20 +2336,40 @@ const renderStudentGrid = (students, type) => {
             });
 
             return (
-              <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+            <div style={{ background: 'linear-gradient(135deg, #0369a1 0%, #0284c7 100%)', padding: '32px', borderRadius: '28px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', boxShadow: '0 10px 40px rgba(3,105,161,0.25)' }}>
+              <div>
+                <h3 style={{ margin: '0 0 6px 0', fontSize: '26px', fontWeight: 900, letterSpacing: '-0.5px' }}>📦 Teslimat Merkezi</h3>
+                <p style={{ margin: 0, fontSize: '14px', fontWeight: 600, opacity: 0.7 }}>Market siparişlerini yönet ve onayla.</p>
+              </div>
+              {waitDeliveries.length > 0 && (
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <button onClick={() => handleBulkDeliveryAction('approve')} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '12px 20px', fontWeight: 900 }}>✅ Tümünü Onayla</button>
+                  <button onClick={() => handleBulkDeliveryAction('refund')} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '12px 20px', fontWeight: 900 }}>💰 İadeli İptal</button>
+                  <button onClick={() => handleBulkDeliveryAction('delete')} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '12px 20px', fontWeight: 900 }}>🗑️ Tümünü Sil</button>
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+              {[
+                { label: 'Bekleyen',       value: waitDeliveries.length,  icon: '⏳', color: '#f59e0b', bg: '#fefce8' },
+                { label: 'Teslim Edildi',  value: doneDeliveries.length,  icon: '✅', color: '#10b981', bg: '#ecfdf5' },
+                { label: 'Toplam Sipariş', value: allDeliveries.length,   icon: '📦', color: '#3b82f6', bg: '#eff6ff' },
+              ].map(stat => (
+                <div key={stat.label} style={{ background: stat.bg, borderRadius: '20px', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: '16px', border: `1px solid ${stat.color}20` }}>
+                  <div style={{ fontSize: '28px' }}>{stat.icon}</div>
+                  <div>
+                    <div style={{ fontSize: '28px', fontWeight: 900, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', marginTop: '4px' }}>{stat.label}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ background: 'white', padding: '28px', borderRadius: '28px', boxShadow: '0 8px 32px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9' }}>
                  <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
                    <button onClick={() => setDeliveryTab('wait')} className="premium-btn" style={{ flex: 1, padding: '16px', background: deliveryTab === 'wait' ? '#0f172a' : '#f1f5f9', color: deliveryTab === 'wait' ? 'white' : '#64748b', fontSize: '15px' }}>BEKLEYENLER ({waitDeliveries.length})</button>
                    <button onClick={() => setDeliveryTab('done')} className="premium-btn" style={{ flex: 1, padding: '16px', background: deliveryTab === 'done' ? '#10b981' : '#f1f5f9', color: deliveryTab === 'done' ? 'white' : '#64748b', fontSize: '15px' }}>ONAYLANMIŞ ({doneDeliveries.length})</button>
                  </div>
-
-                 {deliveryTab === 'wait' && waitDeliveries.length > 0 && (
-                    <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', background: '#fefce8', padding: '15px', borderRadius: '16px', border: '1px dashed #fde047' }}>
-                       <div style={{ width: '100%', fontSize: '13px', fontWeight: 900, color: '#b45309', marginBottom: '8px' }}>⚡ TOPLU İŞLEMLER (Tüm Bekleyenler İçin)</div>
-                       <button onClick={() => handleBulkDeliveryAction('approve')} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '10px 15px', fontSize: '12px', flex: 1 }}>✅ TÜMÜNÜ ONAYLA</button>
-                       <button onClick={() => handleBulkDeliveryAction('refund')} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '10px 15px', fontSize: '12px', flex: 1 }}>💰 TÜMÜNÜ İPTAL ET (İADELİ)</button>
-                       <button onClick={() => handleBulkDeliveryAction('delete')} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '10px 15px', fontSize: '12px', flex: 1 }}>🗑️ TÜMÜNÜ SİL (İADESİZ)</button>
-                    </div>
-                 )}
 
                  {deliveryTab === 'wait' ? (
                      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -2375,7 +2452,8 @@ const renderStudentGrid = (students, type) => {
                          {doneDeliveries.length === 0 && <div style={{ textAlign: 'center', color: '#94a3b8', padding: '20px', fontWeight: 700 }}>Geçmiş işlem bulunmuyor.</div>}
                      </div>
                  )}
-              </div>
+            </div>
+          </div>
             );
         })()}
 
@@ -2447,7 +2525,7 @@ const renderStudentGrid = (students, type) => {
         {currentModule === 'admin_settings' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 {!adminSettingsView ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
                         <div onClick={() => setAdminSettingsView('kimlik')} className="card-hover" style={{ background: 'white', borderRadius: '24px', padding: '28px', boxShadow: '0 4px 15px rgba(0,0,0,0.04)', cursor: 'pointer' }}>
                             <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔒</div>
                             <h4 style={{ margin: '0 0 6px 0', fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>Kimlik & Şifreler</h4>
@@ -2457,6 +2535,11 @@ const renderStudentGrid = (students, type) => {
                             <div style={{ fontSize: '40px', marginBottom: '12px' }}>⚖️</div>
                             <h4 style={{ margin: '0 0 6px 0', fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>Puanlama Yapılandırması</h4>
                             <p style={{ margin: 0, fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Puan değerlerini kategorilere göre ayarla.</p>
+                        </div>
+                        <div onClick={() => setAdminSettingsView('logo')} className="card-hover" style={{ background: 'white', borderRadius: '24px', padding: '28px', boxShadow: '0 4px 15px rgba(0,0,0,0.04)', cursor: 'pointer' }}>
+                            <div style={{ fontSize: '40px', marginBottom: '12px' }}>🏢</div>
+                            <h4 style={{ margin: '0 0 6px 0', fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>Kurumsal Logo</h4>
+                            <p style={{ margin: 0, fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Kurumun logosunu yükle veya güncelle.</p>
                         </div>
                     </div>
                 ) : adminSettingsView === 'kimlik' ? (
@@ -2565,6 +2648,43 @@ const renderStudentGrid = (students, type) => {
                                 </div>
                             );
                         })()}
+                    </div>
+                ) : adminSettingsView === 'logo' ? (
+                    <div className="fade-in" style={{ maxWidth: '600px', margin: '0 auto' }}>
+                        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+                            <div style={{ fontSize: '40px', marginBottom: '8px' }}>🏢</div>
+                            <h3 style={{ margin: '0 0 6px 0', fontWeight: 900, fontSize: '22px', color: '#0f172a' }}>Kurumsal Logo</h3>
+                            <p style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 600, margin: 0 }}>Giriş ekranı ve panellerde görünecek logonuzu yükleyin.</p>
+                        </div>
+                        <div style={{ background: 'white', borderRadius: '24px', padding: '28px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', border: '1.5px solid #e2e8f0', marginBottom: '16px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 800, color: '#64748b', marginBottom: '16px', letterSpacing: '0.5px' }}>MEVCUT LOGO</div>
+                            {appData?.settings?.corporate_logo_url ? (
+                                <img src={appData.settings.corporate_logo_url} alt="Logo" style={{ maxHeight: '100px', maxWidth: '100%', objectFit: 'contain', borderRadius: '12px' }} />
+                            ) : (
+                                <div style={{ padding: '30px', color: '#94a3b8', fontSize: '14px', fontWeight: 700 }}>Henüz logo yüklenmedi.</div>
+                            )}
+                        </div>
+                        <div style={{ background: 'white', borderRadius: '24px', padding: '28px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', border: '1.5px solid #e2e8f0', marginBottom: '16px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 800, color: '#64748b', marginBottom: '16px', letterSpacing: '0.5px' }}>YENİ LOGO SEÇ</div>
+                            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', border: '2px dashed #cbd5e1', borderRadius: '16px', padding: '28px', cursor: 'pointer', background: '#f8fafc' }}>
+                                <div style={{ fontSize: '36px' }}>📁</div>
+                                <div style={{ fontWeight: 700, color: '#334155', fontSize: '14px' }}>Dosya seç veya buraya sürükle</div>
+                                <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>PNG, JPG, SVG</div>
+                                <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} />
+                            </label>
+                            {corporateIdentity.logoUrl && (
+                                <div style={{ marginTop: '16px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '12px', fontWeight: 800, color: '#10b981', marginBottom: '10px' }}>Önizleme</div>
+                                    <img src={corporateIdentity.logoUrl} alt="Önizleme" style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                                </div>
+                            )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            {appData?.settings?.corporate_logo_url && (
+                                <button onClick={async () => { if(window.confirm('Logo kaldırılacak, emin misiniz?')) { await db.ref('mavikent_premium/settings/corporate_logo_url').remove(); setCorporateIdentity({ logoUrl: '' }); toast('Logo kaldırıldı!'); } }} className="premium-btn" style={{ background: '#fef2f2', color: '#ef4444', padding: '16px 20px', fontWeight: 900 }}>🗑️ Kaldır</button>
+                            )}
+                            <button onClick={async () => { if(!corporateIdentity.logoUrl) return toast('Önce bir dosya seçin.'); try { await db.ref('mavikent_premium/settings/corporate_logo_url').set(corporateIdentity.logoUrl); setCorporateIdentity({ logoUrl: '' }); toast('Logo güncellendi!'); } catch(e) { toast('Hata: ' + e.message); } }} className="premium-btn" style={{ flex: 1, background: '#0f172a', color: 'white', padding: '16px', fontSize: '15px', fontWeight: 900 }}>🏢 LOGOYU KAYDET</button>
+                        </div>
                     </div>
                 ) : null}
             </div>
