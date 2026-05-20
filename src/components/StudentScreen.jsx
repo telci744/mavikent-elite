@@ -467,7 +467,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   };
 
   const handleLogout = () => { 
-      localStorage.removeItem('mavikentUser'); localStorage.removeItem('mavikentPass'); goBackToRoles(); 
+      localStorage.removeItem('mavikentSession'); goBackToRoles();
   };
 
   const sendChatMessage = () => {

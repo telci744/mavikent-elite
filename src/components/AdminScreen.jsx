@@ -2023,7 +2023,7 @@ const renderStudentGrid = (students, type) => {
                       </div>
                       <div>
                         <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', marginBottom: '6px' }}>ŞİFRE</div>
-                        <input type="text" value={studentEdit.password} onChange={e => setStudentEdit({...studentEdit, password: e.target.value})} className="elite-input" placeholder="Şifre" style={{ padding: '12px' }} />
+                        <input type="password" value={studentEdit.password} onChange={e => setStudentEdit({...studentEdit, password: e.target.value})} className="elite-input" placeholder="Şifre" style={{ padding: '12px' }} />
                       </div>
                       <div>
                         <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', marginBottom: '6px' }}>SINIF</div>
