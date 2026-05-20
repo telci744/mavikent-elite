@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { db } from './firebase';
+import { db, authReady } from './firebase';
 import AdminScreen from './components/AdminScreen';
 import StudentScreen from './components/StudentScreen';
 import StaffScreen from './components/StaffScreen';
-import GameRoomTV from './components/GameRoomTV';
+import Toast from './Toast.jsx';
 
 const App = () => {
   const [appData, setAppData] = useState(null);
   const [role, setRole] = useState(null); 
   const [currentUser, setCurrentUser] = useState('');
   
-  const [loginMode, setLoginMode] = useState('select'); 
+  const [loginMode, setLoginMode] = useState('select');
   const [pinInput, setPinInput] = useState('');
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
@@ -24,11 +24,14 @@ const App = () => {
 
   // Veritabanını Dinle
   useEffect(() => {
-    const ref = db.ref('mavikent_premium');
-    ref.on('value', snapshot => {
-      setAppData(snapshot.val() || {});
+    let ref;
+    authReady.then(() => {
+      ref = db.ref('mavikent_premium');
+      ref.on('value', snapshot => {
+        setAppData(snapshot.val() || {});
+      });
     });
-    return () => ref.off();
+    return () => { if (ref) ref.off(); };
   }, []);
 
   // Otomatik Giriş (Beni Hatırla) Kontrolü
@@ -123,11 +126,21 @@ const App = () => {
   };
 
   // YÖNLENDİRMELER
-  if (role === 'admin') return <AdminScreen appData={appData} goBackToRoles={goBackToRoles} />;
-  if (role === 'staff') return <StaffScreen appData={appData} goBackToRoles={goBackToRoles} />;
-  if (role === 'student') return <StudentScreen studentName={currentUser} appData={appData} goBackToRoles={goBackToRoles} />;
-  if (loginMode === 'tv') return <GameRoomTV appData={appData} goBack={() => setLoginMode('select')} />;
+  const logoUrl = appData?.settings?.corporate_logo_url;
+  const LogoWatermark = logoUrl ? (
+    <img src={logoUrl} alt="" style={{
+      position: 'fixed', top: '50%', left: '50%',
+      transform: 'translate(-50%, -50%)',
+      width: '65vw', maxWidth: '520px',
+      opacity: 0.045,
+      pointerEvents: 'none', userSelect: 'none',
+      zIndex: 0, objectFit: 'contain',
+    }} />
+  ) : null;
 
+  if (role === 'admin') return <>{LogoWatermark}<AdminScreen appData={appData} goBackToRoles={goBackToRoles} /><Toast /></>;
+  if (role === 'staff') return <>{LogoWatermark}<StaffScreen appData={appData} goBackToRoles={goBackToRoles} /><Toast /></>;
+  if (role === 'student') return <>{LogoWatermark}<StudentScreen studentName={currentUser} appData={appData} goBackToRoles={goBackToRoles} /><Toast /></>;
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         
@@ -167,8 +180,12 @@ const App = () => {
         <div className="popIn-anim" style={{ width: '100%', maxWidth: '440px', textAlign: 'center' }}>
             
             {/* LOGO KISMI */}
-            <div style={{ marginBottom: '60px' }}>
-                <h1 style={{ margin: '0', fontSize: '42px', fontWeight: 900, color: '#0f172a', letterSpacing: '-1.5px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.05))' }}>MAVİKENT</h1>
+            <div style={{ marginBottom: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                {appData?.settings?.corporate_logo_url ? (
+                    <img src={appData.settings.corporate_logo_url} alt="Kurumsal Logo" style={{ maxHeight: '100px', objectFit: 'contain', marginBottom: '20px' }} />
+                ) : (
+                    <h1 style={{ margin: '0', fontSize: '42px', fontWeight: 900, color: '#0f172a', letterSpacing: '-1.5px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.05))' }}>MAVİKENT</h1>
+                )}
                 <div style={{ fontSize: '13px', color: '#3b82f6', fontWeight: 800, letterSpacing: '10px', marginTop: '6px', marginLeft: '10px' }}>E L I T E</div>
             </div>
 
@@ -199,13 +216,6 @@ const App = () => {
                         </div>
                     </div>
 
-                    <div onClick={() => setLoginMode('tv')} className="login-card" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderColor: '#0f172a' }}>
-                        <div className="icon-box" style={{ background: 'rgba(255,255,255,0.1)', color: '#38bdf8' }}>📺</div>
-                        <div style={{ textAlign: 'left' }}>
-                            <div style={{ fontSize: '17px', fontWeight: 900, color: '#ffffff' }}>Oyun Odası TV</div>
-                            <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600, marginTop: '4px' }}>Canlı Yayın Yansıtma Ekranı</div>
-                        </div>
-                    </div>
                 </div>
             )}
 

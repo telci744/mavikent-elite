@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
+import { playClick, playSuccess, playCoin, playCancel, playReward, playPenalty } from '../sounds';
+import { toast } from '../toast';
+import { burst } from '../confetti';
 
 const AdminScreen = ({ appData, goBackToRoles }) => {
   const [dashboardView, setDashboardView] = useState('main'); 
@@ -14,6 +17,114 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const [roomEditMode, setRoomEditMode] = useState(false);
   const [tempRoomData, setTempRoomData] = useState({});
   const [roomForm, setRoomForm] = useState({ areaId: '', score: 5, note: '' });
+
+  const [corporateIdentity, setCorporateIdentity] = useState({
+    logoUrl: appData?.settings?.corporate_logo_url || '',
+  });
+
+  const [adminSettingsView, setAdminSettingsView] = useState(null);
+  const [pointsModal, setPointsModal] = useState(null);
+  const [pointsDraft, setPointsDraft] = useState({});
+  const [studentModal, setStudentModal] = useState(null);
+  const [studentEdit, setStudentEdit] = useState({});
+
+  const [pointsConfig, setPointsConfig] = useState({
+    okul_dondu: appData?.settings?.points_config?.okul_dondu ?? 10,
+    okul_gelmedi: appData?.settings?.points_config?.okul_gelmedi ?? -20,
+    yoklama_takkeli: appData?.settings?.points_config?.yoklama_takkeli ?? 3,
+    yoklama_geldi: appData?.settings?.points_config?.yoklama_geldi ?? 2,
+    yoklama_gec: appData?.settings?.points_config?.yoklama_gec ?? 1,
+    yoklama_gelmedi: appData?.settings?.points_config?.yoklama_gelmedi ?? -3,
+    telefon_teslim: appData?.settings?.points_config?.telefon_teslim ?? 2,
+    telefon_vermedi: appData?.settings?.points_config?.telefon_vermedi ?? 0,
+    yatak_duzenli: appData?.settings?.points_config?.yatak_duzenli ?? 1,
+    yatak_bozuk: appData?.settings?.points_config?.yatak_bozuk ?? 0,
+    dolap_duzenli: appData?.settings?.points_config?.dolap_duzenli ?? 1,
+    dolap_bozuk: appData?.settings?.points_config?.dolap_bozuk ?? 0,
+  });
+
+  const handleLogoUpload = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+              const canvas = document.createElement('canvas');
+              const MAX_WIDTH = 500;
+              const scaleSize = MAX_WIDTH / img.width;
+              canvas.width = MAX_WIDTH;
+              canvas.height = img.height * scaleSize;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              const dataUrl = canvas.toDataURL('image/png');
+              setCorporateIdentity({ logoUrl: dataUrl });
+          };
+      };
+  };
+
+  const [pinInputs, setPinInputs] = useState({
+      admin_pin: appData?.settings?.admin_pin || '1507',
+      staff_pin: appData?.settings?.staff_pin || '1234',
+  });
+
+  const saveCorporateIdentity = async () => {
+      if (corporateIdentity.logoUrl) {
+          try { await db.ref('mavikent_premium/settings/corporate_logo_url').set(corporateIdentity.logoUrl); toast("✅ Kurumsal kimlik başarıyla güncellendi!"); } catch (e) { toast("Hata oluştu: " + e.message); }
+      } else {
+          if (window.confirm("Logo kaldırılacak, emin misiniz?")) { await db.ref('mavikent_premium/settings/corporate_logo_url').remove(); toast("✅ Logo başarıyla kaldırıldı!"); }
+      }
+  };
+
+  const savePins = async () => {
+      if (!pinInputs.admin_pin || !pinInputs.staff_pin) return toast("❌ Şifre alanları boş bırakılamaz!");
+      try {
+          await db.ref('mavikent_premium/settings').update({ admin_pin: pinInputs.admin_pin, staff_pin: pinInputs.staff_pin });
+          toast("✅ Şifreler başarıyla güncellendi!");
+      } catch (e) { toast("Hata oluştu: " + e.message); }
+  };
+
+  const savePointsConfig = async () => {
+      try {
+          await db.ref('mavikent_premium/settings/points_config').set(pointsConfig);
+          toast("✅ Puan yapılandırması başarıyla güncellendi!");
+      } catch (e) {
+          toast("Hata oluştu: " + e.message);
+      }
+  };
+
+  const POINTS_CATEGORIES = [
+    { id: 'okul', icon: '🏫', label: 'Okul Devam', desc: 'Okula geliş/devamsızlık', color: '#3b82f6', bg: '#eff6ff',
+      items: [{ key: 'okul_dondu', label: 'Okuldan Döndü', icon: '✅' }, { key: 'okul_gelmedi', label: 'Okula Gelmedi', icon: '🚫' }] },
+    { id: 'telefon', icon: '📱', label: 'Telefon Teslim', desc: 'Sabah telefon kontrolü', color: '#f59e0b', bg: '#fffbeb',
+      items: [{ key: 'telefon_teslim', label: 'Teslim Etti', icon: '✅' }, { key: 'telefon_vermedi', label: 'Vermedi', icon: '❌' }] },
+    { id: 'yoklama', icon: '🕌', label: 'Yoklama', desc: 'Namaz yoklaması', color: '#10b981', bg: '#f0fdf4',
+      items: [{ key: 'yoklama_takkeli', label: 'Takkeli', icon: '👳‍♂️' }, { key: 'yoklama_geldi', label: 'Geldi', icon: '✅' }, { key: 'yoklama_gec', label: 'Geç', icon: '⏳' }, { key: 'yoklama_gelmedi', label: 'Gelmedi', icon: '❌' }] },
+    { id: 'yatak', icon: '🛏️', label: 'Yatak & Dolap', desc: 'Sabah oda düzeni', color: '#8b5cf6', bg: '#faf5ff',
+      items: [{ key: 'yatak_duzenli', label: 'Yatak Düzenli', icon: '✅' }, { key: 'yatak_bozuk', label: 'Yatak Bozuk', icon: '❌' }, { key: 'dolap_duzenli', label: 'Dolap Düzenli', icon: '✅' }, { key: 'dolap_bozuk', label: 'Dolap Bozuk', icon: '❌' }] },
+  ];
+
+  const openPointsModal = (catId) => {
+    const cat = POINTS_CATEGORIES.find(c => c.id === catId);
+    const draft = {};
+    cat.items.forEach(item => { draft[item.key] = String(pointsConfig[item.key]); });
+    setPointsDraft(draft);
+    setPointsModal(catId);
+  };
+
+  const savePointsModal = async () => {
+    const updates = {};
+    Object.entries(pointsDraft).forEach(([key, val]) => { updates[key] = parseInt(val) || 0; });
+    const newConfig = { ...pointsConfig, ...updates };
+    setPointsConfig(newConfig);
+    setPointsModal(null);
+    try {
+      await db.ref('mavikent_premium/settings/points_config').set(newConfig);
+      toast("✅ Puan yapılandırması güncellendi!");
+    } catch (e) { toast("Hata oluştu: " + e.message); }
+  };
 
   // Kayıtlı görev yerlerini veritabanından çekip listeye doldurur
   useEffect(() => {
@@ -39,7 +150,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   };
 
   const saveInspection = async () => {
-      if(!hygieneForm.areaId) return alert("Lütfen bir alan seçin!");
+      if(!hygieneForm.areaId) return toast("Lütfen bir alan seçin!");
       setIsHygieneSaving(true);
       const area = appData.hygiene_areas?.[hygieneForm.areaId];
       const responsibles = area?.responsibles || [];
@@ -62,9 +173,9 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
       try {
           await db.ref('mavikent_premium').update(updates);
-          alert(`✅ Denetim kaydedildi! ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
+          toast(`✅ Denetim kaydedildi! ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
           setHygieneForm({ areaId: '', score: 5, note: '' });
-      } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
+      } catch (e) { toast("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
   };
 
   // SADECE TEMİZLİK GÖREV YERLERİNİ KAYDEDER (PUAN VERMEZ)
@@ -75,8 +186,8 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     });
     try {
       await db.ref('mavikent_premium/hygiene_assignments').set(tasks);
-      alert("✅ Temizlik görev yerleri başarıyla kaydedildi!");
-    } catch (e) { alert("Hata oluştu!"); }
+      toast("✅ Temizlik görev yerleri başarıyla kaydedildi!");
+    } catch (e) { toast("Hata oluştu!"); }
   };
 
   const openWcEditMode = () => {
@@ -94,9 +205,9 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const saveWcAssignments = async () => {
       try {
           await db.ref('mavikent_premium/hygiene_areas').update(tempWcData);
-          alert("✅ WC Nöbetçileri Kaydedildi!");
+          toast("✅ WC Nöbetçileri Kaydedildi!");
           setWcEditMode(false);
-      } catch(e) { alert("Hata!"); }
+      } catch(e) { toast("Hata!"); }
   };
 
   const getRoomCoinImpact = (score) => {
@@ -123,13 +234,13 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const saveRoomAssignments = async () => {
       try {
           await db.ref('mavikent_premium/room_areas').update(tempRoomData);
-          alert("✅ Oda İsimleri ve Öğrencileri Kaydedildi!");
+          toast("✅ Oda İsimleri ve Öğrencileri Kaydedildi!");
           setRoomEditMode(false);
-      } catch(e) { alert("Hata!"); }
+      } catch(e) { toast("Hata!"); }
   };
 
   const saveRoomInspection = async () => {
-      if(!roomForm.areaId) return alert("Lütfen bir oda seçin!");
+      if(!roomForm.areaId) return toast("Lütfen bir oda seçin!");
       setIsHygieneSaving(true);
       const area = appData.room_areas?.[roomForm.areaId];
       const responsibles = area?.responsibles || [];
@@ -152,9 +263,9 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
       try {
           await db.ref('mavikent_premium').update(updates);
-          alert(`✅ Oda denetimi kaydedildi! Odadaki öğrencilere ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
+          toast(`✅ Oda denetimi kaydedildi! Odadaki öğrencilere ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
           setRoomForm({ areaId: '', score: 5, note: '' });
-      } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
+      } catch (e) { toast("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
   };
 
   const [selectedSession, setSelectedSession] = useState(''); 
@@ -171,11 +282,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       active_theme: appData?.settings?.active_theme || 'default', admin_pin: appData?.settings?.admin_pin || '1507', staff_pin: appData?.settings?.staff_pin || '1234' 
   });
   
-  const [questInputs, setQuestInputs] = useState({ 
-      q1_text: appData?.quests?.q1?.text || '', q1_amt: appData?.quests?.q1?.amt || '', q1_type: appData?.quests?.q1?.type || 'M', 
-      q2_text: appData?.quests?.q2?.text || '', q2_amt: appData?.quests?.q2?.amt || '', q2_type: appData?.quests?.q2?.type || 'M', 
-      q3_text: appData?.quests?.q3?.text || '', q3_amt: appData?.quests?.q3?.amt || '', q3_type: appData?.quests?.q3?.type || 'M' 
-  });
   
   const [newStudentName, setNewStudentName] = useState('');
   const [newProduct, setNewProduct] = useState({ name: '', price: '', icon: '📦', type: 'normal', stock: '' });
@@ -191,10 +297,12 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const [newPenaltyCard, setNewPenaltyCard] = useState({ name: '', mcoin: 0, banDays: 0, rp: 0 });
   const [newRewardCard, setNewRewardCard] = useState({ name: '', type: 'mcoin', amount1: '', amount2: '' });
   const [tutanakTab, setTutanakTab] = useState('odul');
+  const [rewardCardModal, setRewardCardModal] = useState(false);
+  const [penaltyCardModal, setPenaltyCardModal] = useState(false);
   const [newTourney, setNewTourney] = useState({ name: '', game: 'FIFA 24', fee: '', p1: '', p2: '', p3: '', device: 'ps5' });
 
   const handleCreatePenaltyCard = () => {
-      if (!newPenaltyCard.name) return alert("Ceza adı zorunludur!");
+      if (!newPenaltyCard.name) return toast("Ceza adı zorunludur!");
       const cId = `penalty_${Date.now()}`;
       db.ref(`mavikent_premium/penalty_cards/${cId}`).set({
           name: newPenaltyCard.name,
@@ -202,12 +310,12 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           banDays: parseInt(newPenaltyCard.banDays) || 0,
           rp: parseInt(newPenaltyCard.rp) || 0
       });
-      alert("✅ Ceza Kartı sisteme eklendi!");
+      toast("✅ Ceza Kartı sisteme eklendi!");
       setNewPenaltyCard({ name: '', mcoin: 0, banDays: 0, rp: 0 });
   };
 
   const handleCreateRewardCard = () => {
-      if (!newRewardCard.name) return alert("Ödül adı zorunludur!");
+      if (!newRewardCard.name) return toast("Ödül adı zorunludur!");
       const cId = `reward_${Date.now()}`;
       db.ref(`mavikent_premium/reward_cards/${cId}`).set({
           name: newRewardCard.name,
@@ -215,13 +323,13 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
           amount1: newRewardCard.amount1,
           amount2: newRewardCard.amount2
       });
-      alert("✅ Ödül Kartı sisteme eklendi!");
+      toast("✅ Ödül Kartı sisteme eklendi!");
       setNewRewardCard({ name: '', type: 'mcoin', amount1: '', amount2: '' });
   };
 
   const applyPenaltyCard = (studentName, cardId) => {
       const card = appData?.penalty_cards?.[cardId];
-      if (!card) return alert("Hata: Kart bulunamadı!");
+      if (!card) return toast("Hata: Kart bulunamadı!");
       if (!window.confirm(`${studentName} adlı öğrenciye '${card.name}' cezası uygulanacak. Onaylıyor musunuz?`)) return;
 
       const updates = {};
@@ -254,8 +362,11 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
       updates[`notifications/${studentName}/notif_${timestamp}`] = { title: 'Disiplin İhlali!', message: `'${card.name}' kurallarını ihlal ettiğin için ceza aldın.`, isRead: false, timestamp };
 
+      playPenalty();
+
+
       db.ref('mavikent_premium').update(updates).then(() => {
-          alert(`✅ ${studentName} adlı öğrenciye ${card.name} cezası başarıyla uygulandı!`);
+          toast(`✅ ${studentName} adlı öğrenciye ${card.name} cezası başarıyla uygulandı!`);
           setSelectedStudent(null);
           setModalType(null);
       });
@@ -263,7 +374,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
   const applyRewardCard = (studentName, cardId) => {
       const card = appData?.reward_cards?.[cardId];
-      if (!card) return alert("Hata: Ödül kartı bulunamadı!");
+      if (!card) return toast("Hata: Ödül kartı bulunamadı!");
       if (!window.confirm(`${studentName} adlı öğrenciye '${card.name}' ödülü verilecek. Onaylıyor musunuz?`)) return;
 
       const updates = {};
@@ -288,8 +399,9 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
       updates[`notifications/${studentName}/notif_${timestamp}`] = { title: 'Ödül Kazandın!', message: `'${card.name}' ödülü hesabına tanımlandı. Harikasın!`, isRead: false, timestamp };
 
+      playReward(); burst();
       db.ref('mavikent_premium').update(updates).then(() => {
-          alert(`✅ ${studentName} adlı öğrenciye ${card.name} ödülü başarıyla tanımlandı!`);
+          toast(`✅ ${studentName} adlı öğrenciye ${card.name} ödülü başarıyla tanımlandı!`);
           setSelectedStudent(null);
           setModalType(null);
       });
@@ -308,6 +420,21 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const roster = Array.isArray(rawRoster) ? rawRoster : Object.values(rawRoster || {});
   const isElite = (name) => appData?.student_tiers?.[name] === 'elite';
 
+  const pointsConfigFromDB = appData?.settings?.points_config || {
+    okul_dondu: 10,
+    okul_gelmedi: -20,
+    yoklama_takkeli: 3,
+    yoklama_geldi: 2,
+    yoklama_gec: 1,
+    yoklama_gelmedi: -3,
+    telefon_teslim: 2,
+    telefon_vermedi: 0,
+    yatak_duzenli: 1,
+    yatak_bozuk: 0,
+    dolap_duzenli: 1,
+    dolap_bozuk: 0,
+  };
+
   const mebLessons = { "5. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Bilişim", "Beden", "🚫 YOK"], "6. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Bilişim", "Beden", "🚫 YOK"], "7. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Teknoloji", "Beden", "🚫 YOK"], "8. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "İnkılap Tarihi", "İngilizce", "Din", "Teknoloji", "Beden", "🚫 YOK"], "ELİT": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"], "STANDART": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal/İnkılap", "İngilizce", "Din", "Paragraf S.", "Problem Ç.", "🚫 YOK"] };
   const valuesSubjectsList = ["K.Kerim", "İlmihal", "Siyer-i Nebi", "Adabı Muaşeret", "Tecvid"];
   const collectionTypes = [{ id: 'AKILLI SAAT', label: 'Akıllı Saat', icon: '⌚' }, { id: 'FORMA', label: 'Forma', icon: '👕' }, { id: 'KRAMPON', label: 'Krampon', icon: '👟' }, { id: 'ÇİKOLATA EVİM', label: 'Çikolata Evim', icon: '🍫' }, { id: 'KÜNEFE', label: 'Künefe', icon: '🍮' }, { id: 'NEŞELİ BALIK', label: 'Neşeli Balık', icon: '🐟' }, { id: 'PİZZA', label: 'Pizza', icon: '🍕' }, { id: 'FUTBOL TOPU', label: 'Futbol Topu', icon: '⚽' }];
@@ -324,12 +451,12 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
 
   const handleAddCustomSlot = () => {
-      if(!newCustomSlot.time || !newCustomSlot.price) return alert("Saat ve Fiyat girin!");
+      if(!newCustomSlot.time || !newCustomSlot.price) return toast("Saat ve Fiyat girin!");
       const slotId = `custom_${Date.now()}`;
       db.ref(`mavikent_premium/custom_game_slots/${newCustomSlot.device}/${newCustomSlot.day}/${slotId}`).set({
           time: newCustomSlot.time, price: parseInt(newCustomSlot.price)
       });
-      alert("✅ Özel seans eklendi!");
+      toast("✅ Özel seans eklendi!");
       setNewCustomSlot({...newCustomSlot, time: ''});
   };
 
@@ -371,7 +498,11 @@ const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartes
   const handleBack = () => {
     if (currentModule && (modalType || selectedStudent)) { setModalType(null); setSelectedStudent(null); return; }
     if (currentModule === 'yoklama' && selectedSession) { setSelectedSession(''); return; }
-    if (currentModule) { setCurrentModule(null); setSelectedSession(''); return; } 
+    if (currentModule === 'admin_settings' && adminSettingsView) {
+        setAdminSettingsView(null);
+        return;
+    }
+    if (currentModule) { setCurrentModule(null); setSelectedSession(''); setAdminSettingsView(null); return; }
     if (dashboardView !== 'main') { if (dashboardView.startsWith('egitim_')) setDashboardView('egitim'); else setDashboardView('main'); return; }
     goBackToRoles();
   };
@@ -395,7 +526,7 @@ const saveData = (type, status, basePts) => {
     // KURAL 2: Öğrenci kurumda yoksa ödül/ceza puanı (Yoklama ve Okul hariç) verilemez!
     const todayStr = new Date().toDateString();
     if (appData?.daily_status?.[todayStr]?.[selectedStudent] === 'a' && type !== 'okul' && type !== 'yoklama') {
-        return alert(`⚠️ ${selectedStudent} adlı öğrenci bugün kurumda değil (İzinli/Gelmedi). Puan işlemi yapılamaz.`);
+        return toast(`⚠️ ${selectedStudent} adlı öğrenci bugün kurumda değil (İzinli/Gelmedi). Puan işlemi yapılamaz.`);
     }
 
     const finalPts = getCalculatedPoints(selectedStudent, basePts, type);
@@ -405,7 +536,7 @@ const saveData = (type, status, basePts) => {
     if (isFail) {
         const strk = appData?.active_cards?.[selectedStudent]?.streak;
         if (strk && (strk.date === todayStr || (strk.end && strk.end > Date.now()))) { 
-            alert(`🛡️ ${selectedStudent} SERİ KORUMA KALKANI kullandı!`); updates[`active_cards/${selectedStudent}/streak`] = null; 
+            toast(`🛡️ ${selectedStudent} SERİ KORUMA KALKANI kullandı!`); updates[`active_cards/${selectedStudent}/streak`] = null; 
         } else { updates[`streaks/${selectedStudent}`] = 0; updates[`daily_flags/${selectedStudent}/broken`] = true; }
     }
     
@@ -425,7 +556,7 @@ const saveData = (type, status, basePts) => {
             if (currentAbs % 10 === 0) { 
                 updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalPts - 100;
                 updates[`transactions/${selectedStudent}/abs_fine_${Date.now()}`] = { desc: '🚨 10 Günlük Devamsızlık Cezası', amt: -100, date: new Date().toLocaleString('tr-TR') };
-                alert(`🚨 ${selectedStudent} 10. devamsızlığını yaptı! Hesabından ekstra 100 M-Coin düşüldü.`);
+                toast(`🚨 ${selectedStudent} 10. devamsızlığını yaptı! Hesabından ekstra 100 M-Coin düşüldü.`);
             }
         }
     }
@@ -477,7 +608,7 @@ const saveEducationData = () => {
         updates[`xp/${selectedStudent}`] = (Number(appData?.xp?.[selectedStudent]) || 0) + (earnedPoints * 10);
         updates[`transactions/${selectedStudent}/txn_${Date.now()}`] = { desc: 'Günlük Eğitim Başarısı', amt: finalM, date: new Date().toLocaleString('tr-TR') };
     }
-    db.ref('mavikent_premium').update(updates); setSelectedStudent(null); setModalType(null); alert("✅ Eğitim Kaydedildi ve Haftalık Panoya İşlendi!");
+    db.ref('mavikent_premium').update(updates); setSelectedStudent(null); setModalType(null); toast("✅ Eğitim Kaydedildi ve Haftalık Panoya İşlendi!");
   };
 
   const saveExamData = (type) => {
@@ -497,7 +628,7 @@ const saveEducationData = () => {
         }
         updates[`exams/${selectedStudent}/yazili`] = { ...writeData, avg: count > 0 ? (total / count) : 0, target: parseFloat(examData.target) || 0, date: new Date().toDateString() };
     }
-    db.ref('mavikent_premium').update(updates); setSelectedStudent(null); setModalType(null); alert(`${type.toUpperCase()} Kaydedildi!`);
+    db.ref('mavikent_premium').update(updates); setSelectedStudent(null); setModalType(null); toast(`${type.toUpperCase()} Kaydedildi!`);
   };
 
   const downloadCSVTemplate = (type) => {
@@ -517,7 +648,7 @@ const saveEducationData = () => {
   const handleCSVUpload = (e, type) => {
       const file = e.target.files[0];
       if (!file) return;
-      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) return alert("⚠️ Lütfen Excel'de dosyanızı doldurduktan sonra 'Farklı Kaydet' diyerek 'CSV (Virgülle ayrılmış)' formatında kaydedip sisteme yükleyin.");
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) return toast("⚠️ Lütfen Excel'de dosyanızı doldurduktan sonra 'Farklı Kaydet' diyerek 'CSV (Virgülle ayrılmış)' formatında kaydedip sisteme yükleyin.");
       const reader = new FileReader();
       reader.onload = (evt) => {
           const text = evt.target.result; const rows = text.split(/\r?\n/).map(row => row.split(/[,;]/));
@@ -544,7 +675,7 @@ const saveEducationData = () => {
                   }
               }
           }
-          if (Object.keys(updates).length > 0) { db.ref('mavikent_premium').update(updates); alert(`✅ Başarılı! ${matchCount} öğrencinin verisi aktarıldı.`); } else { alert('⚠️ Hata: İsimler eşleşmedi.'); }
+          if (Object.keys(updates).length > 0) { db.ref('mavikent_premium').update(updates); toast(`✅ Başarılı! ${matchCount} öğrencinin verisi aktarıldı.`); } else { toast('⚠️ Hata: İsimler eşleşmedi.'); }
           e.target.value = null; 
       };
       reader.readAsText(file, 'UTF-8');
@@ -609,9 +740,10 @@ const saveEducationData = () => {
   };
 
   const handleAddProduct = () => {
-    if (!newProduct.name || !newProduct.price) return alert("İsim ve fiyat zorunludur!");
+    playClick();
+    if (!newProduct.name || !newProduct.price) return toast("İsim ve fiyat zorunludur!");
     const productData = { n: newProduct.name, p: parseInt(newProduct.price), i: newProduct.icon, type: newProduct.type, stock: newProduct.stock !== '' ? parseInt(newProduct.stock) : 999 };
-    if (newProduct.type === 'bundle') { if (bundleSelection.length === 0) return alert("Lütfen paket içine eklenecek ürünleri seçin!"); productData.bundleItems = bundleSelection; }
+    if (newProduct.type === 'bundle') { if (bundleSelection.length === 0) return toast("Lütfen paket içine eklenecek ürünleri seçin!"); productData.bundleItems = bundleSelection; }
     if (editProductKey) { db.ref(`mavikent_premium/market_products/${editProductKey}`).update(productData); setEditProductKey(null); } 
     else { db.ref('mavikent_premium/market_products').push(productData); }
     setNewProduct({ name: '', price: '', icon: '📦', type: 'normal', stock: '' }); setBundleSelection([]);
@@ -621,36 +753,36 @@ const saveEducationData = () => {
 
   const handleCreateGroupBuy = () => {
       const tc = parseInt(newGroupBuy.totalCost); const mp = parseInt(newGroupBuy.maxP);
-      if(!newGroupBuy.name || isNaN(tc) || isNaN(mp)) return alert("Tüm alanları doldurun!");
+      if(!newGroupBuy.name || isNaN(tc) || isNaN(mp)) return toast("Tüm alanları doldurun!");
       db.ref('mavikent_premium/group_buys').push({ n: newGroupBuy.name, i: newGroupBuy.icon, tc: tc, mp: mp, pp: Math.ceil(tc/mp), participants: [], active: true, date: new Date().toLocaleDateString('tr-TR') });
-      alert("🤝 İmece başlatıldı!"); setNewGroupBuy({ name: '', totalCost: '', maxP: '', icon: '🤝' });
+      toast("🤝 İmece başlatıldı!"); setNewGroupBuy({ name: '', totalCost: '', maxP: '', icon: '🤝' });
   };
 
   const handleStartAuction = () => {
       const item = document.getElementById('aucItem').value; const price = parseInt(document.getElementById('aucPrice').value);
-      if(!item || !price) return alert("İhale ürünü ve başlangıç fiyatı zorunludur!");
+      if(!item || !price) return toast("İhale ürünü ve başlangıç fiyatı zorunludur!");
       db.ref('mavikent_premium/auction').set({ item: item, minBid: price, currentBid: price, highestBidder: null, active: true });
-      alert("🔨 İhale başlatıldı! Öğrenciler artık teklif verebilir."); document.getElementById('aucItem').value = ''; document.getElementById('aucPrice').value = '';
+      toast("🔨 İhale başlatıldı! Öğrenciler artık teklif verebilir."); document.getElementById('aucItem').value = ''; document.getElementById('aucPrice').value = '';
   };
 
   const handleEndAuction = () => {
       if(!window.confirm("İhaleyi bitirmek istediğine emin misin?")) return;
       const auc = appData?.auction;
-      if (auc && auc.highestBidder) { db.ref('mavikent_premium/deliveries').push({ s: auc.highestBidder, i: `${auc.item} (İhale Kazancı)`, st: 'wait', type: 'normal', val: auc.item, date: new Date().toLocaleDateString('tr-TR') }); alert(`🏆 İhale bitti! ${auc.highestBidder} kazandı.`); } else { alert("İhaleye kimse teklif vermedi."); }
+      if (auc && auc.highestBidder) { playSuccess(); db.ref('mavikent_premium/deliveries').push({ s: auc.highestBidder, i: `${auc.item} (İhale Kazancı)`, st: 'wait', type: 'normal', val: auc.item, date: new Date().toLocaleDateString('tr-TR') }); toast(`🏆 İhale bitti! ${auc.highestBidder} kazandı.`); } else { toast("İhaleye kimse teklif vermedi."); }
       db.ref('mavikent_premium/auction').set(null);
   };
 
   const handleAdminCreateClan = () => {
-      if(!newAdminClan.name || !newAdminClan.tag || !newAdminClan.leader) return alert("Klan adı, TAG ve lider zorunludur!");
+      if(!newAdminClan.name || !newAdminClan.tag || !newAdminClan.leader) return toast("Klan adı, TAG ve lider zorunludur!");
       const cId = `clan_${Date.now()}`;
       db.ref(`mavikent_premium/clans/${cId}`).set({ name: newAdminClan.name.toUpperCase(), tag: newAdminClan.tag.toUpperCase(), icon: newAdminClan.icon, desc: 'Yönetici tarafından kuruldu.', leader: newAdminClan.leader, members: [newAdminClan.leader] });
-      alert("Klan başarıyla oluşturuldu."); setNewAdminClan({ name: '', tag: '', icon: '🛡️', leader: '' });
+      toast("Klan başarıyla oluşturuldu."); setNewAdminClan({ name: '', tag: '', icon: '🛡️', leader: '' });
   };
 
   const handleAdminDeleteClan = (cId) => {
       if(!window.confirm("Bu klanı silmek istediğine emin misin?")) return;
       const clan = appData?.clans?.[cId];
-      if(clan && clan.members) { const updates = {}; updates[`clans/${cId}`] = null; clan.members.forEach(m => { updates[`clan_war_participants/${m}`] = null; }); db.ref('mavikent_premium').update(updates); alert("Klan temizlendi."); }
+      if(clan && clan.members) { const updates = {}; updates[`clans/${cId}`] = null; clan.members.forEach(m => { updates[`clan_war_participants/${m}`] = null; }); db.ref('mavikent_premium').update(updates); toast("Klan temizlendi."); }
   };
 
   // EKSİK 1: KLAN SAVAŞINI BİTİRME VE ÖDÜL DAĞITIMI
@@ -662,7 +794,7 @@ const saveEducationData = () => {
           (clan.members || []).forEach(m => { if (appData?.clan_war_participants?.[m]) { warScore += Number(appData?.season_score?.[m] || 0); } });
           if (warScore > highestScore) { highestScore = warScore; winnerClanId = cId; }
       });
-      if (!winnerClanId || highestScore === 0) return alert("Savaşa katılan klan veya puan yok.");
+      if (!winnerClanId || highestScore === 0) return toast("Savaşa katılan klan veya puan yok.");
       
       const winnerClan = appData.clans[winnerClanId]; const updates = {};
       (winnerClan.members || []).forEach(m => {
@@ -670,24 +802,8 @@ const saveEducationData = () => {
       });
       updates['clan_war_participants'] = null;
       db.ref('mavikent_premium/global_chat').push({ s: 'SİSTEM', t: `🏆 HAFTANIN KLAN SAVAŞI ŞAMPİYONU: ${winnerClan.name}! Katılan üyelere 60 M-Coin yatırıldı.`, ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) });
-      db.ref('mavikent_premium').update(updates); alert(`✅ Savaş bitti! Şampiyon: ${winnerClan.name} (${highestScore} Puan)`);
+      db.ref('mavikent_premium').update(updates); toast(`✅ Savaş bitti! Şampiyon: ${winnerClan.name} (${highestScore} Puan)`);
   };
-
-  // EKSİK 2: GÖREV TAMAMLAMA VE ÖDÜL DAĞITIMI
-  const completeQuest = (qId) => {
-      const quest = appData?.quests?.[qId]; if (!quest) return;
-      const parts = quest.participants || []; if (parts.length === 0) return alert("Bu görevde katılımcı yok!");
-      if (!window.confirm(`${parts.length} öğrenciye ödülleri dağıtılsın mı?`)) return;
-      
-      const updates = {};
-      parts.forEach(p => {
-          if (quest.type === 'M') { updates[`wallet/${p}`] = (Number(appData?.wallet?.[p]) || 0) + Number(quest.amt); updates[`transactions/${p}/txn_q_${Date.now()}`] = { desc: `Görev Ödülü: ${quest.text}`, amt: Number(quest.amt), date: new Date().toLocaleString('tr-TR') }; } 
-          else if (quest.type === 'RP') { updates[`season_score/${p}`] = (Number(appData?.season_score?.[p]) || 0) + Number(quest.amt); }
-          updates[`xp/${p}`] = (Number(appData?.xp?.[p]) || 0) + 50; 
-      });
-      updates[`quests/${qId}/participants`] = null; db.ref('mavikent_premium').update(updates); alert("✅ Ödüller dağıtıldı ve liste temizlendi.");
-  };
-
   // EKSİK 3: YÖNETİCİ SOHBET MESAJI GÖNDERİMİ
   const sendAdminChat = () => {
       if (!adminChatInput.trim()) return;
@@ -705,7 +821,7 @@ const saveEducationData = () => {
           else if (item.type === 'multiplier') { updates[`active_cards/${item.s}/multiplier`] = { date: new Date().toDateString(), val: "2X" }; }
           else if (item.type === 'streak') { const today = new Date(); let nextSat = new Date(); nextSat.setDate(today.getDate() + 6); nextSat.setHours(15, 0, 0, 0); updates[`active_cards/${item.s}/streak`] = { val: "aktif", date: new Date().toDateString(), end: nextSat.getTime() }; }
       }
-      updates[`deliveries/${k}/st`] = 'done'; db.ref('mavikent_premium').update(updates); alert("✅ Onaylandı!");
+      updates[`deliveries/${k}/st`] = 'done'; playSuccess(); burst(); db.ref('mavikent_premium').update(updates); toast("✅ Onaylandı!");
   };
 
   const handleDeliverCollection = (student, cName, keys) => {
@@ -713,7 +829,7 @@ const saveEducationData = () => {
       const updates = {}; keys.forEach(k => { updates[`deliveries/${k}/st`] = 'done'; });
       updates[`wallet/${student}`] = (Number(appData?.wallet?.[student]) || 0) + 500;
       updates[`transactions/${student}/txn_col_${Date.now()}`] = { desc: `🏆 Koleksiyon Ödülü (${cName})`, amt: 500, date: new Date().toLocaleString('tr-TR') };
-      db.ref('mavikent_premium').update(updates); alert("✅ Ödül yatırıldı!");
+      playSuccess(); burst(); db.ref('mavikent_premium').update(updates); toast("✅ Ödül yatırıldı!");
   };
 
   const handleCancelCollection = (student, keys, items, withRefund) => {
@@ -732,12 +848,12 @@ const saveEducationData = () => {
           updates[`wallet/${student}`] = (Number(appData?.wallet?.[student]) || 0) + totalRefund;
           updates[`transactions/${student}/txn_ref_col_${Date.now()}`] = { desc: `Toplu İade (Koleksiyon)`, amt: totalRefund, date: new Date().toLocaleString('tr-TR') };
       }
-      db.ref('mavikent_premium').update(updates); alert(withRefund ? `✅ İade yapıldı: ${totalRefund} M` : "🗑️ Silindi.");
+      playCancel(); db.ref('mavikent_premium').update(updates); toast(withRefund ? `✅ İade yapıldı: ${totalRefund} M` : "🗑️ Silindi.");
   };
 
   const handleBulkDeliveryAction = (action) => {
       const waitingKeys = Object.keys(appData?.deliveries || {}).filter(k => appData.deliveries[k].st === 'wait');
-      if (waitingKeys.length === 0) return alert("Bekleyen teslimat yok.");
+      if (waitingKeys.length === 0) return toast("Bekleyen teslimat yok.");
       const updates = {};
       
       if (action === 'approve') {
@@ -752,7 +868,7 @@ const saveEducationData = () => {
               }
               updates[`deliveries/${k}/st`] = 'done';
           });
-          db.ref('mavikent_premium').update(updates); alert(`✅ Toplu onaylandı!`);
+          playSuccess(); burst(); db.ref('mavikent_premium').update(updates); toast(`✅ Toplu onaylandı!`);
       } 
       else if (action === 'refund') {
           if(!window.confirm(`Tüm bekleyen siparişleri iptal edip ücretlerini iade etmek istediğine emin misin?`)) return;
@@ -768,11 +884,11 @@ const saveEducationData = () => {
                   updates[`transactions/${item.s}/txn_${Date.now()}_${Math.floor(Math.random()*1000)}`] = { desc: `Toplu İade: ${itemName}`, amt: refundAmt, date: new Date().toLocaleString('tr-TR') };
               }
           });
-          db.ref('mavikent_premium').update(updates); alert(`💰 İadeler tamamlandı!`);
+          playCancel(); db.ref('mavikent_premium').update(updates); toast(`💰 İadeler tamamlandı!`);
       }
       else if (action === 'delete') {
           if(!window.confirm(`Tüm bekleyen siparişleri İADESİZ olarak silmek istediğine emin misin?`)) return;
-          waitingKeys.forEach(k => updates[`deliveries/${k}`] = null); db.ref('mavikent_premium').update(updates); alert(`🗑️ Teslimatlar silindi.`);
+          waitingKeys.forEach(k => updates[`deliveries/${k}`] = null); playCancel(); db.ref('mavikent_premium').update(updates); toast(`🗑️ Teslimatlar silindi.`);
       }
   };
 
@@ -784,17 +900,18 @@ const saveEducationData = () => {
           if (iName.includes('(Çekiliş)')) refundAmt = 20; else if (iName.includes('(Kazı Kazan)')) refundAmt = 15;
           else { const prod = Object.values(appData?.market_products || {}).find(p => p.n === iName); if (prod && prod.p) refundAmt = Number(prod.p); }
           
+          playCancel();
           if (refundAmt > 0) {
               updates[`wallet/${item.s}`] = (Number(appData?.wallet?.[item.s]) || 0) + refundAmt;
               updates[`transactions/${item.s}/txn_ref_${Date.now()}`] = { desc: `İade: ${iName}`, amt: refundAmt, date: new Date().toLocaleString('tr-TR') };
-              alert(`✅ İade edildi: ${refundAmt} M`);
-          } else { alert(`✅ İptal edildi. (Sabit bedel bulunamadı)`); }
-      } else { alert("🗑️ Kalıcı olarak silindi."); }
+              toast(`✅ İade edildi: ${refundAmt} M`);
+          } else { toast(`✅ İptal edildi. (Sabit bedel bulunamadı)`); }
+      } else { toast("🗑️ Kalıcı olarak silindi."); }
       db.ref('mavikent_premium').update(updates);
   };
 
   const applyBan = () => {
-      if (!banInput.student || !banInput.reason) return alert("Öğrenci ve Ceza Sebebi zorunludur!");
+      if (!banInput.student || !banInput.reason) return toast("Öğrenci ve Ceza Sebebi zorunludur!");
       let expTime = 0;
       if (banInput.duration === '1') expTime = Date.now() + (1 * 24 * 60 * 60 * 1000);
       else if (banInput.duration === '3') expTime = Date.now() + (3 * 24 * 60 * 60 * 1000);
@@ -811,12 +928,12 @@ const saveEducationData = () => {
               });
           });
       });
-      db.ref('mavikent_premium').update(updates); alert(`⛔ ${banInput.student} adlı öğrenciye başarıyla ceza kesildi ve aktif randevuları iptal edildi!`);
+      db.ref('mavikent_premium').update(updates); toast(`⛔ ${banInput.student} adlı öğrenciye başarıyla ceza kesildi ve aktif randevuları iptal edildi!`);
       setBanInput({ student: '', duration: '1', reason: '', photoUrl: '' });
   };
 
   const removeBan = (student) => {
-      if(window.confirm(`${student} adlı öğrencinin yasağını kaldırmak istiyor musun?`)) { db.ref(`mavikent_premium/game_room_bans/${student}`).remove(); alert("Yasak kaldırıldı."); }
+      if(window.confirm(`${student} adlı öğrencinin yasağını kaldırmak istiyor musun?`)) { db.ref(`mavikent_premium/game_room_bans/${student}`).remove(); toast("Yasak kaldırıldı."); }
   };
 
   const toggleTourneyDay = (tId, day) => {
@@ -829,9 +946,9 @@ const saveEducationData = () => {
 
   const generateFixture = (tId, tourneyData) => {
       const selectedDays = tourneyDaysMap[tId] || [];
-      if (selectedDays.length === 0) return alert("Lütfen maçların oynanacağı günleri (Aşağıdaki Butonlardan) seçin!");
+      if (selectedDays.length === 0) return toast("Lütfen maçların oynanacağı günleri (Aşağıdaki Butonlardan) seçin!");
       const players = [...(tourneyData.participants || [])];
-      if (players.length < 2) return alert("Fikstür oluşturmak için en az 2 kişi gerekli!");
+      if (players.length < 2) return toast("Fikstür oluşturmak için en az 2 kişi gerekli!");
       if (!window.confirm(`Fikstür çekilecek ve seçtiğiniz günlerin (Akşam) seansları bu turnuva için kilitlenecektir. Onaylıyor musun?`)) return;
 
       players.sort(() => Math.random() - 0.5);
@@ -845,7 +962,7 @@ const saveEducationData = () => {
       const devSlotsObj = GAME_SLOTS[tourneyData.device] || [];
       const eveningSlots = devSlotsObj.filter(s => parseInt(s.time.split(':')[0]) >= 20);
 
-      if (eveningSlots.length === 0) return alert("Bu cihaz için akşam seansı bulunamadı!");
+      if (eveningSlots.length === 0) return toast("Bu cihaz için akşam seansı bulunamadı!");
 
       let currentWeek = 1; let currentDayIdx = 0; let currentSlotIdx = 0;
       let updates = {}; let lockedCount = 0;
@@ -877,11 +994,11 @@ const saveEducationData = () => {
       updates[`tournaments/${tId}/status`] = 'active';
       updates[`tournaments/${tId}/fixture`] = matches;
       updates[`tournaments/${tId}/standings`] = standings;
-      db.ref('mavikent_premium').update(updates); alert(`✅ Fikstür başarıyla oluşturuldu! Toplam ${lockedCount} seans turnuva için kilitlendi.`);
+      db.ref('mavikent_premium').update(updates); toast(`✅ Fikstür başarıyla oluşturuldu! Toplam ${lockedCount} seans turnuva için kilitlendi.`);
   };
 
   const handleCreateTournament = () => {
-      if (!newTourney.name || !newTourney.fee || !newTourney.p1) return alert("Turnuva Adı, Giriş Ücreti ve 1. Ödülü zorunludur!");
+      if (!newTourney.name || !newTourney.fee || !newTourney.p1) return toast("Turnuva Adı, Giriş Ücreti ve 1. Ödülü zorunludur!");
       const tId = `tourney_${Date.now()}`;
       const updates = {};
       updates[`tournaments/${tId}`] = {
@@ -890,20 +1007,20 @@ const saveEducationData = () => {
           participants: [], status: 'open', date: new Date().toLocaleDateString('tr-TR')
       };
       db.ref('mavikent_premium').update(updates);
-      alert("🏆 Turnuva başarıyla oluşturuldu! Öğrenciler katılım sağlayabilir.");
+      toast("🏆 Turnuva başarıyla oluşturuldu! Öğrenciler katılım sağlayabilir.");
       setNewTourney({ name: '', game: 'FIFA 24', fee: '', p1: '', p2: '', p3: '', device: 'ps5' });
   };
 
   const handleEndTournament = (tId, tourneyData) => {
       const parts = tourneyData.participants || [];
-      if (parts.length === 0) return alert("Turnuvada katılımcı yok!");
+      if (parts.length === 0) return toast("Turnuvada katılımcı yok!");
       let msg = "🏆 ŞAMPİYONU SEÇİN:\n\n";
       parts.forEach((p, i) => { msg += `${i + 1}- ${p}\n`; });
       msg += "\nŞampiyonun numarasını girin:";
       const res = prompt(msg);
       if (!res) return;
       const idx = parseInt(res) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= parts.length) return alert("Geçersiz bir numara girdiniz.");
+      if (isNaN(idx) || idx < 0 || idx >= parts.length) return toast("Geçersiz bir numara girdiniz.");
       
       const winner = parts[idx];
       const prize = parseInt(tourneyData.p1); 
@@ -925,7 +1042,7 @@ const saveEducationData = () => {
           });
           
           db.ref('mavikent_premium/global_chat').push({ s: 'SİSTEM', t: `🏆 ${tourneyData.name} Turnuvasının Şampiyonu ${winner.split(' ')[0]} oldu ve ${prize} M-Coin kazandı! Tebrikler! 🎉`, ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) });
-          db.ref('mavikent_premium').update(updates); alert(`🎉 İşlem tamam! Şampiyon ilan edildi, oyun odası saatleri açıldı ve ödül yatırıldı.`);
+          db.ref('mavikent_premium').update(updates); toast(`🎉 İşlem tamam! Şampiyon ilan edildi, oyun odası saatleri açıldı ve ödül yatırıldı.`);
       }
   };
 
@@ -1011,7 +1128,7 @@ const renderStudentGrid = (students, type) => {
         return (
           <div key={name} onClick={() => { 
                 if (isDisabled || isCompletedToday) {
-                    if (isCompletedToday && currentModule === 'okul') alert(`⚠️ ${name} için bugünün Okul Dönüş işlemi zaten yapılmış!\n\nGünde sadece bir kez işlem yapılabilir.`);
+                    if (isCompletedToday && currentModule === 'okul') toast(`⚠️ ${name} için bugünün Okul Dönüş işlemi zaten yapılmış!\n\nGünde sadece bir kez işlem yapılabilir.`);
                     return;
                 }
                 setSelectedStudent(name); 
@@ -1110,7 +1227,7 @@ const renderStudentGrid = (students, type) => {
             {dashboardView === 'egitim_yazili' && (
               <>
                 {eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('yazili_view'); setSelectedSession(cls); }} className="premium-card card-hover"><div className="icon">💯</div><div className="label">{cls}</div></div>))}
-                <div style={{ gridColumn: '1 / -1', marginTop: '10px' }}><button onClick={() => { if(window.confirm('Tüm sınıfların YAZILI notları sıfırlanacak. Emin misiniz?')) { const updates = {}; roster.forEach(n => updates[`exams/${n}/yazili`] = null); db.ref('mavikent_premium').update(updates); alert('Yazılı notları sıfırlandı!'); } }} className="premium-btn" style={{ width: '100%', background: '#ef4444', color: 'white', padding: '18px', fontSize: '15px' }}>🔄 HAFTALIK YAZILI PERFORMANSLARINI SIFIRLA</button></div>
+                <div style={{ gridColumn: '1 / -1', marginTop: '10px' }}><button onClick={() => { if(window.confirm('Tüm sınıfların YAZILI notları sıfırlanacak. Emin misiniz?')) { const updates = {}; roster.forEach(n => updates[`exams/${n}/yazili`] = null); db.ref('mavikent_premium').update(updates); toast('Yazılı notları sıfırlandı!'); } }} className="premium-btn" style={{ width: '100%', background: '#ef4444', color: 'white', padding: '18px', fontSize: '15px' }}>🔄 HAFTALIK YAZILI PERFORMANSLARINI SIFIRLA</button></div>
               </>
             )}
 
@@ -1130,14 +1247,13 @@ const renderStudentGrid = (students, type) => {
             {dashboardView === 'yonetim' && [ 
               { id: 'admin_students', icon: '👥', label: 'ÖĞRENCİ / BİLET' }, 
               { id: 'admin_discipline', icon: '📜', label: 'DİSİPLİN KURULU' },
-              { id: 'admin_quests', icon: '🎯', label: 'GÖREVLER' }, 
               { id: 'admin_market', icon: '🛒', label: 'MARKET' }, 
               { id: 'admin_teslimat', icon: '📦', label: 'TESLİMAT' }, 
               { id: 'admin_lig', icon: '🏆', label: 'ELİT LİG' }, 
               { id: 'admin_clans', icon: '🚩', label: 'KLANLAR' }, 
               { id: 'admin_codes', icon: '🎟️', label: 'KODLAR' },
               { id: 'admin_chat', icon: '💬', label: 'SOHBET YÖNETİMİ' }, 
-              { id: 'admin_settings', icon: '⚙️', label: 'AYARLAR' } 
+              { id: 'admin_settings', icon: '🏢', label: 'KURUMSAL KİMLİK' } 
             ].map(mod => (
               <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
             ))}
@@ -1153,7 +1269,7 @@ const renderStudentGrid = (students, type) => {
                     <div style={{ display: 'flex', gap: '10px' }}>
                         <select value={appData?.settings?.game_room_controller || ''} onChange={e => {
                             db.ref('mavikent_premium/settings/game_room_controller').set(e.target.value);
-                            alert(`Oyun Odası Sorumlusu başarıyla atandı! (${e.target.value})`);
+                            toast(`Oyun Odası Sorumlusu başarıyla atandı! (${e.target.value})`);
                         }} className="elite-input" style={{ flex: 1 }}>
                             <option value="">Sorumlu Seçin</option>
                             {roster.map(n => <option key={n} value={n}>{n}</option>)}
@@ -1189,8 +1305,8 @@ const renderStudentGrid = (students, type) => {
                                     type: 'admin', 
                                     date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) 
                                 });
-                                alert('Sistem sıfırlandı! Oynanmamış tüm turnuva maçları (sıradaki haftalar) otomatik olarak oyun odasını kapattı.');
-                            }).catch(err => alert("Hata oluştu: " + err.message));
+                                toast('Sistem sıfırlandı! Oynanmamış tüm turnuva maçları (sıradaki haftalar) otomatik olarak oyun odasını kapattı.');
+                            }).catch(err => toast("Hata oluştu: " + err.message));
                         }
                     }} className="premium-btn" style={{ width: '100%', background: '#f59e0b', color: 'white', padding: '16px', marginTop: '15px' }}>
                         🎮 TÜM RANDEVULARI ŞİMDİ SIFIRLA
@@ -1272,7 +1388,7 @@ const renderStudentGrid = (students, type) => {
                                                         type: 'system', 
                                                         date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) 
                                                     });
-                                                    alert("✅ Randevu başarıyla iptal edildi ve iade sağlandı.");
+                                                    toast("✅ Randevu başarıyla iptal edildi ve iade sağlandı.");
                                                 });
                                             }
                                         }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '8px 16px', fontSize: '12px' }}>
@@ -1634,7 +1750,7 @@ const renderStudentGrid = (students, type) => {
                     <option value="">Ders Seçin</option>{valuesSubjectsList.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <input value={valuesTopic.topic} onChange={e => setValuesTopic({...valuesTopic, topic: e.target.value})} placeholder="İşlenen konu vb." className="elite-input" style={{ marginBottom: '16px' }} />
-                <button onClick={() => { db.ref(`mavikent_premium/values_log/${selectedSession}/${new Date().toDateString()}`).set(valuesTopic); alert("Konu Kaydedildi"); }} className="premium-btn" style={{ width: '100%', padding: '16px', background: '#0f172a', color: 'white', fontSize: '15px' }}>DERSİ YAYINLA</button>
+                <button onClick={() => { db.ref(`mavikent_premium/values_log/${selectedSession}/${new Date().toDateString()}`).set(valuesTopic); toast("Konu Kaydedildi"); }} className="premium-btn" style={{ width: '100%', padding: '16px', background: '#0f172a', color: 'white', fontSize: '15px' }}>DERSİ YAYINLA</button>
             </div>
             {renderStudentGrid(roster.filter(n => appData?.student_levels?.[n] === selectedSession), 'degerler')}
             
@@ -1659,11 +1775,11 @@ const renderStudentGrid = (students, type) => {
                     <input type="number" value={newGiftCode.val} onChange={e => setNewGiftCode({...newGiftCode, val: e.target.value})} placeholder="Miktar / Yüzde" className="elite-input" />
                     <input type="number" value={newGiftCode.uses} onChange={e => setNewGiftCode({...newGiftCode, uses: e.target.value})} placeholder="Kaç Kez Kullanılabilir?" className="elite-input" />
                     <button onClick={() => {
-                        if (!newGiftCode.code || !newGiftCode.val) return alert("Tüm alanları doldurun!");
+                        if (!newGiftCode.code || !newGiftCode.val) return toast("Tüm alanları doldurun!");
                         db.ref(`mavikent_premium/gift_codes/${newGiftCode.code.toUpperCase().trim()}`).set({
                             type: newGiftCode.type, val: parseInt(newGiftCode.val), uses: parseInt(newGiftCode.uses), usedBy: {}
                         });
-                        alert("Kod başarıyla oluşturuldu!"); setNewGiftCode({ code: '', type: 'mcoin', val: '', uses: '1' });
+                        toast("Kod başarıyla oluşturuldu!"); setNewGiftCode({ code: '', type: 'mcoin', val: '', uses: '1' });
                     }} className="premium-btn" style={{ background: '#0f172a', color: 'white', gridColumn: '1 / -1', padding: '16px' }}>KODU YAYINLA</button>
                  </div>
              </div>
@@ -1699,240 +1815,446 @@ const renderStudentGrid = (students, type) => {
         )}
 
         {/* DİSİPLİN VE ÖDÜL YÖNETİMİ */}
-        {currentModule === 'admin_discipline' && (
-           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              <div style={{ background: 'linear-gradient(135deg, #047857 0%, #064e3b 100%)', padding: '30px', borderRadius: '24px', color: 'white', boxShadow: '0 10px 20px rgba(4,120,87,0.3)' }}>
-                  <h3 style={{ margin: '0 0 5px 0', fontSize: '24px', fontWeight: 900 }}>🎁 Yeni Ödül Kartı Üret</h3>
-                  <p style={{ margin: '0 0 20px 0', fontSize: '14px', fontWeight: 600, opacity: 0.9 }}>Öğrencilere atanacak dijital ödülleri ve avantajları belirleyin.</p>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-                      <input type="text" placeholder="Ödül Adı (Örn: Haftanın Yıldızı)" value={newRewardCard.name} onChange={e => setNewRewardCard({...newRewardCard, name: e.target.value})} className="elite-input" style={{ gridColumn: '1 / -1' }} />
-                      <select value={newRewardCard.type} onChange={e => setNewRewardCard({...newRewardCard, type: e.target.value, amount1: '', amount2: ''})} className="elite-input" style={{ gridColumn: '1 / -1', fontWeight: 900, color: '#0f172a' }}>
-                          <option value="mcoin">💰 Doğrudan M-Coin & RP Yükle</option>
-                          <option value="joker">🎫 Altın Bilet (Oyun Odası Jokeri)</option>
-                          <option value="box">📦 Kutu Açma Bileti (Standart/Mega/Elit)</option>
-                          <option value="discount">📉 Oyun Odası İndirim Kuponu</option>
-                          <option value="bounty">🤝 Kralın İkramı (Arkadaşlarına Para Gönder)</option>
-                      </select>
-                      
-                      {newRewardCard.type === 'mcoin' && (
-                          <>
-                              <input type="number" placeholder="M-Coin Miktarı" value={newRewardCard.amount1} onChange={e => setNewRewardCard({...newRewardCard, amount1: e.target.value})} className="elite-input" />
-                              <input type="number" placeholder="RP Miktarı" value={newRewardCard.amount2} onChange={e => setNewRewardCard({...newRewardCard, amount2: e.target.value})} className="elite-input" />
-                          </>
-                      )}
-                      {newRewardCard.type === 'joker' && (
-                          <input type="number" placeholder="Kaç Adet Bilet Verilecek?" value={newRewardCard.amount1} onChange={e => setNewRewardCard({...newRewardCard, amount1: e.target.value})} className="elite-input" />
-                      )}
-                      {newRewardCard.type === 'box' && (
-                          <>
-                              <input type="number" placeholder="Açılış Hakkı Adedi" value={newRewardCard.amount1} onChange={e => setNewRewardCard({...newRewardCard, amount1: e.target.value})} className="elite-input" />
-                              <select value={newRewardCard.amount2} onChange={e => setNewRewardCard({...newRewardCard, amount2: e.target.value})} className="elite-input">
-                                  <option value="">Kutu Tipi Seçin</option><option value="1">Standart Kutu</option><option value="2">Mega Kutu</option><option value="3">Elit Kutu</option>
-                              </select>
-                          </>
-                      )}
-                      {newRewardCard.type === 'discount' && (
-                          <input type="number" placeholder="İndirim Yüzdesi (Örn: 50)" value={newRewardCard.amount1} onChange={e => setNewRewardCard({...newRewardCard, amount1: e.target.value})} className="elite-input" />
-                      )}
-                      {newRewardCard.type === 'bounty' && (
-                          <>
-                              <input type="number" placeholder="Kaç Kişiye?" value={newRewardCard.amount1} onChange={e => setNewRewardCard({...newRewardCard, amount1: e.target.value})} className="elite-input" />
-                              <input type="number" placeholder="Kişi Başı M-Coin?" value={newRewardCard.amount2} onChange={e => setNewRewardCard({...newRewardCard, amount2: e.target.value})} className="elite-input" />
-                          </>
-                      )}
+        {currentModule === 'admin_discipline' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+            {/* ÖDÜL KARTLARI */}
+            <div style={{ background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.04)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h4 style={{ margin: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px' }}>🎁 Ödül Kartları</h4>
+                <button onClick={() => { setNewRewardCard({ name: '', type: 'mcoin', amount1: '', amount2: '' }); setRewardCardModal(true); }} className="premium-btn" style={{ background: '#0f172a', color: 'white', padding: '10px 20px', fontWeight: 900 }}>+ Yeni Ekle</button>
+              </div>
+              {Object.keys(appData?.reward_cards || {}).length === 0 ? (
+                <div style={{ color: '#94a3b8', fontWeight: 700, fontSize: '14px', textAlign: 'center', padding: '30px 0' }}>Henüz ödül kartı oluşturulmadı.</div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '14px' }}>
+                  {Object.entries(appData.reward_cards).map(([id, card]) => (
+                    <div key={id} style={{ background: '#ecfdf5', borderRadius: '20px', padding: '18px', border: '1.5px solid #6ee7b7' }}>
+                      <div style={{ fontSize: '22px', marginBottom: '8px' }}>🎁</div>
+                      <div style={{ fontWeight: 900, color: '#065f46', fontSize: '14px', marginBottom: '6px', lineHeight: 1.3 }}>{card.name}</div>
+                      <div style={{ fontSize: '11px', color: '#047857', fontWeight: 800, background: '#d1fae5', padding: '3px 10px', borderRadius: '8px', display: 'inline-block', marginBottom: '12px' }}>{card.type.toUpperCase()}</div>
+                      <button onClick={() => { if(window.confirm('Ödülü silmek istediğine emin misin?')) db.ref(`mavikent_premium/reward_cards/${id}`).remove(); }} style={{ width: '100%', background: 'white', color: '#ef4444', border: '1px solid #fca5a5', padding: '8px', borderRadius: '12px', cursor: 'pointer', fontWeight: 800, fontSize: '13px' }}>🗑️ Sil</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* CEZA KARTLARI */}
+            <div style={{ background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.04)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h4 style={{ margin: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px' }}>📜 Ceza Kartları</h4>
+                <button onClick={() => { setNewPenaltyCard({ name: '', mcoin: 0, banDays: 0, rp: 0 }); setPenaltyCardModal(true); }} className="premium-btn" style={{ background: '#0f172a', color: 'white', padding: '10px 20px', fontWeight: 900 }}>+ Yeni Ekle</button>
+              </div>
+              {Object.keys(appData?.penalty_cards || {}).length === 0 ? (
+                <div style={{ color: '#94a3b8', fontWeight: 700, fontSize: '14px', textAlign: 'center', padding: '30px 0' }}>Henüz ceza kartı oluşturulmadı.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {Object.entries(appData.penalty_cards).map(([k, card]) => (
+                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fef2f2', padding: '16px 20px', borderRadius: '16px', border: '1.5px solid #fca5a5' }}>
+                      <div>
+                        <div style={{ fontWeight: 900, color: '#7f1d1d', fontSize: '15px' }}>{card.name}</div>
+                        <div style={{ fontSize: '13px', color: '#ef4444', fontWeight: 700, marginTop: '4px', display: 'flex', gap: '10px' }}>
+                          {card.mcoin > 0 && <span>-{card.mcoin} M-Coin</span>}
+                          {card.banDays > 0 && <span>{card.banDays} Gün Ban</span>}
+                          {card.rp > 0 && <span>-{card.rp} RP</span>}
+                        </div>
+                      </div>
+                      <button onClick={() => { if(window.confirm('Bu ceza kartı tamamen silinsin mi?')) db.ref(`mavikent_premium/penalty_cards/${k}`).remove(); }} className="premium-btn" style={{ background: 'white', color: '#ef4444', padding: '10px 15px', border: '1px solid #fca5a5' }}>🗑️</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ÖDÜL KARTI OLUŞTURMA MODALİ */}
+            {rewardCardModal && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }} onClick={() => setRewardCardModal(false)}>
+                <div style={{ background: 'white', borderRadius: '28px', padding: '32px', width: '100%', maxWidth: '480px', boxShadow: '0 25px 50px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+                  <h3 style={{ margin: '0 0 6px 0', fontWeight: 900, color: '#0f172a', fontSize: '20px' }}>🎁 Yeni Ödül Kartı</h3>
+                  <p style={{ margin: '0 0 24px 0', color: '#64748b', fontSize: '13px', fontWeight: 600 }}>Öğrencilere atanacak dijital ödülleri tanımlayın.</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <input type="text" placeholder="Ödül Adı (Örn: Haftanın Yıldızı)" value={newRewardCard.name} onChange={e => setNewRewardCard({...newRewardCard, name: e.target.value})} className="elite-input" />
+                    <select value={newRewardCard.type} onChange={e => setNewRewardCard({...newRewardCard, type: e.target.value, amount1: '', amount2: ''})} className="elite-input" style={{ fontWeight: 900, color: '#0f172a' }}>
+                      <option value="mcoin">💰 Doğrudan M-Coin & RP Yükle</option>
+                      <option value="joker">🎫 Altın Bilet (Oyun Odası Jokeri)</option>
+                      <option value="box">📦 Kutu Açma Bileti (Standart/Mega/Elit)</option>
+                      <option value="discount">📉 Oyun Odası İndirim Kuponu</option>
+                      <option value="bounty">🤝 Kralın İkramı (Arkadaşlarına Para Gönder)</option>
+                    </select>
+                    {newRewardCard.type === 'mcoin' && (<><input type="number" placeholder="M-Coin Miktarı" value={newRewardCard.amount1} onChange={e => setNewRewardCard({...newRewardCard, amount1: e.target.value})} className="elite-input" /><input type="number" placeholder="RP Miktarı" value={newRewardCard.amount2} onChange={e => setNewRewardCard({...newRewardCard, amount2: e.target.value})} className="elite-input" /></>)}
+                    {newRewardCard.type === 'joker' && (<input type="number" placeholder="Kaç Adet Bilet Verilecek?" value={newRewardCard.amount1} onChange={e => setNewRewardCard({...newRewardCard, amount1: e.target.value})} className="elite-input" />)}
+                    {newRewardCard.type === 'box' && (<><input type="number" placeholder="Açılış Hakkı Adedi" value={newRewardCard.amount1} onChange={e => setNewRewardCard({...newRewardCard, amount1: e.target.value})} className="elite-input" /><select value={newRewardCard.amount2} onChange={e => setNewRewardCard({...newRewardCard, amount2: e.target.value})} className="elite-input"><option value="">Kutu Tipi Seçin</option><option value="1">Standart Kutu</option><option value="2">Mega Kutu</option><option value="3">Elit Kutu</option></select></>)}
+                    {newRewardCard.type === 'discount' && (<input type="number" placeholder="İndirim Yüzdesi (Örn: 50)" value={newRewardCard.amount1} onChange={e => setNewRewardCard({...newRewardCard, amount1: e.target.value})} className="elite-input" />)}
+                    {newRewardCard.type === 'bounty' && (<><input type="number" placeholder="Kaç Kişiye?" value={newRewardCard.amount1} onChange={e => setNewRewardCard({...newRewardCard, amount1: e.target.value})} className="elite-input" /><input type="number" placeholder="Kişi Başı M-Coin?" value={newRewardCard.amount2} onChange={e => setNewRewardCard({...newRewardCard, amount2: e.target.value})} className="elite-input" /></>)}
                   </div>
-                  <button onClick={handleCreateRewardCard} className="premium-btn badge-glow" style={{ background: '#34d399', color: '#064e3b', gridColumn: '1 / -1', padding: '16px' }}>ÖDÜL KARTINI SİSTEME EKLE</button>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                    <button onClick={() => setRewardCardModal(false)} className="premium-btn" style={{ flex: 1, background: '#f1f5f9', color: '#64748b', padding: '16px' }}>İptal</button>
+                    <button onClick={() => { handleCreateRewardCard(); setRewardCardModal(false); }} className="premium-btn" style={{ flex: 2, background: '#0f172a', color: 'white', padding: '16px' }}>ÖDÜL KARTINI SİSTEME EKLE</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* CEZA KARTI OLUŞTURMA MODALİ */}
+            {penaltyCardModal && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }} onClick={() => setPenaltyCardModal(false)}>
+                <div style={{ background: 'white', borderRadius: '28px', padding: '32px', width: '100%', maxWidth: '480px', boxShadow: '0 25px 50px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+                  <h3 style={{ margin: '0 0 6px 0', fontWeight: 900, color: '#0f172a', fontSize: '20px' }}>📜 Yeni Ceza Kartı</h3>
+                  <p style={{ margin: '0 0 24px 0', color: '#64748b', fontSize: '13px', fontWeight: 600 }}>Standart ihlal ve ceza kurallarını tanımlayın.</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <input type="text" value={newPenaltyCard.name} onChange={e => setNewPenaltyCard({...newPenaltyCard, name: e.target.value})} placeholder="Ceza Adı (Örn: İzinsiz Dışarı Çıkma)" className="elite-input" />
+                    <input type="number" value={newPenaltyCard.mcoin} onChange={e => setNewPenaltyCard({...newPenaltyCard, mcoin: e.target.value})} placeholder="M-Coin Kesintisi (Örn: 100)" className="elite-input" />
+                    <input type="number" value={newPenaltyCard.banDays} onChange={e => setNewPenaltyCard({...newPenaltyCard, banDays: e.target.value})} placeholder="Oyun Odası Ban (Gün)" className="elite-input" />
+                    <input type="number" value={newPenaltyCard.rp} onChange={e => setNewPenaltyCard({...newPenaltyCard, rp: e.target.value})} placeholder="RP Kesintisi (Örn: 5)" className="elite-input" />
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                    <button onClick={() => setPenaltyCardModal(false)} className="premium-btn" style={{ flex: 1, background: '#f1f5f9', color: '#64748b', padding: '16px' }}>İptal</button>
+                    <button onClick={() => { handleCreatePenaltyCard(); setPenaltyCardModal(false); }} className="premium-btn" style={{ flex: 2, background: '#0f172a', color: 'white', padding: '16px' }}>CEZA KARTINI SİSTEME EKLE</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
+
+          {/* ÖĞRENCİ YÖNETİMİ */}
+        {currentModule === 'admin_students' && (
+          <div>
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+              <input value={newStudentName} onChange={e => setNewStudentName(e.target.value)} onKeyDown={e => { if(e.key==='Enter' && newStudentName) { db.ref('mavikent_premium/roster').set([...roster, newStudentName.trim()]); setNewStudentName(''); }}} placeholder="Yeni Öğrenci Adı Soyadı" className="elite-input" style={{ flex: 1 }} />
+              <button onClick={() => { if(newStudentName) { db.ref('mavikent_premium/roster').set([...roster, newStudentName.trim()]); setNewStudentName(''); }}} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '0 24px' }}>EKLE</button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '14px' }}>
+              {roster.map(name => {
+                const coins = appData?.wallet?.[name] || 0;
+                const sinif = appData?.student_classes?.[name] || '';
+                const elite = isElite(name);
+                return (
+                  <div key={name} onClick={() => {
+                    const creds = appData?.student_credentials?.[name] || {};
+                    setStudentEdit({ username: creds.username || '', password: creds.password || '', recoveryPin: creds.recoveryPin || '', sinif, mcoin: String(coins) });
+                    setStudentModal(name);
+                  }} className="card-hover" style={{ background: 'white', borderRadius: '20px', padding: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.04)', border: elite ? '2px solid #d4af37' : '1.5px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.3s' }}>
+                    <div style={{ fontSize: '22px', marginBottom: '8px' }}>{elite ? '👑' : '🎓'}</div>
+                    <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '14px', marginBottom: '6px', lineHeight: 1.3 }}>{name}</div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#3b82f6' }}>🪙 {coins} M-Coin</div>
+                    {sinif && <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, marginTop: '4px' }}>{sinif}</div>}
+                  </div>
+                );
+              })}
+            </div>
+
+            {studentModal && (() => {
+              const name = studentModal;
+              return (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }} onClick={() => setStudentModal(null)}>
+                  <div style={{ background: 'white', borderRadius: '28px', padding: '32px', width: '100%', maxWidth: '460px', boxShadow: '0 25px 50px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '24px' }}>
+                      <div style={{ width: '52px', height: '52px', background: isElite(name) ? '#fffbeb' : '#eff6ff', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px' }}>{isElite(name) ? '👑' : '🎓'}</div>
+                      <div>
+                        <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '20px' }}>{name}</div>
+                        <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>🪙 {appData?.wallet?.[name] || 0} M-Coin</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', marginBottom: '6px' }}>KULLANICI ADI</div>
+                        <input type="text" value={studentEdit.username} onChange={e => setStudentEdit({...studentEdit, username: e.target.value})} className="elite-input" placeholder="Kullanıcı adı" style={{ padding: '12px' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', marginBottom: '6px' }}>ŞİFRE</div>
+                        <input type="text" value={studentEdit.password} onChange={e => setStudentEdit({...studentEdit, password: e.target.value})} className="elite-input" placeholder="Şifre" style={{ padding: '12px' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', marginBottom: '6px' }}>SINIF</div>
+                        <select value={studentEdit.sinif} onChange={e => setStudentEdit({...studentEdit, sinif: e.target.value})} className="elite-input" style={{ padding: '12px' }}>
+                          <option value="">Seç</option>{classList.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', marginBottom: '6px' }}>KURTARMA PIN</div>
+                        <input type="text" maxLength="4" value={studentEdit.recoveryPin} onChange={e => setStudentEdit({...studentEdit, recoveryPin: e.target.value})} className="elite-input" placeholder="4 haneli PIN" style={{ padding: '12px', letterSpacing: '4px', textAlign: 'center' }} />
+                      </div>
+                    </div>
+                    <div style={{ marginBottom: '20px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', marginBottom: '6px' }}>M-COİN BAKİYESİ</div>
+                      <input type="text" inputMode="numeric" value={studentEdit.mcoin} onChange={e => { const r = e.target.value; if(r === '' || r === '-' || /^-?\d*$/.test(r)) setStudentEdit({...studentEdit, mcoin: r}); }} className="elite-input" placeholder="Bakiye" style={{ padding: '12px', fontWeight: 900, fontSize: '18px', textAlign: 'center', color: '#3b82f6' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button onClick={() => { if(window.confirm(`${name} silinsin mi?`)) { db.ref('mavikent_premium/roster').set(roster.filter(n => n !== name)); setStudentModal(null); }}} className="premium-btn" style={{ background: '#fef2f2', color: '#ef4444', padding: '14px 16px' }}>🗑️</button>
+                      <button onClick={() => setStudentModal(null)} className="premium-btn" style={{ flex: 1, background: '#f1f5f9', color: '#64748b', padding: '14px' }}>İptal</button>
+                      <button onClick={() => {
+                        const updates = {};
+                        updates[`student_credentials/${name}/username`] = studentEdit.username;
+                        updates[`student_credentials/${name}/password`] = studentEdit.password;
+                        if(studentEdit.recoveryPin) updates[`student_credentials/${name}/recoveryPin`] = studentEdit.recoveryPin;
+                        if(studentEdit.sinif) updates[`student_classes/${name}`] = studentEdit.sinif;
+                        const newCoins = parseInt(studentEdit.mcoin) || 0;
+                        const oldCoins = appData?.wallet?.[name] || 0;
+                        updates[`wallet/${name}`] = newCoins;
+                        if(newCoins !== oldCoins) updates[`transactions/${name}/txn_admin_${Date.now()}`] = { desc: 'Yönetici Bakiye Düzenlemesi', amt: newCoins - oldCoins, date: new Date().toLocaleString('tr-TR') };
+                        db.ref('mavikent_premium').update(updates);
+                        toast('✅ Öğrenci bilgileri güncellendi!');
+                        setStudentModal(null);
+                      }} className="premium-btn" style={{ flex: 2, background: '#0f172a', color: 'white', padding: '14px', fontWeight: 900 }}>💾 KAYDET</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* MARKET YÖNETİMİ */}
+        {currentModule === 'admin_market' && (() => {
+          const products = appData?.market_products || {};
+          const productKeys = Object.keys(products);
+          const totalProducts = productKeys.length;
+          const outOfStock = productKeys.filter(k => products[k].stock === 0).length;
+          const inStock = totalProducts - outOfStock;
+
+          const typeConfig = {
+            normal:     { label: 'Normal',      color: '#64748b', bg: '#f1f5f9' },
+            ticket:     { label: 'Çekiliş',     color: '#7c3aed', bg: '#f5f3ff' },
+            bundle:     { label: 'Paket',       color: '#0369a1', bg: '#e0f2fe' },
+            gift:       { label: 'Hediye',      color: '#be185d', bg: '#fce7f3' },
+            avatar:     { label: 'Avatar',      color: '#0f766e', bg: '#ccfbf1' },
+            multiplier: { label: '2X Kart',     color: '#b45309', bg: '#fef3c7' },
+            streak:     { label: 'Kalkan',      color: '#15803d', bg: '#dcfce7' },
+            title:      { label: 'Ünvan',       color: '#9333ea', bg: '#f3e8ff' },
+            frame:      { label: 'Çerçeve',     color: '#c2410c', bg: '#fff7ed' },
+          };
+
+          return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+
+            {/* ÖZET STATS BARI */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+              {[
+                { label: 'Toplam Ürün', value: totalProducts, icon: '📦', color: '#3b82f6', bg: '#eff6ff' },
+                { label: 'Stokta Var',  value: inStock,       icon: '✅', color: '#10b981', bg: '#ecfdf5' },
+                { label: 'Tükendi',     value: outOfStock,    icon: '🚫', color: '#ef4444', bg: '#fef2f2' },
+              ].map(stat => (
+                <div key={stat.label} style={{ background: stat.bg, borderRadius: '20px', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: '16px', border: `1px solid ${stat.color}20` }}>
+                  <div style={{ fontSize: '28px' }}>{stat.icon}</div>
+                  <div>
+                    <div style={{ fontSize: '28px', fontWeight: 900, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', marginTop: '4px' }}>{stat.label}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* ANA 2 SÜTUN: FORM + ARAÇLAR */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
+
+              {/* SOL: ÜRÜN EKLEME / GÜNCELLEME FORMU */}
+              <div style={{ background: 'white', padding: '32px', borderRadius: '28px', boxShadow: '0 8px 32px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                  <div style={{ width: '44px', height: '44px', borderRadius: '14px', background: editProductKey ? '#fff7ed' : '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>
+                    {editProductKey ? '✏️' : '➕'}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>{editProductKey ? 'Ürünü Güncelle' : 'Yeni Ürün Ekle'}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Tüm alanları doldurun</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <input value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="Ürün Adı" className="elite-input" />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <input value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} type="number" placeholder="Fiyat (M-Coin)" className="elite-input" />
+                    <input value={newProduct.icon} onChange={e => setNewProduct({...newProduct, icon: e.target.value})} placeholder="Emoji 📦" className="elite-input" style={{ textAlign: 'center', fontSize: '20px' }} />
+                  </div>
+                  <input value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} type="number" placeholder="Stok Adedi (Boş bırakın = Sınırsız)" className="elite-input" />
+                  <select value={newProduct.type} onChange={e => setNewProduct({...newProduct, type: e.target.value})} className="elite-input">
+                    <option value="normal">🍔 Normal Ürün</option>
+                    <option value="ticket">🎟️ Çekiliş Bileti</option>
+                    <option value="bundle">🎁 Paket (Bundle)</option>
+                    <option value="gift">🎁 Hediye Ürünü</option>
+                    <option value="avatar">👤 Profil Avatarı</option>
+                    <option value="multiplier">⚡ 2X Puan Kartı</option>
+                    <option value="streak">🛡️ Seri Kalkanı</option>
+                    <option value="title">🎖️ Profil Ünvanı</option>
+                    <option value="frame">🖼️ Avatar Çerçevesi</option>
+                  </select>
+                </div>
+
+                {newProduct.type === 'bundle' && (
+                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '16px', border: '1px dashed #cbd5e1', marginTop: '12px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', marginBottom: '10px' }}>Paket İçeriğini Seçin:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {productKeys.filter(k => products[k].type !== 'bundle').map(k => {
+                        const p = products[k]; const isSelected = bundleSelection.includes(p.n);
+                        return (
+                          <div key={k} onClick={() => setBundleSelection(isSelected ? bundleSelection.filter(n => n !== p.n) : [...bundleSelection, p.n])}
+                            style={{ background: isSelected ? '#10b981' : '#f1f5f9', color: isSelected ? 'white' : '#64748b', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s' }}>
+                            {p.i} {p.n}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+                  <button onClick={handleAddProduct} className="premium-btn" style={{ flex: 1, background: editProductKey ? '#f59e0b' : '#10b981', color: 'white', padding: '16px', fontSize: '15px', fontWeight: 900 }}>
+                    {editProductKey ? '💾 GÜNCELLE' : '➕ ÜRÜN EKLE'}
+                  </button>
+                  {editProductKey && (
+                    <button onClick={() => { setEditProductKey(null); setNewProduct({ name: '', price: '', icon: '📦', type: 'normal', stock: '' }); setBundleSelection([]); }}
+                      className="btn-iptal" style={{ padding: '16px 20px' }}>İPTAL</button>
+                  )}
+                </div>
               </div>
 
-              <div style={{ background: 'linear-gradient(135deg, #7f1d1d 0%, #450a0a 100%)', padding: '30px', borderRadius: '24px', color: 'white', boxShadow: '0 10px 20px rgba(127,29,29,0.3)' }}>
-                 <h3 style={{ margin: '0 0 5px 0', fontSize: '24px', fontWeight: 900 }}>📜 Yeni Ceza Kartı Oluştur</h3>
-                 <p style={{ margin: '0 0 20px 0', fontSize: '14px', fontWeight: 600, opacity: 0.9 }}>Öğrencilere atanacak standart ihlal ve ceza kurallarını belirleyin.</p>
-                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                    <input type="text" value={newPenaltyCard.name} onChange={e => setNewPenaltyCard({...newPenaltyCard, name: e.target.value})} placeholder="Ceza Adı (Örn: İzinsiz Dışarı Çıkma)" className="elite-input" style={{ gridColumn: '1 / -1' }} />
-                    <input type="number" value={newPenaltyCard.mcoin} onChange={e => setNewPenaltyCard({...newPenaltyCard, mcoin: e.target.value})} placeholder="M-Coin Kesintisi (Örn: 100)" className="elite-input" />
-                    <input type="number" value={newPenaltyCard.banDays} onChange={e => setNewPenaltyCard({...newPenaltyCard, banDays: e.target.value})} placeholder="Oyun Odası Ban (Gün)" className="elite-input" />
-                    <input type="number" value={newPenaltyCard.rp} onChange={e => setNewPenaltyCard({...newPenaltyCard, rp: e.target.value})} placeholder="RP Kesintisi (Örn: 5)" className="elite-input" />
-                    <button onClick={handleCreatePenaltyCard} className="premium-btn badge-glow" style={{ background: '#fca5a5', color: '#450a0a', gridColumn: '1 / -1', padding: '16px', marginTop: '10px' }}>CEZA KARTINI SİSTEME EKLE</button>
-                 </div>
-              </div>
+              {/* SAĞ: İHALE + İMECE */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-              <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                 <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '15px' }}>📋 Mevcut Ödül ve Ceza Yönetmeliği</h4>
-                 <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '10px' }} className="clean-scroll">
-                     {Object.entries(appData?.reward_cards || {}).map(([id, card]) => (
-                         <div key={id} style={{ background: '#ecfdf5', padding: '12px 20px', borderRadius: '16px', border: '1px solid #6ee7b7', minWidth: '220px' }}>
-                             <div style={{ fontWeight: 900, color: '#065f46', fontSize: '15px' }}>{card.name}</div>
-                             <div style={{ fontSize: '11px', color: '#047857', fontWeight: 700, margin: '5px 0' }}>{card.type.toUpperCase()}</div>
-                             <button onClick={() => { if(window.confirm('Ödülü silmek istediğine emin misin?')) db.ref(`mavikent_premium/reward_cards/${id}`).remove(); }} style={{ background: 'white', color: '#ef4444', border: '1px solid #fca5a5', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 800, width: '100%' }}>Sil</button>
-                         </div>
-                     ))}
-                 </div>
-                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {Object.keys(appData?.penalty_cards || {}).map(k => {
-                        const card = appData.penalty_cards[k];
-                        return (
-                            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '16px 20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-                                <div>
-                                   <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>{card.name}</div>
-                                   <div style={{ fontSize: '13px', color: '#ef4444', fontWeight: 700, marginTop: '4px', display: 'flex', gap: '10px' }}>
-                                       {card.mcoin > 0 && <span>-{card.mcoin} M-Coin</span>}
-                                       {card.banDays > 0 && <span>{card.banDays} Gün Ban</span>}
-                                       {card.rp > 0 && <span>-{card.rp} RP</span>}
-                                   </div>
-                                </div>
-                                <button onClick={() => { if(window.confirm("Bu ceza kartı tamamen silinsin mi?")) db.ref(`mavikent_premium/penalty_cards/${k}`).remove(); }} className="premium-btn" style={{ background: '#fef2f2', color: '#ef4444', padding: '10px 15px' }}>🗑️ SİL</button>
-                            </div>
-                        )
-                    })}
-                 </div>
-              </div>
-           </div>
-        )}
-
-        {/* ÖĞRENCİ YÖNETİMİ VE BİLET */}
-        {currentModule === 'admin_students' && (
-          <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-              <input value={newStudentName} onChange={e => setNewStudentName(e.target.value)} placeholder="Yeni Öğrenci Adı Soyadı" className="elite-input" style={{ flex: 1 }} />
-              <button onClick={() => { if(newStudentName) db.ref('mavikent_premium/roster').set([...roster, newStudentName.trim()]); setNewStudentName(''); }} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '0 24px' }}>EKLE</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {roster.map(name => {
-                const creds = appData?.student_credentials?.[name] || { username: '', password: '' };
-                return (
-                <div key={name} style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', padding: '20px', background: '#f8fafc', borderRadius: '24px' }}>
-                  <div style={{ fontWeight: 900, fontSize: '15px', width: '100%', marginBottom: '16px', color:'#0f172a' }}>
-                     {isElite(name)?'👑 ':''}{name} 
-                     <span style={{ color: '#3b82f6', marginLeft: '12px' }}>🪙 {appData?.wallet?.[name] || 0} M</span>
-                     <span style={{ color: '#f59e0b', marginLeft: '12px' }}>⭐ {appData?.xp?.[name] || 0} XP</span>
-                     <span style={{ color: '#10b981', marginLeft: '12px' }}>⚔️ {appData?.season_score?.[name] || 0} RP</span>
-                     <span style={{ color: '#8b5cf6', marginLeft: '12px' }}>🎟️ {appData?.tickets?.[name] || 0} BİLET</span>
-                     <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px' }}>🕒 Son Giriş: {appData?.last_logins?.[name] || 'Hiç Girmedi'}</div>
+                {/* İHALE PANELİ */}
+                <div style={{ background: 'linear-gradient(135deg, #fefce8 0%, #fffbeb 100%)', padding: '28px', borderRadius: '28px', border: '1px solid #fde68a', boxShadow: '0 8px 24px rgba(251,191,36,0.1)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                    <div style={{ fontSize: '28px' }}>🔨</div>
+                    <div>
+                      <div style={{ fontSize: '17px', fontWeight: 900, color: '#b45309' }}>Haftalık İhale</div>
+                      <div style={{ fontSize: '12px', color: '#92400e', fontWeight: 600 }}>Açık Artırma Sistemi</div>
+                    </div>
+                    {appData?.auction?.active && (
+                      <div style={{ marginLeft: 'auto', background: '#ef4444', color: 'white', padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 900 }}>CANLI</div>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', width: '100%' }}>
-                    <input type="text" placeholder="Kullanıcı" value={creds.username || ''} onChange={e => db.ref(`mavikent_premium/student_credentials/${name}/username`).set(e.target.value)} className="elite-input" style={{ padding: '12px 16px', fontSize: '13px', width: '110px' }} />
-                    <input type="text" placeholder="Şifre" value={creds.password || ''} onChange={e => db.ref(`mavikent_premium/student_credentials/${name}/password`).set(e.target.value)} className="elite-input" style={{ padding: '12px 16px', fontSize: '13px', width: '90px' }} />
-                    <select onChange={e => db.ref(`mavikent_premium/student_classes/${name}`).set(e.target.value)} value={appData?.student_classes?.[name] || ''} className="elite-input" style={{ padding: '12px 16px', fontSize: '13px', width: '110px' }}>
-                      <option value="">Sınıf Seç</option>{classList.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    
-                    <button onClick={() => { 
-                        const val = prompt(`${name} M:`, appData?.wallet?.[name] || 0); 
-                        if(val !== null) { 
-                            const diff = parseInt(val) - (appData?.wallet?.[name] || 0);
-                            db.ref(`mavikent_premium/wallet/${name}`).set(parseInt(val)); 
-                            if(diff !== 0) db.ref(`mavikent_premium/transactions/${name}`).push({ desc: 'Yönetici Bakiye Düzenlemesi', amt: diff, date: new Date().toLocaleString('tr-TR') });
-                        } 
-                    }} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '10px 16px' }}>M</button>
-                    
-                    <button onClick={() => { const val = prompt(`${name} XP:`, appData?.xp?.[name] || 0); if(val) db.ref(`mavikent_premium/xp/${name}`).set(parseInt(val)); }} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '10px 16px' }}>XP</button>
-                    <button onClick={() => { const val = prompt(`${name} RP:`, appData?.season_score?.[name] || 0); if(val) db.ref(`mavikent_premium/season_score/${name}`).set(parseInt(val)); }} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '10px 16px' }}>RP</button>
-                    <button onClick={() => { const val = prompt(`${name} Bilet:`, appData?.tickets?.[name] || 0); if(val !== null) db.ref(`mavikent_premium/tickets/${name}`).set(parseInt(val)); }} className="premium-btn" style={{ background: '#8b5cf6', color: 'white', padding: '10px 16px' }}>🎟️ BİLET</button>
-                    <button onClick={() => { if(window.confirm('Silinsin mi?')) db.ref('mavikent_premium/roster').set(roster.filter(n => n !== name)); }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '10px 16px' }}>SİL</button>
+                  {appData?.auction?.active ? (
+                    <div>
+                      <div style={{ background: 'white', borderRadius: '16px', padding: '16px', marginBottom: '12px', border: '1px solid #fde68a' }}>
+                        <div style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a' }}>{appData.auction.item}</div>
+                        <div style={{ fontSize: '22px', fontWeight: 900, color: '#b45309', marginTop: '6px' }}>{appData.auction.currentBid} M-Coin</div>
+                        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>En yüksek teklif: {appData.auction.highestBidder || 'Henüz teklif yok'}</div>
+                      </div>
+                      <button onClick={handleEndAuction} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '14px', width: '100%', fontWeight: 900 }}>İHALEYİ BİTİR & TESLİM ET</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <input type="text" id="aucItem" placeholder="İhale Ürünü (Örn: Sınırsız Ev İzni)" className="elite-input" />
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px' }}>
+                        <input type="number" id="aucPrice" placeholder="Başlangıç Fiyatı (M)" className="elite-input" />
+                        <button onClick={handleStartAuction} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '16px 20px', fontWeight: 900 }}>BAŞLAT</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* İMECE PANELİ */}
+                <div style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%)', padding: '28px', borderRadius: '28px', border: '1px solid #bfdbfe', boxShadow: '0 8px 24px rgba(59,130,246,0.08)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                    <div style={{ fontSize: '28px' }}>🤝</div>
+                    <div>
+                      <div style={{ fontSize: '17px', fontWeight: 900, color: '#1e40af' }}>İmece (Ortak Alım)</div>
+                      <div style={{ fontSize: '12px', color: '#1d4ed8', fontWeight: 600 }}>Toplu fon sistemi</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <input type="text" value={newGroupBuy.name} onChange={e => setNewGroupBuy({...newGroupBuy, name: e.target.value})} placeholder="Örn: Tüm Yurda Çiğköfte" className="elite-input" />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <input type="number" value={newGroupBuy.totalCost} onChange={e => setNewGroupBuy({...newGroupBuy, totalCost: e.target.value})} placeholder="Toplam Maliyet (M)" className="elite-input" />
+                      <input type="number" value={newGroupBuy.maxP} onChange={e => setNewGroupBuy({...newGroupBuy, maxP: e.target.value})} placeholder="Kaç Kişi?" className="elite-input" />
+                    </div>
+                    <button onClick={handleCreateGroupBuy} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '14px', fontWeight: 900 }}>İMECE BAŞLAT</button>
                   </div>
                 </div>
-              )})}
+
+              </div>
             </div>
-          </div>
-        )}
 
-        {/* MARKET YÖNETİMİ VE İHALE */}
-        {currentModule === 'admin_market' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-             
-             {/* İHALE (AÇIK ARTIRMA) PANELİ */}
-             <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '20px' }}>🔨 HAFTALIK İHALE (AÇIK ARTIRMA)</h4>
-                {appData?.auction?.active ? (
-                    <div style={{ background: '#fefce8', border: '1px solid #fde047', padding: '20px', borderRadius: '16px' }}>
-                        <div style={{ fontSize: '18px', fontWeight: 900, color: '#b45309' }}>Yayındaki İhale: {appData.auction.item}</div>
-                        <div style={{ fontSize: '14px', color: '#854d0e', marginTop: '5px', fontWeight: 700 }}>En Yüksek Teklif: {appData.auction.currentBid} M ({appData.auction.highestBidder || 'Henüz teklif yok'})</div>
-                        <button onClick={handleEndAuction} className="premium-btn" style={{ background: '#ef4444', color: 'white', marginTop: '15px', padding: '12px 20px', width: '100%' }}>İHALEYİ BİTİR & TESLİM ET</button>
-                    </div>
-                ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
-                        <input type="text" id="aucItem" placeholder="İhale Ürünü (Örn: Sınırsız Ev İzni)" className="elite-input" style={{ gridColumn: '1 / -1' }} />
-                        <input type="number" id="aucPrice" placeholder="Başlangıç (M)" className="elite-input" />
-                        <button onClick={handleStartAuction} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '16px' }}>İHALEYİ BAŞLAT</button>
-                    </div>
-                )}
-             </div>
-
-             {/* İMECE (KİTLE FONLAMA) PANELİ */}
-             <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '20px' }}>🤝 İMECE (ORTAK ALIM) OLUŞTUR</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
-                    <input type="text" value={newGroupBuy.name} onChange={e => setNewGroupBuy({...newGroupBuy, name: e.target.value})} placeholder="Örn: Tüm Yurda Çiğköfte" className="elite-input" style={{ gridColumn: '1 / -1' }} />
-                    <input type="number" value={newGroupBuy.totalCost} onChange={e => setNewGroupBuy({...newGroupBuy, totalCost: e.target.value})} placeholder="Toplam Maliyet (M)" className="elite-input" />
-                    <input type="number" value={newGroupBuy.maxP} onChange={e => setNewGroupBuy({...newGroupBuy, maxP: e.target.value})} placeholder="Kaç Kişi Ortak Olacak?" className="elite-input" />
-                    <button onClick={handleCreateGroupBuy} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '16px' }}>İMECE BAŞLAT</button>
+            {/* ÜRÜN KATALOĞU */}
+            <div style={{ background: 'white', padding: '32px', borderRadius: '28px', boxShadow: '0 8px 32px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+                <div>
+                  <div style={{ fontSize: '20px', fontWeight: 900, color: '#0f172a' }}>Ürün Kataloğu</div>
+                  <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, marginTop: '2px' }}>{totalProducts} ürün listeleniyor</div>
                 </div>
-             </div>
+              </div>
 
-             <div style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-               <h4 style={{ marginTop: 0, color:'#0f172a', fontSize: '18px', fontWeight: 900 }}>{editProductKey ? '✏️ ÜRÜNÜ GÜNCELLE' : '📦 YENİ ÜRÜN EKLE'}</h4>
-               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '24px', background:'#f8fafc', padding:'20px', borderRadius:'24px' }}>
-                 <input value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="Adı" className="elite-input" style={{ width: '100%' }} />
-                 <input value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} type="number" placeholder="Fiyat (M)" className="elite-input" style={{ width: '100%' }} />
-                 <input value={newProduct.icon} onChange={e => setNewProduct({...newProduct, icon: e.target.value})} placeholder="Emoji (📦)" className="elite-input" style={{ width: '100%', textAlign: 'center' }} />
-                 <input value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} type="number" placeholder="Stok Adedi (Boş = Sınırsız)" className="elite-input" style={{ width: '100%' }} />
-                 <select value={newProduct.type} onChange={e => setNewProduct({...newProduct, type: e.target.value})} className="elite-input" style={{ width: '100%' }}>
-                   <option value="normal">🍔 Normal Ürün</option>
-                   <option value="ticket">🎟️ Çekiliş Bileti</option>
-                   <option value="bundle">🎁 Paket (Bundle Fırsatı)</option>
-                   <option value="gift">🎁 Arkadaşa Hediye Ürünü</option>
-                   <option value="avatar">👤 Profil Avatarı</option>
-                   <option value="multiplier">⚡ 2X Puan Kartı</option>
-                   <option value="streak">🛡️ Haftalık Seri Kalkanı</option>
-                   <option value="title">🎖️ Profil Ünvanı</option>
-                   <option value="frame">🖼️ Avatar Çerçevesi</option>
-                 </select>
+              {productKeys.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#94a3b8' }}>
+                  <div style={{ fontSize: '48px', marginBottom: '12px' }}>📭</div>
+                  <div style={{ fontSize: '16px', fontWeight: 700 }}>Henüz ürün eklenmemiş</div>
+                  <div style={{ fontSize: '13px', marginTop: '6px' }}>Soldaki formu kullanarak ilk ürünü ekleyin.</div>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
+                  {productKeys.map(key => {
+                    const p = products[key];
+                    const isOutOfStock = p.stock === 0;
+                    const stockText = p.stock !== undefined ? (p.stock > 0 ? `${p.stock} adet` : 'TÜKENDİ') : 'Sınırsız';
+                    const tConf = typeConfig[p.type] || typeConfig.normal;
+                    return (
+                      <div key={key} style={{
+                        background: isOutOfStock ? '#fef2f2' : '#fafafa',
+                        borderRadius: '20px',
+                        border: `1.5px solid ${isOutOfStock ? '#fca5a5' : '#e2e8f0'}`,
+                        padding: '20px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px',
+                        transition: 'all 0.3s cubic-bezier(0.16,1,0.3,1)',
+                        position: 'relative',
+                        overflow: 'hidden',
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 16px 40px rgba(0,0,0,0.1)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+                      >
+                        {isOutOfStock && (
+                          <div style={{ position: 'absolute', top: '12px', right: '12px', background: '#ef4444', color: 'white', fontSize: '9px', fontWeight: 900, padding: '3px 8px', borderRadius: '20px', letterSpacing: '0.5px' }}>TÜKENDİ</div>
+                        )}
 
-                 {newProduct.type === 'bundle' && (
-                     <div style={{ gridColumn: '1 / -1', background: 'white', padding: '15px', borderRadius: '16px', border: '1px dashed #cbd5e1' }}>
-                         <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', marginBottom: '10px' }}>Paket İçeriğini Seçin (Mevcut Ürünler):</div>
-                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                             {Object.keys(appData?.market_products || {}).filter(k => appData.market_products[k].type !== 'bundle').map(k => {
-                                 const p = appData.market_products[k];
-                                 const isSelected = bundleSelection.includes(p.n);
-                                 return (
-                                     <div key={k} onClick={() => setBundleSelection(isSelected ? bundleSelection.filter(n => n !== p.n) : [...bundleSelection, p.n])} style={{ background: isSelected ? '#10b981' : '#f1f5f9', color: isSelected ? 'white' : '#64748b', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 800, cursor: 'pointer' }}>
-                                         {p.i} {p.n}
-                                     </div>
-                                 )
-                             })}
-                         </div>
-                     </div>
-                 )}
+                        {/* ÜRÜN İKONU */}
+                        <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '30px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', border: '1px solid #f1f5f9' }}>
+                          {p.i}
+                        </div>
 
-                 <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px' }}>
-                    <button onClick={handleAddProduct} className="premium-btn" style={{ flex: 1, background: editProductKey ? '#f59e0b' : '#10b981', color: 'white', padding: '16px' }}>{editProductKey ? 'KAYDET' : 'EKLE'}</button>
-                    {editProductKey && <button onClick={() => { setEditProductKey(null); setNewProduct({ name: '', price: '', icon: '📦', type: 'normal', stock: '' }); setBundleSelection([]); }} className="btn-iptal" style={{ padding: '16px 24px' }}>İPTAL</button>}
-                 </div>
-               </div>
-               <h4 style={{ borderTop: '2px solid #f1f5f9', paddingTop: '20px', margin: '0 0 16px 0', fontSize: '18px', fontWeight: 900 }}>MEVCUT ÜRÜNLER VE STOKLAR</h4>
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                 {Object.keys(appData?.market_products || {}).map(key => {
-                   const p = appData.market_products[key];
-                   const stockText = p.stock !== undefined ? (p.stock > 0 ? `${p.stock} Kaldı` : 'TÜKENDİ') : 'Sınırsız';
-                   return (
-                     <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: p.stock === 0 ? '#fef2f2' : '#f8fafc', borderRadius: '20px', border: `1px solid ${p.stock === 0 ? '#fca5a5' : '#e2e8f0'}` }}>
-                       <div>
-                           <div style={{ fontWeight: 900, fontSize: '15px', color: '#0f172a' }}>{p.i} {p.n} <span style={{ color: '#64748b' }}>({p.p} M)</span></div>
-                           <div style={{ fontSize: '12px', fontWeight: 800, color: p.stock === 0 ? '#ef4444' : '#10b981', marginTop: '4px' }}>Stok: {stockText} | Tür: {p.type === 'bundle' ? 'Paket' : p.type}</div>
-                           {p.type === 'bundle' && <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>İçerik: {(p.bundleItems||[]).join(', ')}</div>}
-                       </div>
-                       <div style={{ display: 'flex', gap: '8px' }}>
-                         <button onClick={() => editProduct(key, p)} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '12px 18px' }}>✏️</button>
-                         <button onClick={() => { if(window.confirm('Silinsin mi?')) db.ref(`mavikent_premium/market_products/${key}`).remove() }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '12px 18px' }}>🗑️</button>
-                       </div>
-                     </div>
-                   );
-                 })}
-               </div>
+                        {/* ÜRÜN BİLGİSİ */}
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a', lineHeight: 1.3 }}>{p.n}</div>
+                          {p.type === 'bundle' && p.bundleItems?.length > 0 && (
+                            <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600, marginTop: '4px' }}>{p.bundleItems.join(', ')}</div>
+                          )}
+                        </div>
+
+                        {/* ETIKETLER */}
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          <div style={{ background: tConf.bg, color: tConf.color, padding: '3px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 800 }}>{tConf.label}</div>
+                          <div style={{ background: isOutOfStock ? '#fef2f2' : '#ecfdf5', color: isOutOfStock ? '#ef4444' : '#10b981', padding: '3px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 800 }}>{stockText}</div>
+                        </div>
+
+                        {/* FİYAT + AKSIYONLAR */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 900, color: '#3b82f6' }}>{p.p} <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>M</span></div>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button onClick={() => editProduct(key, p)} style={{ background: '#eff6ff', color: '#3b82f6', border: 'none', borderRadius: '10px', padding: '8px 12px', cursor: 'pointer', fontSize: '14px', fontWeight: 800, transition: 'all 0.2s' }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#3b82f6'} onMouseLeave={e => e.currentTarget.style.background = '#eff6ff'}
+                              onMouseOver={e => { e.currentTarget.style.background='#3b82f6'; e.currentTarget.style.color='white'; }} onMouseOut={e => { e.currentTarget.style.background='#eff6ff'; e.currentTarget.style.color='#3b82f6'; }}>
+                              ✏️
+                            </button>
+                            <button onClick={() => { if(window.confirm(`"${p.n}" silinsin mi?`)) db.ref(`mavikent_premium/market_products/${key}`).remove(); }}
+                              style={{ background: '#fef2f2', color: '#ef4444', border: 'none', borderRadius: '10px', padding: '8px 12px', cursor: 'pointer', fontSize: '14px', fontWeight: 800, transition: 'all 0.2s' }}
+                              onMouseOver={e => { e.currentTarget.style.background='#ef4444'; e.currentTarget.style.color='white'; }} onMouseOut={e => { e.currentTarget.style.background='#fef2f2'; e.currentTarget.style.color='#ef4444'; }}>
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+
           </div>
-        )}
+          );
+        })()}
 
         {/* TESLİMAT YÖNETİMİ (3'LÜ BİRİKTİRME DESTEKLİ) */}
         {currentModule === 'admin_teslimat' && (() => {
@@ -2057,32 +2379,6 @@ const renderStudentGrid = (students, type) => {
             );
         })()}
 
-        {/* GÖREV YÖNETİMİ */}
-        {currentModule === 'admin_quests' && (
-           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {[1, 2, 3].map(num => {
-                 const qId = `q${num}`; const parts = appData?.quests?.[qId]?.participants || [];
-                 return (
-                   <div key={qId} style={{ background: 'white', padding: '24px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                     <div style={{ fontWeight: 900, color: '#0f172a', marginBottom: '16px', fontSize: '18px' }}>GÖREV {num}</div>
-                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-                       <input value={questInputs[`${qId}_text`]} onChange={e => setQuestInputs({...questInputs, [`${qId}_text`]: e.target.value})} placeholder="Örn: 50 Soru Çöz" className="elite-input" style={{ gridColumn: '1 / -1' }} />
-                       <input value={questInputs[`${qId}_amt`]} onChange={e => setQuestInputs({...questInputs, [`${qId}_amt`]: e.target.value})} type="number" placeholder="Ödül" className="elite-input" />
-                       <select value={questInputs[`${qId}_type`]} onChange={e => setQuestInputs({...questInputs, [`${qId}_type`]: e.target.value})} className="elite-input">
-                          <option value="M">M-Coin</option><option value="RP">RP Puanı</option>
-                       </select>
-                     </div>
-                     <div style={{ display: 'flex', gap: '12px' }}>
-                       <button onClick={() => { db.ref(`mavikent_premium/quests/${qId}`).update({ text: questInputs[`${qId}_text`], amt: questInputs[`${qId}_amt`], type: questInputs[`${qId}_type`] }); alert("Görev Yayınlandı!"); }} className="premium-btn" style={{ flex: 1, background: '#3b82f6', color: 'white', padding: '16px' }}>YAYINLA</button>
-                       <button onClick={() => completeQuest(qId)} className="premium-btn" style={{ flex: 1, background: '#10b981', color: 'white', padding: '16px' }}>✅ BİTİR ({parts.length})</button>
-                       <button onClick={() => { if(window.confirm('Bu görevi tamamen silmek istediğine emin misin?')) { db.ref(`mavikent_premium/quests/${qId}`).set(null); setQuestInputs({...questInputs, [`${qId}_text`]: '', [`${qId}_amt`]: '', [`${qId}_type`]: 'M'}); alert("Görev Silindi!"); } }} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '16px', minWidth: '80px' }}>🗑️ SİL</button>
-                     </div>
-                   </div>
-                 )
-              })}
-           </div>
-        )}
-
         {/* LİG YÖNETİMİ */}
         {currentModule === 'admin_lig' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
@@ -2147,58 +2443,131 @@ const renderStudentGrid = (students, type) => {
            </div>
         )}
 
-        {/* AYARLAR YÖNETİMİ */}
+        {/* KURUMSAL KİMLİK */}
         {currentModule === 'admin_settings' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
-             <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', gridColumn: '1 / -1' }}>
-               <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '8px' }}>⚡ SİSTEM ETKİNLİKLERİ</h4>
-               <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', fontWeight: 600 }}>Tüm yurtta aynı anda devreye girecek etkinlikler ve enflasyon yönetimi.</p>
-               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                  <button onClick={() => { db.ref('mavikent_premium/settings/global_event').set('2x_xp'); alert("Tüm yurt için 2X XP aktif edildi!"); }} className="premium-btn" style={{ background: appData?.settings?.global_event === '2x_xp' ? '#10b981' : '#f8fafc', color: appData?.settings?.global_event === '2x_xp' ? 'white' : '#64748b', border: appData?.settings?.global_event === '2x_xp' ? 'none' : '2px solid #e2e8f0' }}>⭐ TÜM YURT 2X ÇARPAN</button>
-                  <button onClick={() => { db.ref('mavikent_premium/settings/global_event').set('none'); alert("Etkinlikler durduruldu."); }} className="premium-btn" style={{ background: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? '#ef4444' : '#f8fafc', color: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? 'white' : '#64748b', border: appData?.settings?.global_event === 'none' || !appData?.settings?.global_event ? 'none' : '2px solid #e2e8f0' }}>🚫 ETKİNLİKLERİ BİTİR</button>
-                  <button onClick={() => { if(window.confirm('Tüm öğrencilere anında 1 adet Şans Çarkı Bileti hediye edilecek. Onaylıyor musun?')) { const updates = {}; roster.forEach(n => { updates[`tickets/${n}`] = (Number(appData?.tickets?.[n]) || 0) + 1; }); db.ref('mavikent_premium').update(updates); alert('🎟️ Biletler başarıyla dağıtıldı!'); } }} className="premium-btn" style={{ background: '#8b5cf6', color: 'white', border: 'none', padding: '15px' }}>🎟️ HERKESE 1 BİLET DAĞIT</button>
-                  <button onClick={() => { if(window.confirm('Tüm öğrencilerin kişisel enflasyonları sıfırlanacak. Ürün fiyatları ana fiyata dönecek. Emin misiniz?')) { db.ref('mavikent_premium/personal_inflation').set(null); alert('Enflasyon sıfırlandı!'); } }} className="premium-btn" style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '15px' }}>🔄 KİŞİSEL ENFLASYONLARI SIFIRLA</button>
-               </div>
-             </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {!adminSettingsView ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                        <div onClick={() => setAdminSettingsView('kimlik')} className="card-hover" style={{ background: 'white', borderRadius: '24px', padding: '28px', boxShadow: '0 4px 15px rgba(0,0,0,0.04)', cursor: 'pointer' }}>
+                            <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔒</div>
+                            <h4 style={{ margin: '0 0 6px 0', fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>Kimlik & Şifreler</h4>
+                            <p style={{ margin: 0, fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Yönetici ve personel Şifrelerini düzenle.</p>
+                        </div>
+                        <div onClick={() => setAdminSettingsView('points')} className="card-hover" style={{ background: 'white', borderRadius: '24px', padding: '28px', boxShadow: '0 4px 15px rgba(0,0,0,0.04)', cursor: 'pointer' }}>
+                            <div style={{ fontSize: '40px', marginBottom: '12px' }}>⚖️</div>
+                            <h4 style={{ margin: '0 0 6px 0', fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>Puanlama Yapılandırması</h4>
+                            <p style={{ margin: 0, fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Puan değerlerini kategorilere göre ayarla.</p>
+                        </div>
+                    </div>
+                ) : adminSettingsView === 'kimlik' ? (
+                    <div className="fade-in" style={{ maxWidth: '700px', margin: '0 auto' }}>
+                        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+                            <div style={{ fontSize: '40px', marginBottom: '8px' }}>🔒</div>
+                            <h3 style={{ margin: '0 0 6px 0', fontWeight: 900, fontSize: '22px', color: '#0f172a' }}>Kimlik & Şifreler</h3>
+                            <p style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 600, margin: 0 }}>Yönetici ve personel giriş Şifrelerini güncelleyin.</p>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                            <div style={{ background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', border: '1.5px solid #e2e8f0' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 900, color: '#64748b', marginBottom: '16px', textAlign: 'center', letterSpacing: '0.5px' }}>🔑 YÖNETİCİ ŞİFRESİ</div>
+                                <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 700, marginBottom: '10px', textAlign: 'center' }}>Mevcut: {appData?.settings?.admin_pin || '1507'}</div>
+                                <input type="text" value={pinInputs.admin_pin} onChange={e => setPinInputs({...pinInputs, admin_pin: e.target.value})} className="elite-input" placeholder="Yeni yönetici şifresi" style={{ textAlign: 'center', fontWeight: 900, fontSize: '18px', letterSpacing: '4px' }} />
+                            </div>
+                            <div style={{ background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', border: '1.5px solid #e2e8f0' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 900, color: '#64748b', marginBottom: '16px', textAlign: 'center', letterSpacing: '0.5px' }}>🔐 PERSONEL ŞİFRESİ</div>
+                                <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 700, marginBottom: '10px', textAlign: 'center' }}>Mevcut: {appData?.settings?.staff_pin || '1234'}</div>
+                                <input type="text" value={pinInputs.staff_pin} onChange={e => setPinInputs({...pinInputs, staff_pin: e.target.value})} className="elite-input" placeholder="Yeni personel şifresi" style={{ textAlign: 'center', fontWeight: 900, fontSize: '18px', letterSpacing: '4px' }} />
+                            </div>
+                        </div>
+                        <button onClick={savePins} className="premium-btn" style={{ width: '100%', background: '#0f172a', color: 'white', padding: '18px', fontSize: '16px' }}>🔒 ŞİFRELERİ GÜNCELLE</button>
+                    </div>
+                ) : adminSettingsView === 'points' ? (
+                    <div className="fade-in" style={{ maxWidth: '700px', margin: '0 auto' }}>
+                        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+                            <div style={{ fontSize: '40px', marginBottom: '8px' }}>⚖️</div>
+                            <h3 style={{ margin: '0 0 6px 0', fontWeight: 900, fontSize: '22px', color: '#0f172a' }}>Puanlama Yapılandırması</h3>
+                            <p style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 600, margin: 0 }}>Düzenlemek istediğin kategoriye tıkla.</p>
+                        </div>
 
-             <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                 <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '20px' }}>📢 DUYURU MERKEZİ</h4>
-                 <input value={settingsInputs.news_ticker} onChange={e => setSettingsInputs({...settingsInputs, news_ticker: e.target.value})} placeholder="Kayan Şerit Duyurusu..." className="elite-input" style={{ marginBottom: '12px' }} />
-                 <input value={settingsInputs.ann1} onChange={e => setSettingsInputs({...settingsInputs, ann1: e.target.value})} placeholder="Siyah Kutu Duyurusu" className="elite-input" style={{ marginBottom: '12px' }} />
-                 <input value={settingsInputs.ann2} onChange={e => setSettingsInputs({...settingsInputs, ann2: e.target.value})} placeholder="Beyaz Kutu Duyurusu" className="elite-input" style={{ marginBottom: '20px' }} />
-                 <button onClick={() => { db.ref('mavikent_premium/settings/news_ticker').set(settingsInputs.news_ticker); db.ref('mavikent_premium/settings/ann1').set(settingsInputs.ann1); db.ref('mavikent_premium/settings/ann2').set(settingsInputs.ann2); alert('Duyurular Kaydedildi!'); }} className="premium-btn" style={{ width: '100%', padding: '16px', background: '#0f172a', color: 'white' }}>DUYURULARI KAYDET</button>
-             </div>
-             
-             <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-               <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '20px' }}>🎨 TEMA VE ŞİFRE</h4>
-               <select value={settingsInputs.active_theme} onChange={e => setSettingsInputs({...settingsInputs, active_theme: e.target.value})} className="elite-input" style={{ marginBottom: '16px' }}>
-                 <option value="default">🍎 Apple Premium (Varsayılan)</option><option value="osmanli">🏹 Osmanlı / Diriliş</option><option value="uzay">🚀 Uzay Çağı / Galaksi</option><option value="espor">🎮 Siber E-Spor</option><option value="futbol">⚽ Şampiyon Ligi</option><option value="teknoloji">💻 Teknoloji Devi / Cyber</option>
-               </select>
-               <input value={settingsInputs.admin_pin} onChange={e => setSettingsInputs({...settingsInputs, admin_pin: e.target.value})} placeholder="Yönetici Şifresi" className="elite-input" style={{ marginBottom: '12px' }} />
-               <input value={settingsInputs.staff_pin} onChange={e => setSettingsInputs({...settingsInputs, staff_pin: e.target.value})} placeholder="Personel Şifresi" className="elite-input" style={{ marginBottom: '20px' }} />
-               <button onClick={() => { db.ref('mavikent_premium/settings/active_theme').set(settingsInputs.active_theme); db.ref('mavikent_premium/settings/admin_pin').set(settingsInputs.admin_pin); db.ref('mavikent_premium/settings/staff_pin').set(settingsInputs.staff_pin); alert('Ayarlar başarıyla güncellendi!'); }} className="premium-btn" style={{ width: '100%', padding: '16px', background: '#0f172a', color: 'white' }}>KAYDET</button>
-             </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                            {POINTS_CATEGORIES.map(cat => (
+                                <div key={cat.id} onClick={() => openPointsModal(cat.id)} className="card-hover"
+                                    style={{ background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', border: `1.5px solid ${cat.bg}`, cursor: 'pointer', transition: 'all 0.3s' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                                        <div style={{ width: '48px', height: '48px', background: cat.bg, borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>{cat.icon}</div>
+                                        <div>
+                                            <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>{cat.label}</div>
+                                            <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>{cat.desc}</div>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                        {cat.items.map(item => {
+                                            const val = pointsConfig[item.key];
+                                            const isPos = Number(val) > 0;
+                                            const isNeg = Number(val) < 0;
+                                            return (
+                                                <div key={item.key} style={{ background: isPos ? '#ecfdf5' : isNeg ? '#fef2f2' : '#f8fafc', border: `1px solid ${isPos ? '#6ee7b7' : isNeg ? '#fca5a5' : '#e2e8f0'}`, borderRadius: '10px', padding: '4px 10px', fontSize: '13px', fontWeight: 800, color: isPos ? '#047857' : isNeg ? '#b91c1c' : '#64748b' }}>
+                                                    {item.icon} {isPos ? '+' : ''}{val}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
 
-             <div style={{ background: '#fef2f2', padding: '30px', borderRadius: '24px', border: '1px solid #fecaca' }}>
-               <h4 style={{ marginTop: 0, color: '#b91c1c', fontWeight: 900, fontSize: '18px' }}>⛔ YASAKLI CİHAZ YÖNETİMİ</h4>
-               <p style={{fontSize:'13px', color:'#991b1b', marginBottom:'20px', fontWeight:600}}>3 kez hatalı şifre girdiği için engellenen cihazların listesi.</p>
-               
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px', maxHeight: '200px', overflowY: 'auto' }} className="clean-scroll">
-                   {Object.keys(appData?.banned_devices || {}).length === 0 && <div style={{ color: '#991b1b', fontWeight: 700, fontSize: '14px', textAlign: 'center', padding: '10px' }}>Şu an engelli cihaz yok.</div>}
-                   {Object.keys(appData?.banned_devices || {}).map(ip => (
-                       <div key={ip} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '12px 16px', borderRadius: '12px', border: '1px solid #fca5a5' }}>
-                           <div>
-                              <div style={{ fontWeight: 900, color: '#b91c1c', fontSize: '14px' }}>Cihaz ID / IP:</div>
-                              <div style={{ fontSize: '12px', color: '#475569', wordBreak: 'break-all', marginTop: '2px' }}>{ip}</div>
-                           </div>
-                           <button onClick={() => db.ref(`mavikent_premium/banned_devices/${ip}`).remove()} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '8px 16px', fontSize: '12px' }}>Kaldır</button>
-                       </div>
-                   ))}
-               </div>
-
-               <button onClick={() => { if(window.confirm('Tüm cihaz engelleri kaldırılacak. Emin misiniz?')) { db.ref('mavikent_premium/banned_devices').set(null); alert('Tüm engeller kaldırıldı!'); } }} className="premium-btn" style={{ width: '100%', padding: '16px', background: 'transparent', color: '#ef4444', border: '2px solid #ef4444 !important' }}>TÜM ENGELLERİ KALDIR</button>
-             </div>
-          </div>
+                        {/* MODAL */}
+                        {pointsModal && (() => {
+                            const cat = POINTS_CATEGORIES.find(c => c.id === pointsModal);
+                            return (
+                                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }} onClick={() => setPointsModal(null)}>
+                                    <div style={{ background: 'white', borderRadius: '28px', padding: '32px', width: '100%', maxWidth: '460px', boxShadow: '0 25px 50px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '24px' }}>
+                                            <div style={{ width: '52px', height: '52px', background: cat.bg, borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px' }}>{cat.icon}</div>
+                                            <div>
+                                                <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '20px' }}>{cat.label}</div>
+                                                <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>{cat.desc}</div>
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: cat.items.length > 2 ? '1fr 1fr' : '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
+                                            {cat.items.map(item => {
+                                                const val = pointsDraft[item.key] ?? '';
+                                                const numVal = parseFloat(val);
+                                                const isPos = numVal > 0;
+                                                const isNeg = numVal < 0;
+                                                return (
+                                                    <div key={item.key} style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                                                            <span style={{ fontSize: '16px' }}>{item.icon}</span>
+                                                            <span style={{ fontWeight: 800, color: '#334155', fontSize: '13px' }}>{item.label}</span>
+                                                        </div>
+                                                        <input
+                                                            type="text"
+                                                            inputMode="numeric"
+                                                            value={val}
+                                                            onChange={e => {
+                                                                const raw = e.target.value;
+                                                                if (raw === '' || raw === '-' || /^-?\d*$/.test(raw)) {
+                                                                    setPointsDraft({ ...pointsDraft, [item.key]: raw });
+                                                                }
+                                                            }}
+                                                            className="elite-input"
+                                                            style={{ textAlign: 'center', fontWeight: 900, fontSize: '22px', padding: '12px', color: isPos ? '#047857' : isNeg ? '#b91c1c' : '#0f172a' }}
+                                                        />
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '12px' }}>
+                                            <button onClick={() => setPointsModal(null)} className="premium-btn" style={{ flex: 1, background: '#f1f5f9', color: '#64748b', padding: '16px' }}>İptal</button>
+                                            <button onClick={savePointsModal} className="premium-btn" style={{ flex: 2, background: '#0f172a', color: 'white', padding: '16px', fontWeight: 900 }}>💾 KAYDET</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                    </div>
+                ) : null}
+            </div>
         )}
 
       </div> 
@@ -2390,7 +2759,7 @@ const renderStudentGrid = (students, type) => {
                                 <button onClick={saveCleaningTasks} className="premium-btn" style={{ background: 'linear-gradient(135deg, #334155, #0f172a)', color: 'white', padding: '10px 20px', fontSize: '13px', border: 'none', boxShadow: '0 5px 15px rgba(15,23,42,0.3)' }}>📍 YERLERİ KAYDET</button>
                                 <button onClick={async () => {
                                         const entries = Object.entries(generalCleaningList).filter(([name, data]) => data.area && data.score);
-                                        if(entries.length === 0) return alert("En az bir öğrenci için alan ve puan girmelisiniz!");
+                                        if(entries.length === 0) return toast("En az bir öğrenci için alan ve puan girmelisiniz!");
                                         if(!window.confirm(`${entries.length} öğrencinin puanı kaydedilecek. Onaylıyor musun?`)) return;
                                         
                                         setIsHygieneSaving(true);
@@ -2407,9 +2776,9 @@ const renderStudentGrid = (students, type) => {
 
                                         try {
                                             await db.ref('mavikent_premium').update(updates);
-                                            alert("✅ Günlük temizlik kontrolleri kaydedildi ve M-Coin'ler dağıtıldı!");
+                                            toast("✅ Günlük temizlik kontrolleri kaydedildi ve M-Coin'ler dağıtıldı!");
                                             setGeneralCleaningList({}); 
-                                        } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
+                                        } catch (e) { toast("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
                                     }} 
                                     disabled={isHygieneSaving} className="premium-btn badge-glow" style={{ background: 'linear-gradient(135deg, #065f46, #022c22)', color: 'white', padding: '10px 24px', fontSize: '13px', border: 'none', boxShadow: '0 5px 15px rgba(6,78,59,0.4)' }}>
                                     {isHygieneSaving ? '⏳...' : '🚀 PUANLARI DAĞIT'}
@@ -2540,33 +2909,24 @@ const renderStudentGrid = (students, type) => {
               )}
               {currentModule === 'okul' && (
                 <>
-                  <button onClick={() => saveData('okul', 'p', 10)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🏠 DÖNDÜ (+10 M)</button>
-                  <button onClick={() => saveData('okul', 'a', -20)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🚫 GELMEDİ (-20 M + 📉)</button>
+                  <button onClick={() => saveData('okul', 'p', pointsConfigFromDB.okul_dondu)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🏠 DÖNDÜ (+{pointsConfigFromDB.okul_dondu} M)</button>
+                  <button onClick={() => saveData('okul', 'a', pointsConfigFromDB.okul_gelmedi)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🚫 GELMEDİ ({pointsConfigFromDB.okul_gelmedi} M + 📉)</button>
                   <button onClick={() => saveData('okul', 'i', 0)} className="premium-btn" style={{ background: '#64748b', color: 'white', padding: '20px' }}>✉️ İZİNLİ (0 M)</button>
                 </>
               )}
               {currentModule === 'yoklama' && (
                 <>
-                  <button onClick={() => saveData('yoklama', 't', 3)} className="premium-btn" style={{ background: '#d4af37', color: 'white', padding: '20px' }}>👳‍♂️ TAKKELİ (+{getCalculatedPoints(selectedStudent, 3, 'yoklama')} M)</button>
-                  <button onClick={() => saveData('yoklama', 'p', 2)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>✅ GELDİ (+{getCalculatedPoints(selectedStudent, 2, 'yoklama')} M)</button>
-                  <button onClick={() => saveData('yoklama', 'l', 1)} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '20px' }}>⏳ GEÇ (+{getCalculatedPoints(selectedStudent, 1, 'yoklama')} M)</button>
-                  <button onClick={() => saveData('yoklama', 'a', -3)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>❌ GELMEDİ (-3 M, Seri Bozar)</button>
+                  <button onClick={() => saveData('yoklama', 't', pointsConfigFromDB.yoklama_takkeli)} className="premium-btn" style={{ background: '#d4af37', color: 'white', padding: '20px' }}>👳‍♂️ TAKKELİ (+{getCalculatedPoints(selectedStudent, pointsConfigFromDB.yoklama_takkeli, 'yoklama')} M)</button>
+                  <button onClick={() => saveData('yoklama', 'p', pointsConfigFromDB.yoklama_geldi)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>✅ GELDİ (+{getCalculatedPoints(selectedStudent, pointsConfigFromDB.yoklama_geldi, 'yoklama')} M)</button>
+                  <button onClick={() => saveData('yoklama', 'l', pointsConfigFromDB.yoklama_gec)} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '20px' }}>⏳ GEÇ (+{getCalculatedPoints(selectedStudent, pointsConfigFromDB.yoklama_gec, 'yoklama')} M)</button>
+                  <button onClick={() => saveData('yoklama', 'a', pointsConfigFromDB.yoklama_gelmedi)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>❌ GELMEDİ ({pointsConfigFromDB.yoklama_gelmedi} M, Seri Bozar)</button>
                 </>
               )}
               {currentModule === 'telefon' && (
-                <>
-                  <button onClick={() => saveData('telefon', 'p', 2)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>📱 TESLİM (+{getCalculatedPoints(selectedStudent, 2, 'telefon')} M)</button>
-                  <button onClick={() => saveData('telefon', 'e', 2)} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '20px' }}>📵 TELEFONU YOK (+{getCalculatedPoints(selectedStudent, 2, 'telefon')} M)</button>
-                  <button onClick={() => saveData('telefon', 'a', 0)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🚫 VERMEDİ (Seri Bozar)</button>
-                </>
+                <><button onClick={() => saveData('telefon', 'p', pointsConfigFromDB.telefon_teslim)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>📱 TESLİM (+{getCalculatedPoints(selectedStudent, pointsConfigFromDB.telefon_teslim, 'telefon')} M)</button><button onClick={() => saveData('telefon', 'e', pointsConfigFromDB.telefon_teslim)} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '20px' }}>📵 TELEFONU YOK (+{getCalculatedPoints(selectedStudent, pointsConfigFromDB.telefon_teslim, 'telefon')} M)</button><button onClick={() => saveData('telefon', 'a', pointsConfigFromDB.telefon_vermedi)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🚫 VERMEDİ ({pointsConfigFromDB.telefon_vermedi} M, Seri Bozar)</button></>
               )}
               {currentModule === 'yatak' && (
-                <>
-                  <button onClick={() => saveData('yatak', 'yatak', 1)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🛏️ YATAK DÜZENLİ (+{getCalculatedPoints(selectedStudent, 1, 'yatak')} M)</button>
-                  <button onClick={() => saveData('yatak', 'yatak', 0)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🕸️ YATAK BOZUK (Seri Bozar)</button>
-                  <button onClick={() => saveData('yatak', 'dolap', 1)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🚪 DOLAP DÜZENLİ (+{getCalculatedPoints(selectedStudent, 1, 'yatak')} M)</button>
-                  <button onClick={() => saveData('yatak', 'dolap', 0)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🏚️ DOLAP BOZUK (Seri Bozar)</button>
-                </>
+                <><button onClick={() => saveData('yatak', 'yatak', pointsConfigFromDB.yatak_duzenli)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🛏️ YATAK DÜZENLİ (+{getCalculatedPoints(selectedStudent, pointsConfigFromDB.yatak_duzenli, 'yatak')} M)</button><button onClick={() => saveData('yatak', 'yatak', pointsConfigFromDB.yatak_bozuk)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🕸️ YATAK BOZUK ({pointsConfigFromDB.yatak_bozuk} M, Seri Bozar)</button><button onClick={() => saveData('yatak', 'dolap', pointsConfigFromDB.dolap_duzenli)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🚪 DOLAP DÜZENLİ (+{getCalculatedPoints(selectedStudent, pointsConfigFromDB.dolap_duzenli, 'yatak')} M)</button><button onClick={() => saveData('yatak', 'dolap', pointsConfigFromDB.dolap_bozuk)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🏚️ DOLAP BOZUK ({pointsConfigFromDB.dolap_bozuk} M, Seri Bozar)</button></>
               )}
               {currentModule === 'kanaat' && (
                 <>
@@ -2638,7 +2998,7 @@ const renderStudentGrid = (students, type) => {
                  if(window.confirm(`${selectedStudent} adlı öğrencinin ${modalType === 'deneme' ? 'Deneme' : 'Yazılı'} geçmişi tamamen silinecek. Onaylıyor musun?`)) {
                      db.ref(`mavikent_premium/exams/${selectedStudent}/${modalType}`).set(null);
                      setExamData({});
-                     alert('Geçmiş başarıyla temizlendi!');
+                     toast('Geçmiş başarıyla temizlendi!');
                  }
              }} style={{ position: 'absolute', top: '20px', right: '20px', background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5', padding: '8px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', transition: '0.2s' }}>🗑️ Geçmişi Sil</button>
 

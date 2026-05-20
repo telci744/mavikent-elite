@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
+import { playClick, playCoin, playBooking, playCancel } from '../sounds';
+import { toast } from '../toast';
+import { burst } from '../confetti';
 
 const BADGES = {
   soru_1: { id: 'soru_1', icon: '🥉', name: 'Soru Çırağı', desc: '500 soru çöz.', req: 500, rew: 50, type: 'soru' },
@@ -118,11 +121,11 @@ const YemekPuanlama = ({ ogrenciAdi }) => {
   }, [ogrenciAdi, bugunTarihStr]);
 
   const puanGonder = async (ogunId, puan) => {
-    if (!ogrenciAdi) return alert("⚠️ Lütfen önce sisteme giriş yapın!");
+    if (!ogrenciAdi) return toast("⚠️ Lütfen önce sisteme giriş yapın!");
     try {
       await db.ref(`mavikent_premium/yemek_puanlari/${bugunTarihStr}/${ogrenciAdi}/${ogunId}`).set(puan);
       setMevcutPuan(prev => ({ ...prev, [ogunId]: puan }));
-    } catch (error) { alert("Hata oluştu: " + error.message); }
+    } catch (error) { toast("Hata oluştu: " + error.message); }
   };
 
   const isUnlocked = (ogun) => {
@@ -469,15 +472,15 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
 
   const sendChatMessage = () => {
       if (!chatInput.trim()) return;
-      if (appData?.banned_chat?.[safeName]) return alert("⛔ Yönetici tarafından sohbetten kalıcı olarak yasaklandınız!");
-      if (Date.now() - lastMsgTime < 10000) return alert("⏳ Yavaş Mod aktif! Lütfen 10 saniye bekleyip tekrar gönderin.");
+      if (appData?.banned_chat?.[safeName]) return toast("⛔ Yönetici tarafından sohbetten kalıcı olarak yasaklandınız!");
+      if (Date.now() - lastMsgTime < 10000) return toast("⏳ Yavaş Mod aktif! Lütfen 10 saniye bekleyip tekrar gönderin.");
       const cleanText = censorText(chatInput);
       db.ref('mavikent_premium/global_chat').push({ s: safeName, t: cleanText, ts: Date.now(), date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) });
       setChatInput(''); setLastMsgTime(Date.now());
   };
 
   const submitEvaluation = () => {
-      if(!evalForm.student) return alert("Değerlendirilecek randevuyu seçin!");
+      if(!evalForm.student) return toast("Değerlendirilecek randevuyu seçin!");
       
       if(evalForm.attended !== false) {
           const hasViolation = !evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5;
@@ -543,7 +546,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
           }
           
           db.ref('mavikent_premium').update(updates).then(() => {
-              alert(evalForm.attended !== false ? "✅ Rapor başarıyla yöneticiye iletildi!" : "🔄 Randevu iptal edildi ve M-Coin iadesi yapıldı.");
+              toast(evalForm.attended !== false ? "✅ Rapor başarıyla yöneticiye iletildi!" : "🔄 Randevu iptal edildi ve M-Coin iadesi yapıldı.");
               setEvalForm({ bookingId: '', student: '', device: '', day: '', slot: '', time: '', attended: true, q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' });
               setShowControlPanel(false);
           });
@@ -551,11 +554,11 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   };
 
   const submitMatchScore = () => {
-      if(!scoreForm.tId || !scoreForm.matchId) return alert("Lütfen bir turnuva ve maç seçin!");
-      if(scoreForm.s1 === '' || scoreForm.s2 === '') return alert("Lütfen her iki takımın da skorunu girin!");
+      if(!scoreForm.tId || !scoreForm.matchId) return toast("Lütfen bir turnuva ve maç seçin!");
+      if(scoreForm.s1 === '' || scoreForm.s2 === '') return toast("Lütfen her iki takımın da skorunu girin!");
       
       const t = appData?.tournaments?.[scoreForm.tId];
-      if (!t || !t.fixture || !t.fixture[scoreForm.matchId]) return alert("Maç verisi bulunamadı!");
+      if (!t || !t.fixture || !t.fixture[scoreForm.matchId]) return toast("Maç verisi bulunamadı!");
       
       const m = t.fixture[scoreForm.matchId];
       const s1 = parseInt(scoreForm.s1);
@@ -607,7 +610,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
           }
           
           db.ref('mavikent_premium').update(updates);
-          alert("✅ Skor başarıyla kaydedildi, puan tablosu güncellendi ve M-Coinler yatırıldı!");
+          toast("✅ Skor başarıyla kaydedildi, puan tablosu güncellendi ve M-Coinler yatırıldı!");
           setScoreForm({ tId: '', matchId: '', s1: '', s2: '' });
       }
   };
@@ -616,11 +619,11 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   const getJoker = (devId) => Number(appData?.joker_tickets?.[safeName]?.[devId] || 0);
 
   const handleBookGameSlot = (slot, currentBookedStr, capacity) => {
-      if (appData?.game_room_bans?.[safeName] && appData.game_room_bans[safeName].expiry > Date.now()) return alert("⛔ Oyun odasından banlısınız!");
+      if (appData?.game_room_bans?.[safeName] && appData.game_room_bans[safeName].expiry > Date.now()) return toast("⛔ Oyun odasından banlısınız!");
       
       const bookedArray = currentBookedStr ? String(currentBookedStr).split(', ') : [];
-      if (bookedArray.includes(safeName)) return alert("Bu seansa zaten kayıtlısınız!");
-      if (bookedArray.length >= capacity) return alert("❌ Bu seans tamamen dolu!");
+      if (bookedArray.includes(safeName)) return toast("Bu seansa zaten kayıtlısınız!");
+      if (bookedArray.length >= capacity) return toast("❌ Bu seans tamamen dolu!");
 
       const slotPrice = parseInt(slot.price) || 0;
       const universalJokers = Number(appData?.inventory?.[safeName]?.joker_ticket || 0);
@@ -639,7 +642,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
           }
       }
 
-      if (!useUniversalJoker && !useDeviceJoker && mCoin < slotPrice) return alert(`❌ Bakiyeniz yetersiz! (${slotPrice} M-Coin gerekli)`);
+      if (!useUniversalJoker && !useDeviceJoker && mCoin < slotPrice) return toast(`❌ Bakiyeniz yetersiz! (${slotPrice} M-Coin gerekli)`);
 
       if (useUniversalJoker || useDeviceJoker || window.confirm(`${gameDay} ${slot.time} seansını ${slotPrice} M-Coin karşılığında rezerve etmek istiyor musun?`)) {
           const updates = {};
@@ -667,15 +670,15 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
           updates[`game_room_appointments/${gameDevice}/${gameDay}/${slot.id}`] = newBooking;
           
           db.ref('mavikent_premium').update(updates)
-            .then(() => alert(useUniversalJoker || useDeviceJoker ? "🎟️ Bilet kullanıldı! Bedava seansın hayırlı olsun." : "🚀 Rezervasyon yapıldı ve M-Coin düştü! İyi eğlenceler."))
-            .catch(() => alert("❌ Bir hata oluştu, internetini kontrol et."));
+            .then(() => { playBooking(); burst(); toast(useUniversalJoker || useDeviceJoker ? "🎟️ Bilet kullanıldı! Bedava seansın hayırlı olsun." : "🚀 Rezervasyon yapıldı ve M-Coin düştü! İyi eğlenceler."); })
+            .catch(() => toast("❌ Bir hata oluştu, internetini kontrol et."));
       }
   };
 
   const handleJoinTournament = (tId, t) => {
-      if (mCoin < t.fee) return alert(`❌ Bakiye yetersiz! Giriş ücreti ${t.fee} M-Coin.`);
-      if ((t.participants || []).includes(safeName)) return alert("✅ Zaten bu turnuvaya katıldın!");
-      if (t.status !== 'open') return alert("❌ Bu turnuva artık katılıma kapalı!");
+      if (mCoin < t.fee) return toast(`❌ Bakiye yetersiz! Giriş ücreti ${t.fee} M-Coin.`);
+      if ((t.participants || []).includes(safeName)) return toast("✅ Zaten bu turnuvaya katıldın!");
+      if (t.status !== 'open') return toast("❌ Bu turnuva artık katılıma kapalı!");
 
       if (window.confirm(`${t.name} turnuvasına ${t.fee} M karşılığında katılmak istiyor musun?`)) {
           const updates = {};
@@ -686,7 +689,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
           updates[`tournaments/${tId}/participants`] = newParts;
           
           db.ref('mavikent_premium').update(updates);
-          alert("🏆 Turnuvaya başarıyla katıldın! Fikstür açıklanınca saatler kilitlenecektir.");
+          toast("🏆 Turnuvaya başarıyla katıldın! Fikstür açıklanınca saatler kilitlenecektir.");
       }
   };
 
@@ -813,10 +816,10 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
       });
   });
 
-  const togglePin = (bId) => { let pinned = [...myPinnedBadges]; if (pinned.includes(bId)) { pinned = pinned.filter(id => id !== bId); } else { if (pinned.length >= 3) return alert("En fazla 3 rozet sabitleyebilirsin!"); pinned.push(bId); } db.ref(`mavikent_premium/pinned_badges/${safeName}`).set(pinned); };
+  const togglePin = (bId) => { let pinned = [...myPinnedBadges]; if (pinned.includes(bId)) { pinned = pinned.filter(id => id !== bId); } else { if (pinned.length >= 3) return toast("En fazla 3 rozet sabitleyebilirsin!"); pinned.push(bId); } db.ref(`mavikent_premium/pinned_badges/${safeName}`).set(pinned); };
   
   const handleBuy = (item) => {
-     if (item.stock !== undefined && item.stock <= 0) return alert("❌ Maalesef bu ürün tükendi!");
+     if (item.stock !== undefined && item.stock <= 0) return toast("❌ Maalesef bu ürün tükendi!");
      setPurchaseModal({ active: true, item: item, target: 'self', receiver: '' });
   };
 
@@ -827,8 +830,8 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
       let baseP = Number(pData.p || 0) + (myInflation * 5); 
       let finalPrice = Math.ceil(baseP * (1 - currentActiveDiscountPercent / 100));
 
-      if (mCoin < finalPrice) return alert("❌ Bakiyen yetersiz!");
-      if (purchaseModal.target === 'friend' && !purchaseModal.receiver) return alert("Lütfen hediye göndereceğin arkadaşını seç!");
+      if (mCoin < finalPrice) return toast("❌ Bakiyen yetersiz!");
+      if (purchaseModal.target === 'friend' && !purchaseModal.receiver) return toast("Lütfen hediye göndereceğin arkadaşını seç!");
 
       const receiver = purchaseModal.target === 'friend' ? purchaseModal.receiver : safeName;
       const updates = {};
@@ -862,14 +865,15 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
       }
 
       if (isPersonalDiscountActive && currentActiveDiscountPercent === Number(myDiscountObj.value)) updates[`active_discounts/${safeName}`] = null;
-      db.ref('mavikent_premium').update(updates); alert("✅ İşlem başarılı!"); setPurchaseModal({ active: false, item: null, target: 'self', receiver: '' });
+      playCoin(); burst(); db.ref('mavikent_premium').update(updates); toast("✅ İşlem başarılı!"); setPurchaseModal({ active: false, item: null, target: 'self', receiver: '' });
   };
 
   const handleJoinGroupBuy = (gbKey, gb) => {
-      if (mCoin < gb.pp) return alert(`Bu imeceye katılmak için ${gb.pp} M-Coin gerekli.`);
-      if ((gb.participants || []).includes(safeName)) return alert("Zaten bu imeceye ortaksın!");
+      if (mCoin < gb.pp) return toast(`Bu imeceye katılmak için ${gb.pp} M-Coin gerekli.`);
+      if ((gb.participants || []).includes(safeName)) return toast("Zaten bu imeceye ortaksın!");
       
       if (window.confirm(`${gb.n} imecesine ${gb.pp} M vererek ortak olmak istiyor musun?`)) {
+          playCoin(); burst();
           const updates = {};
           updates[`wallet/${safeName}`] = mCoin - gb.pp;
           updates[`transactions/${safeName}/txn_imece_${Date.now()}`] = { desc: `İmece Katılım: ${gb.n}`, amt: -gb.pp, date: new Date().toLocaleString('tr-TR') };
@@ -879,10 +883,10 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
               updates[`group_buys/${gbKey}/participants`] = newParts;
               updates[`group_buys/${gbKey}/active`] = false;
               db.ref('mavikent_premium/global_chat').push({ s: 'SİSTEM', t: `🚀 ${gb.n} imecesi başarıyla tamamlandı!`, ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) });
-              alert("🎉 İmece tamamlandı! Gerekli kişi sayısına ulaşıldı.");
+              toast("🎉 İmece tamamlandı! Gerekli kişi sayısına ulaşıldı.");
           } else {
               updates[`group_buys/${gbKey}/participants`] = newParts;
-              alert("🤝 İmeceye başarıyla katıldın!");
+              toast("🤝 İmeceye başarıyla katıldın!");
           }
           db.ref('mavikent_premium').update(updates);
       }
@@ -890,10 +894,10 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
 
   const handlePlaceBid = () => {
       const auc = appData?.auction;
-      if (!auc || !auc.active) return alert("Şu an aktif bir ihale bulunmuyor!");
+      if (!auc || !auc.active) return toast("Şu an aktif bir ihale bulunmuyor!");
       const bidInput = document.getElementById('bidInput'); const bidAmt = parseInt(bidInput.value);
-      if (isNaN(bidAmt) || bidAmt <= auc.currentBid) return alert(`Teklifiniz en yüksek tekliften (${auc.currentBid} M) daha büyük olmalı!`);
-      if (mCoin < bidAmt) return alert("Bakiyeniz bu teklif için yetersiz!");
+      if (isNaN(bidAmt) || bidAmt <= auc.currentBid) return toast(`Teklifiniz en yüksek tekliften (${auc.currentBid} M) daha büyük olmalı!`);
+      if (mCoin < bidAmt) return toast("Bakiyeniz bu teklif için yetersiz!");
       
       if (window.confirm(`İhaleye ${bidAmt} M ile girmek istiyor musunuz? M-Coin cüzdanınızdan kesilecektir.`)) {
           const updates = {};
@@ -904,7 +908,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
           updates[`wallet/${safeName}`] = mCoin - bidAmt;
           updates[`transactions/${safeName}/txn_auc_bid_${Date.now()}`] = { desc: `İhale Teklifi (${auc.item})`, amt: -bidAmt, date: new Date().toLocaleString('tr-TR') };
           updates[`auction/currentBid`] = bidAmt; updates[`auction/highestBidder`] = safeName;
-          db.ref('mavikent_premium').update(updates); alert("🔨 Teklifiniz başarıyla alındı! İhalenin yeni lideri sizsiniz.");
+          db.ref('mavikent_premium').update(updates); toast("🔨 Teklifiniz başarıyla alındı! İhalenin yeni lideri sizsiniz.");
           bidInput.value = '';
       }
   };
@@ -931,7 +935,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
       let basePrice = boxType === 'standart' ? 7 : boxType === 'mega' ? 10 : 15;
       let totalCost = count === 10 ? Math.ceil((basePrice * 10) * 0.9) : basePrice * count;
 
-      if (mCoin < totalCost) return alert(`❌ Bu işlem için ${totalCost} M-Coin gerekli!`);
+      if (mCoin < totalCost) return toast(`❌ Bu işlem için ${totalCost} M-Coin gerekli!`);
 
       if (window.confirm(`${totalCost} M-Coin harcayarak ${count} adet ${boxType.toUpperCase()} kutu açmak istiyor musun?`)) {
           setBoxAnim({ active: true, type: boxType, step: 1, result: null, count });
@@ -1012,13 +1016,13 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
 
   const redeemShards = (devId, devName, icon) => {
       const currentShards = getShard(devId);
-      if (currentShards < 20) return alert(`Henüz yeterli parçan yok! Kutu açarak 20 ${devName} parçasına ulaşmalısın.`);
+      if (currentShards < 20) return toast(`Henüz yeterli parçan yok! Kutu açarak 20 ${devName} parçasına ulaşmalısın.`);
       if (window.confirm(`20 ${devName} Parçasını birleştirip 1 Adet BEDAVA ${devName} SEANSI bileti almak istiyor musun?`)) {
           const updates = {};
           updates[`shards/${safeName}/${devId}`] = currentShards - 20;
           updates[`joker_tickets/${safeName}/${devId}`] = getJoker(devId) + 1;
           db.ref('mavikent_premium').update(updates); 
-          alert(`🎉 Tebrikler! 20 Parça birleşti ve 1 Adet ${devName} Biletin hesabına eklendi! Oyun odası sekmesinden kullanabilirsin.`);
+          toast(`🎉 Tebrikler! 20 Parça birleşti ve 1 Adet ${devName} Biletin hesabına eklendi! Oyun odası sekmesinden kullanabilirsin.`);
       }
   };
 
@@ -1038,7 +1042,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
           } 
           else if (iType === 'streak' || itemName.includes("KORUMA") || itemName.includes("SERİ")) { 
               const today = new Date();
-              if (today.getDay() !== 0) return alert("❌ Haftalık Seri Kartı SADECE PAZAR GÜNLERİ aktif edilebilir!");
+              if (today.getDay() !== 0) return toast("❌ Haftalık Seri Kartı SADECE PAZAR GÜNLERİ aktif edilebilir!");
               let nextSat = new Date(); nextSat.setDate(today.getDate() + 6); nextSat.setHours(15, 0, 0, 0);
               updates[`active_cards/${safeName}/streak`] = { val: "aktif", date: new Date().toDateString(), end: nextSat.getTime() }; msg = "🛡️ Haftalık Seri Koruma aktif! Cumartesi 15:00'a kadar fire vermezsen 500 M kazanacaksın."; 
           } 
@@ -1073,16 +1077,16 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   };
 
   const acceptInvite = (clanId) => {
-    if (myClanId) return alert('Zaten bir klandasın! Önce mevcut klandan ayrılmalısın.');
+    if (myClanId) return toast('Zaten bir klandasın! Önce mevcut klandan ayrılmalısın.');
     const clanToJoin = appData.clans[clanId];
-    if (!clanToJoin) return alert('Klan bulunamadı.');
-    if ((clanToJoin.members || []).length >= 3) return alert('Bu klan tamamen dolu (3/3).');
+    if (!clanToJoin) return toast('Klan bulunamadı.');
+    if ((clanToJoin.members || []).length >= 3) return toast('Bu klan tamamen dolu (3/3).');
     
     const updates = {};
     updates[`clans/${clanId}/members`] = [...(clanToJoin.members || []), safeName];
     updates[`clan_invites/${safeName}`] = null;
     db.ref('mavikent_premium').update(updates);
-    alert(`${clanToJoin.name} klanına katıldın!`);
+    toast(`${clanToJoin.name} klanına katıldın!`);
   };
 
   const rejectInvite = (clanId) => {
@@ -1090,9 +1094,9 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   };
 
   const joinWar = () => {
-    if (!myClanId) return alert('Savaşa katılmak için bir klanda olmalısın!');
-    if ((myClan?.members || []).length < 3) return alert('Klan savaşına katılmak için klanın tam kapasite (3 kişi) olmalıdır!');
-    if (mCoin < 10) return alert('Savaşa giriş ücreti için 10 M-Coin gerekiyor.');
+    if (!myClanId) return toast('Savaşa katılmak için bir klanda olmalısın!');
+    if ((myClan?.members || []).length < 3) return toast('Klan savaşına katılmak için klanın tam kapasite (3 kişi) olmalıdır!');
+    if (mCoin < 10) return toast('Savaşa giriş ücreti için 10 M-Coin gerekiyor.');
     
     if (window.confirm('Klan savaşına 10 M-Coin karşılığında katılmak istiyor musun? Bu andan itibaren kazanacağın tüm RP puanları klan savaş hanesine de yazılacak!')) {
       const updates = {};
@@ -1100,21 +1104,21 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
       updates[`transactions/${safeName}/txn_war_${Date.now()}`] = { desc: `Klan Savaşı Giriş Ücreti`, amt: -10, date: new Date().toLocaleString('tr-TR') };
       updates[`clan_war_participants/${safeName}`] = true;
       db.ref('mavikent_premium').update(updates);
-      alert('Savaşa katıldın! Artık kastığın her RP klanı şampiyonluğa taşıyacak.');
+      toast('Savaşa katıldın! Artık kastığın her RP klanı şampiyonluğa taşıyacak.');
     }
   };
 
   const handleInviteUser = () => {
     if (!inviteUser.trim()) return;
-    if ((myClan?.members || []).length >= 3) return alert('Klanın tamamen dolu (3/3)!');
-    if (!roster.includes(inviteUser.trim())) return alert('Böyle bir öğrenci bulunamadı.');
-    if ((myClan?.members || []).includes(inviteUser.trim())) return alert('Bu oyuncu zaten klanınızda.');
+    if ((myClan?.members || []).length >= 3) return toast('Klanın tamamen dolu (3/3)!');
+    if (!roster.includes(inviteUser.trim())) return toast('Böyle bir öğrenci bulunamadı.');
+    if ((myClan?.members || []).includes(inviteUser.trim())) return toast('Bu oyuncu zaten klanınızda.');
     
     db.ref(`mavikent_premium/clan_invites/${inviteUser.trim()}/${myClanId}`).set({
       clanName: myClan.name,
       icon: myClan.icon
     });
-    alert(`${inviteUser} oyuncusuna davet gönderildi!`);
+    toast(`${inviteUser} oyuncusuna davet gönderildi!`);
     setInviteUser('');
   };
 
@@ -1316,7 +1320,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}><h2 style={{ margin: '0', fontSize: '24px', fontWeight: 900, color: '#0f172a' }}>✉️ Yöneticiye Mesaj</h2><button onClick={() => setShowMessageModal(false)} className="profile-btn" style={{ background: '#f1f5f9', padding: '10px 15px', color: '#64748b' }}>✕</button></div>
              <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '20px', fontWeight: 600 }}>Öneri, şikayet veya taleplerini yöneticiye doğrudan iletebilirsin.</p>
              <textarea value={messageText} onChange={e => setMessageText(e.target.value)} placeholder="Mesajınızı buraya yazın..." className="elite-input clean-scroll" style={{ height: '120px', resize: 'none', marginBottom: '25px', textAlign: 'left' }} />
-             <button onClick={() => { alert("Mesajınız iletildi."); setShowMessageModal(false); setMessageText(''); }} className="profile-btn" style={{ width: '100%', background: '#0f172a', color: 'white', padding: '16px', fontSize: '16px' }}>MESAJI GÖNDER</button>
+             <button onClick={() => { toast("Mesajınız iletildi."); setShowMessageModal(false); setMessageText(''); }} className="profile-btn" style={{ width: '100%', background: '#0f172a', color: 'white', padding: '16px', fontSize: '16px' }}>MESAJI GÖNDER</button>
           </div>
         </div>
       )}
@@ -1378,6 +1382,9 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '30px', paddingTop: '10px' }}>
+          {appData?.settings?.corporate_logo_url && (
+              <img src={appData.settings.corporate_logo_url} alt="Kurumsal Logo" style={{ maxHeight: '60px', objectFit: 'contain', marginRight: '20px' }} />
+          )}
           <div>
               <div style={{ fontSize: '12px', color: '#d4af37', fontWeight: 900, letterSpacing: '2px', marginBottom: '4px' }}>HOŞ GELDİN</div>
               <div style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: '#0f172a' }}>{firstName} <TitleBadge title={getStudentTitle(safeName)} /></div>
@@ -1526,7 +1533,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                      return (
                         <div key={qId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isPart ? '#f0fdf4' : '#f8fafc', padding: '16px', borderRadius: '16px', border: `1px solid ${isPart ? '#10b981' : '#e2e8f0'}` }}>
                            <div><div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{q.text}</div><div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>Ödül: +{q.amt} {q.type}</div></div>
-                           {isPart ? <div style={{ color: '#10b981', fontWeight: 900, fontSize: '12px' }}>KATILDIN</div> : <button onClick={() => { db.ref(`mavikent_premium/quests/${qId}/participants`).set([...(q.participants||[]), safeName]); alert("Göreve katıldın!"); }} className="profile-btn" style={{ background: '#0f172a', color: 'white', padding: '8px 16px', fontSize: '12px' }}>Katıl</button>}
+                           {isPart ? <div style={{ color: '#10b981', fontWeight: 900, fontSize: '12px' }}>KATILDIN</div> : <button onClick={() => { db.ref(`mavikent_premium/quests/${qId}/participants`).set([...(q.participants||[]), safeName]); toast("Göreve katıldın!"); }} className="profile-btn" style={{ background: '#0f172a', color: 'white', padding: '8px 16px', fontSize: '12px' }}>Katıl</button>}
                         </div>
                      )
                   })}

@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
+import { playSuccess, playCoin, playCancel, playReward, playPenalty } from '../sounds';
+import { toast } from '../toast';
+import { burst } from '../confetti';
 
 const StaffScreen = ({ appData, goBackToRoles }) => {
   const [dashboardView, setDashboardView] = useState('main'); 
@@ -47,6 +50,21 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   const rawRoster = appData?.roster || [];
   const roster = Array.isArray(rawRoster) ? rawRoster : Object.values(rawRoster || {});
   const isElite = (name) => appData?.student_tiers?.[name] === 'elite';
+
+  const pointsConfig = appData?.settings?.points_config || {
+    okul_dondu: 10,
+    okul_gelmedi: -20,
+    yoklama_takkeli: 3,
+    yoklama_geldi: 2,
+    yoklama_gec: 1,
+    yoklama_gelmedi: -3,
+    telefon_teslim: 2,
+    telefon_vermedi: 0,
+    yatak_duzenli: 1,
+    yatak_bozuk: 0,
+    dolap_duzenli: 1,
+    dolap_bozuk: 0,
+  };
 
   const mebLessons = { 
       "5. Sınıf": ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din", "Bilişim", "Beden", "🚫 YOK"], 
@@ -123,7 +141,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   };
 
   const saveRoomInspection = async () => {
-      if(!roomForm.areaId) return alert("Lütfen bir oda seçin!");
+      if(!roomForm.areaId) return toast("Lütfen bir oda seçin!");
       setIsHygieneSaving(true);
       const area = appData.room_areas?.[roomForm.areaId];
       const responsibles = area?.responsibles || [];
@@ -152,13 +170,13 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
 
       try {
           await db.ref('mavikent_premium').update(updates);
-          alert(`✅ Oda denetimi kaydedildi!`);
+          toast(`✅ Oda denetimi kaydedildi!`);
           setRoomForm({ areaId: '', score: 5, note: '' });
-      } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
+      } catch (e) { toast("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
   };
 
   const saveInspection = async () => {
-      if(!hygieneForm.areaId) return alert("Lütfen bir alan seçin!");
+      if(!hygieneForm.areaId) return toast("Lütfen bir alan seçin!");
       setIsHygieneSaving(true);
       
       const area = appData.hygiene_areas?.[hygieneForm.areaId];
@@ -182,9 +200,9 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
 
       try {
           await db.ref('mavikent_premium').update(updates);
-          alert(`✅ Denetim kaydedildi! ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
+          toast(`✅ Denetim kaydedildi! ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
           setHygieneForm({ areaId: '', score: 5, note: '' });
-      } catch (e) { console.error(e); alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
+      } catch (e) { console.error(e); toast("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
   };
 
   const handlePhotoUpload = (e) => {
@@ -207,7 +225,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   };
 
   const submitEvaluation = () => {
-      if(!evalForm.student) return alert("Değerlendirilecek randevuyu seçin!");
+      if(!evalForm.student) return toast("Değerlendirilecek randevuyu seçin!");
       
       if(evalForm.attended) {
           const hasViolation = !evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5;
@@ -217,6 +235,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
       }
 
       if(window.confirm(`${String(evalForm.student || '').split(',')[0]} için işlem sisteme işlenecek. Onaylıyor musun?`)) {
+          playSuccess();
           const updates = {};
           const rId = `rep_${Date.now()}`;
           
@@ -268,7 +287,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
           }
           
           db.ref('mavikent_premium').update(updates).then(() => {
-              alert(evalForm.attended ? "✅ Denetim raporu kaydedildi!" : "🔄 Randevu iptal edildi ve M-Coin iadesi yapıldı.");
+              toast(evalForm.attended ? "✅ Denetim raporu kaydedildi!" : "🔄 Randevu iptal edildi ve M-Coin iadesi yapıldı.");
               setEvalForm({ bookingId: '', student: '', device: '', day: '', slotId: '', time: '', attended: true, q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' });
           });
       }
@@ -312,7 +331,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
     
     const todayStr = new Date().toDateString();
     if (appData?.daily_status?.[todayStr]?.[selectedStudent] === 'a' && type !== 'okul' && type !== 'yoklama') {
-        return alert(`⚠️ ${selectedStudent} adlı öğrenci bugün kurumda değil (İzinli/Gelmedi). Puan işlemi yapılamaz.`);
+        return toast(`⚠️ ${selectedStudent} adlı öğrenci bugün kurumda değil (İzinli/Gelmedi). Puan işlemi yapılamaz.`);
     }
 
     const finalPts = getCalculatedPoints(selectedStudent, basePts, type);
@@ -323,7 +342,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
         const streakData = appData?.active_cards?.[selectedStudent]?.streak;
         const hasStreakSaver = streakData && (streakData.date === todayStr || (streakData.end && streakData.end > Date.now()));
         if (hasStreakSaver) { 
-            alert(`🛡️ ${selectedStudent} SERİ KORUMA KALKANI kullandı! Eksi aldı ama serisi bozulmadı.`); 
+            toast(`🛡️ ${selectedStudent} SERİ KORUMA KALKANI kullandı! Eksi aldı ama serisi bozulmadı.`); 
             updates[`active_cards/${selectedStudent}/streak`] = null; 
         } else { 
             updates[`streaks/${selectedStudent}`] = 0; 
@@ -347,7 +366,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
             if (currentAbs % 10 === 0) { 
                 updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalPts - 100;
                 updates[`transactions/${selectedStudent}/abs_fine_${Date.now()}`] = { desc: '🚨 10 Günlük Devamsızlık Cezası', amt: -100, date: new Date().toLocaleString('tr-TR') };
-                alert(`🚨 ${selectedStudent} 10. devamsızlığını yaptı! Hesabından ekstra 100 M-Coin düşüldü.`);
+                toast(`🚨 ${selectedStudent} 10. devamsızlığını yaptı! Hesabından ekstra 100 M-Coin düşüldü.`);
             }
         }
     }
@@ -362,7 +381,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
 
   const applyPenaltyCard = (studentName, cardId) => {
       const card = appData?.penalty_cards?.[cardId];
-      if (!card) return alert("Hata: Kart bulunamadı!");
+      if (!card) return toast("Hata: Kart bulunamadı!");
       if (!window.confirm(`${studentName} adlı öğrenciye '${card.name}' cezası uygulanacak. Onaylıyor musunuz?`)) return;
 
       const updates = {};
@@ -394,8 +413,9 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
       updates[`daily_flags/${studentName}/broken`] = true;
       updates[`notifications/${studentName}/notif_${timestamp}`] = { title: 'Disiplin İhlali!', message: `'${card.name}' kurallarını ihlal ettiğin için ceza aldın.`, isRead: false, timestamp };
 
+      playPenalty();
       db.ref('mavikent_premium').update(updates).then(() => {
-          alert(`✅ ${studentName} adlı öğrenciye ${card.name} cezası başarıyla uygulandı!`);
+          toast(`✅ ${studentName} adlı öğrenciye ${card.name} cezası başarıyla uygulandı!`);
           setSelectedStudent(null);
           setModalType(null);
       });
@@ -403,7 +423,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
 
   const applyRewardCard = (studentName, cardId) => {
       const card = appData?.reward_cards?.[cardId];
-      if (!card) return alert("Hata: Ödül kartı bulunamadı!");
+      if (!card) return toast("Hata: Ödül kartı bulunamadı!");
       if (!window.confirm(`${studentName} adlı öğrenciye '${card.name}' ödülü verilecek. Onaylıyor musunuz?`)) return;
 
       const updates = {};
@@ -428,8 +448,9 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
 
       updates[`notifications/${studentName}/notif_${timestamp}`] = { title: 'Ödül Kazandın!', message: `'${card.name}' ödülü hesabına tanımlandı. Harikasın!`, isRead: false, timestamp };
 
+      playReward(); burst();
       db.ref('mavikent_premium').update(updates).then(() => {
-          alert(`✅ ${studentName} adlı öğrenciye ${card.name} ödülü başarıyla tanımlandı!`);
+          toast(`✅ ${studentName} adlı öğrenciye ${card.name} ödülü başarıyla tanımlandı!`);
           setSelectedStudent(null);
           setModalType(null);
       });
@@ -457,7 +478,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
     }
     
     db.ref('mavikent_premium').update(updates); 
-    setSelectedStudent(null); setModalType(null); alert("Eğitim Verileri Güncellendi!");
+    setSelectedStudent(null); setModalType(null); toast("Eğitim Verileri Güncellendi!");
   };
 
   const saveExamData = (type) => {
@@ -493,7 +514,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
         };
     }
     db.ref('mavikent_premium').update(updates); 
-    setSelectedStudent(null); setModalType(null); alert(`${type.toUpperCase()} Kaydedildi!`);
+    setSelectedStudent(null); setModalType(null); toast(`${type.toUpperCase()} Kaydedildi!`);
   };
 
   const loadHtml2Canvas = async () => {
@@ -601,7 +622,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
               },
               (errorMessage) => { }
           ).catch((err) => {
-              alert("Kamera başlatılamadı veya izin verilmedi.");
+              toast("Kamera başlatılamadı veya izin verilmedi.");
               setScannerActive(false);
           });
       }, 300);
@@ -689,7 +710,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
         return (
           <div key={name} onClick={() => { 
                 if (isDisabled || isCompletedToday) {
-                    if (isCompletedToday && currentModule === 'okul') alert(`⚠️ ${name} için bugünün Okul Dönüş işlemi zaten yapılmış!\n\nGünde sadece bir kez işlem yapılabilir.`);
+                    if (isCompletedToday && currentModule === 'okul') toast(`⚠️ ${name} için bugünün Okul Dönüş işlemi zaten yapılmış!\n\nGünde sadece bir kez işlem yapılabilir.`);
                     return;
                 }
                 setSelectedStudent(name); 
@@ -784,7 +805,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
             {dashboardView === 'egitim_yazili' && (
               <>
                 {eduClassList.map(cls => (<div key={cls} onClick={() => { setCurrentModule('yazili_view'); setSelectedSession(cls); }} className="premium-card card-hover"><div className="icon">💯</div><div className="label">{cls}</div></div>))}
-                <div style={{ gridColumn: '1 / -1', marginTop: '10px' }}><button onClick={() => { if(window.confirm('Tüm sınıfların YAZILI notları sıfırlanacak. Emin misiniz?')) { const updates = {}; roster.forEach(n => updates[`exams/${n}/yazili`] = null); db.ref('mavikent_premium').update(updates); alert('Yazılı notları sıfırlandı!'); } }} className="premium-btn" style={{ width: '100%', background: '#ef4444', color: 'white', padding: '18px', fontSize: '15px' }}>🔄 HAFTALIK YAZILI PERFORMANSLARINI SIFIRLA</button></div>
+                <div style={{ gridColumn: '1 / -1', marginTop: '10px' }}><button onClick={() => { if(window.confirm('Tüm sınıfların YAZILI notları sıfırlanacak. Emin misiniz?')) { const updates = {}; roster.forEach(n => updates[`exams/${n}/yazili`] = null); db.ref('mavikent_premium').update(updates); toast('Yazılı notları sıfırlandı!'); } }} className="premium-btn" style={{ width: '100%', background: '#ef4444', color: 'white', padding: '18px', fontSize: '15px' }}>🔄 HAFTALIK YAZILI PERFORMANSLARINI SIFIRLA</button></div>
               </>
             )}
 
@@ -812,7 +833,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                     <div style={{ display: 'flex', gap: '10px' }}>
                         <select value={appData?.settings?.game_room_controller || ''} onChange={e => {
                             db.ref('mavikent_premium/settings/game_room_controller').set(e.target.value);
-                            alert(`Oyun Odası Sorumlusu başarıyla atandı! (${e.target.value})`);
+                            toast(`Oyun Odası Sorumlusu başarıyla atandı! (${e.target.value})`);
                         }} className="elite-input" style={{ flex: 1 }}>
                             <option value="">Sorumlu Seçin</option>
                             {roster.map(n => <option key={n} value={n}>{n}</option>)}
@@ -928,7 +949,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                             )}
 
                             <button onClick={() => {
-                                if(!evalForm.student) return alert("Değerlendirilecek randevuyu seçin!");
+                                if(!evalForm.student) return toast("Değerlendirilecek randevuyu seçin!");
                                 
                                 if(evalForm.attended !== false) {
                                     const hasViolation = !evalForm.q1 || !evalForm.q2 || !evalForm.q3 || !evalForm.q4 || evalForm.q5;
@@ -989,7 +1010,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                                     }
                                     
                                     db.ref('mavikent_premium').update(updates).then(() => {
-                                        alert(evalForm.attended !== false ? "✅ Denetim raporu başarıyla kaydedildi!" : "🔄 Randevu iptal edildi ve M-Coin iadesi yapıldı.");
+                                        toast(evalForm.attended !== false ? "✅ Denetim raporu başarıyla kaydedildi!" : "🔄 Randevu iptal edildi ve M-Coin iadesi yapıldı.");
                                         setEvalForm({ bookingId: '', student: '', device: '', day: '', slot: '', time: '', attended: true, q1: true, q2: true, q3: true, q4: true, q5: false, photoUrl: '' });
                                     });
                                 }
@@ -1037,12 +1058,12 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                                     if(!barcodeInput.trim()) return;
                                     const prod = appData?.canteen_products?.[barcodeInput.trim()];
                                     if(prod) { setCart([...cart, { id: barcodeInput.trim(), name: prod.name, price: Number(prod.price) }]); setBarcodeInput(''); } 
-                                    else { alert("Sistemde bu barkoda ait ürün yok! Önce 'Ürün Ekle' kısmından kaydedin."); }
+                                    else { toast("Sistemde bu barkoda ait ürün yok! Önce 'Ürün Ekle' kısmından kaydedin."); }
                                 }} className="premium-btn" style={{ background: '#0f172a', color: 'white', padding: '0 25px' }}>EKLE</button>
                                 <button onClick={() => startBarcodeScanner((code) => {
                                     const prod = appData?.canteen_products?.[code];
                                     if(prod) { setCart(prev => [...prev, { id: code, name: prod.name, price: Number(prod.price) }]); } 
-                                    else { alert(`Bilinmeyen Barkod: ${code}\nLütfen önce 'Ürün Ekle' menüsünden bu ürünü kaydedin.`); }
+                                    else { toast(`Bilinmeyen Barkod: ${code}\nLütfen önce 'Ürün Ekle' menüsünden bu ürünü kaydedin.`); }
                                 })} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '0 20px', fontSize: '24px' }} title="Kamera ile Okut">📷</button>
                             </div>
                         </div>
@@ -1079,7 +1100,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                                                 const updates = {};
                                                 updates[`canteen_logs/txn_${Date.now()}`] = { type: 'cash_sale', amount: total, items: cart.map(c=>c.name).join(', '), date: new Date().toLocaleString('tr-TR'), timestamp: Date.now() };
                                                 cart.forEach(item => { const cStock = appData?.canteen_products?.[item.id]?.stock || 0; updates[`canteen_products/${item.id}/stock`] = Math.max(0, cStock - 1); });
-                                                db.ref('mavikent_premium').update(updates).then(() => { alert('✅ Satış Başarılı! Nakit kasaya eklendi.'); setCart([]); });
+                                                db.ref('mavikent_premium').update(updates).then(() => { toast('✅ Satış Başarılı! Nakit kasaya eklendi.'); setCart([]); });
                                             }
                                         }} className="card-hover" style={{ background: 'linear-gradient(135deg, #10b981, #047857)', color: 'white', padding: '25px', borderRadius: '24px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 10px 25px rgba(16,185,129,0.3)' }}>
                                             <div style={{ fontSize: '45px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.2))' }}>💵</div>
@@ -1089,14 +1110,14 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
 
                                         {/* HESAPTAN DÜŞ BLOĞU */}
                                         <div onClick={() => {
-                                            if(!canteenStudent) return alert('Lütfen yukarıdaki menüden hesabı düşülecek öğrenciyi seçin!');
+                                            if(!canteenStudent) return toast('Lütfen yukarıdaki menüden hesabı düşülecek öğrenciyi seçin!');
                                             const total = cart.reduce((a,b)=>a+b.price, 0); const currBalance = Number(appData?.canteen_wallet?.[canteenStudent]) || 0;
                                             if(currBalance < total) { if(!window.confirm(`⚠️ DİKKAT: ${canteenStudent} adlı öğrencinin bakiyesi YETERSİZ (${currBalance} ₺). Yine de hesabı eksiye düşürülsün mü?`)) return; }
                                             const updates = {};
                                             updates[`canteen_wallet/${canteenStudent}`] = currBalance - total; 
                                             updates[`canteen_logs/txn_${Date.now()}`] = { type: 'account_sale', amount: total, student: canteenStudent, items: cart.map(c=>c.name).join(', '), date: new Date().toLocaleString('tr-TR'), timestamp: Date.now() };
                                             cart.forEach(item => { const cStock = appData?.canteen_products?.[item.id]?.stock || 0; updates[`canteen_products/${item.id}/stock`] = Math.max(0, cStock - 1); });
-                                            db.ref('mavikent_premium').update(updates).then(() => { alert(`✅ Satış Başarılı! Yeni bakiye: ${currBalance - total} ₺`); setCart([]); setCanteenStudent(''); });
+                                            db.ref('mavikent_premium').update(updates).then(() => { toast(`✅ Satış Başarılı! Yeni bakiye: ${currBalance - total} ₺`); setCart([]); setCanteenStudent(''); });
                                         }} className="card-hover" style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: 'white', padding: '25px', borderRadius: '24px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 10px 25px rgba(59,130,246,0.3)' }}>
                                             <div style={{ fontSize: '45px', marginBottom: '10px', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.2))' }}>💳</div>
                                             <div style={{ fontSize: '18px', fontWeight: 900, letterSpacing: '1px' }}>HESAPTAN DÜŞ</div>
@@ -1127,11 +1148,11 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                         </div>
 
                         <button onClick={() => {
-                            if(!newProduct.barcode || !newProduct.name || !newProduct.price || !newProduct.stock) return alert("Lütfen tüm alanları doldurun!");
+                            if(!newProduct.barcode || !newProduct.name || !newProduct.price || !newProduct.stock) return toast("Lütfen tüm alanları doldurun!");
                             const updates = {};
                             updates[`canteen_products/${newProduct.barcode}`] = { name: newProduct.name, price: Number(newProduct.price), stock: Number(newProduct.stock) };
                             db.ref('mavikent_premium').update(updates).then(() => {
-                                alert("✅ Ürün Başarıyla Kaydedildi!");
+                                toast("✅ Ürün Başarıyla Kaydedildi!");
                                 setNewProduct({ barcode: '', name: '', price: '', stock: '' });
                             });
                         }} className="premium-btn badge-glow" style={{ width: '100%', padding: '20px', background: '#0f172a', color: 'white', fontSize: '16px' }}>ÜRÜNÜ SİSTEME KAYDET</button>
@@ -1148,12 +1169,12 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                         </select>
                         <input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} placeholder="Yüklenecek Tutar (₺)" className="elite-input" style={{ marginBottom: '20px', fontSize: '18px', fontWeight: 900 }} />
                         <button onClick={() => {
-                            if(!canteenStudent || !depositAmount || isNaN(depositAmount) || depositAmount <= 0) return alert('Geçerli bir öğrenci ve tutar girin!');
+                            if(!canteenStudent || !depositAmount || isNaN(depositAmount) || depositAmount <= 0) return toast('Geçerli bir öğrenci ve tutar girin!');
                             const amt = Number(depositAmount);
                             if(window.confirm(`${canteenStudent} adlı öğrenciye ${amt} ₺ bakiye yüklenecek. Onaylıyor musunuz?`)) {
-                                const currBalance = Number(appData?.canteen_wallet?.[canteenStudent]) || 0; const updates = {};
+                                playCoin(); const currBalance = Number(appData?.canteen_wallet?.[canteenStudent]) || 0; const updates = {};
                                 updates[`canteen_wallet/${canteenStudent}`] = currBalance + amt; updates[`canteen_logs/txn_${Date.now()}`] = { type: 'deposit', amount: amt, student: canteenStudent, date: new Date().toLocaleString('tr-TR'), timestamp: Date.now() };
-                                db.ref('mavikent_premium').update(updates).then(() => { alert(`Bakiye Yüklendi! Yeni Bakiye: ${currBalance + amt} ₺`); setDepositAmount(''); setCanteenStudent(''); });
+                                db.ref('mavikent_premium').update(updates).then(() => { toast(`Bakiye Yüklendi! Yeni Bakiye: ${currBalance + amt} ₺`); setDepositAmount(''); setCanteenStudent(''); });
                             }
                         }} className="premium-btn" style={{ width: '100%', padding: '20px', background: '#3b82f6', color: 'white', fontSize: '16px' }}>BAKİYE YÜKLE</button>
                     </div>
@@ -1250,7 +1271,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                     <option value="">Ders Seçin</option>{valuesSubjectsList.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <input value={valuesTopic.topic} onChange={e => setValuesTopic({...valuesTopic, topic: e.target.value})} placeholder="İşlenen konu vb." className="elite-input" style={{ marginBottom: '16px' }} />
-                <button onClick={() => { db.ref(`mavikent_premium/values_log/${selectedSession}/${new Date().toDateString()}`).set(valuesTopic); alert("Konu Kaydedildi"); }} className="premium-btn" style={{ width: '100%', padding: '16px', background: '#0f172a', color: 'white', fontSize: '15px' }}>DERSİ YAYINLA</button>
+                <button onClick={() => { db.ref(`mavikent_premium/values_log/${selectedSession}/${new Date().toDateString()}`).set(valuesTopic); toast("Konu Kaydedildi"); }} className="premium-btn" style={{ width: '100%', padding: '16px', background: '#0f172a', color: 'white', fontSize: '15px' }}>DERSİ YAYINLA</button>
             </div>
             {renderStudentGrid(roster.filter(n => appData?.student_levels?.[n] === selectedSession), 'degerler')}
             
@@ -1371,7 +1392,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                           <div style={{ display: 'flex', gap: '10px', width: '100%', justifyContent: 'flex-end' }}>
                               <button onClick={async () => {
                                       const entries = Object.entries(generalCleaningList).filter(([name, data]) => data.area && data.score);
-                                      if(entries.length === 0) return alert("En az bir öğrenci için alan ve puan girmelisiniz!");
+                                      if(entries.length === 0) return toast("En az bir öğrenci için alan ve puan girmelisiniz!");
                                       if(!window.confirm(`${entries.length} öğrencinin puanı kaydedilecek. Onaylıyor musun?`)) return;
                                       
                                       setIsHygieneSaving(true);
@@ -1388,9 +1409,9 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
 
                                       try {
                                           await db.ref('mavikent_premium').update(updates);
-                                          alert("✅ Puanlar başarıyla dağıtıldı!");
+                                          toast("✅ Puanlar başarıyla dağıtıldı!");
                                           setGeneralCleaningList({}); 
-                                      } catch (e) { alert("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
+                                      } catch (e) { toast("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
                                   }} 
                                   disabled={isHygieneSaving} className="premium-btn badge-glow" style={{ background: 'linear-gradient(135deg, #065f46, #022c22)', color: 'white', padding: '12px 24px', fontSize: '14px', border: 'none', boxShadow: '0 8px 15px rgba(6,78,59,0.4)' }}>
                                   {isHygieneSaving ? '⏳...' : '🚀 KAYDET VE DAĞIT'}
@@ -1513,33 +1534,24 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
 
               {currentModule === 'okul' && (
                 <>
-                  <button onClick={() => saveData('okul', 'p', 10)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🏠 DÖNDÜ (+10 M)</button>
-                  <button onClick={() => saveData('okul', 'a', -20)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🚫 GELMEDİ (-20 M + 📉)</button>
+                  <button onClick={() => saveData('okul', 'p', pointsConfig.okul_dondu)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🏠 DÖNDÜ (+{pointsConfig.okul_dondu} M)</button>
+                  <button onClick={() => saveData('okul', 'a', pointsConfig.okul_gelmedi)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🚫 GELMEDİ ({pointsConfig.okul_gelmedi} M + 📉)</button>
                   <button onClick={() => saveData('okul', 'i', 0)} className="premium-btn" style={{ background: '#64748b', color: 'white', padding: '20px' }}>✉️ İZİNLİ (0 M)</button>
                 </>
               )}
               {currentModule === 'yoklama' && (
                 <>
-                  <button onClick={() => saveData('yoklama', 't', 3)} className="premium-btn" style={{ background: '#d4af37', color: 'white', padding: '20px' }}>👳‍♂️ TAKKELİ (+{getCalculatedPoints(selectedStudent, 3, 'yoklama')} M)</button>
-                  <button onClick={() => saveData('yoklama', 'p', 2)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>✅ GELDİ (+{getCalculatedPoints(selectedStudent, 2, 'yoklama')} M)</button>
-                  <button onClick={() => saveData('yoklama', 'l', 1)} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '20px' }}>⏳ GEÇ (+{getCalculatedPoints(selectedStudent, 1, 'yoklama')} M)</button>
-                  <button onClick={() => saveData('yoklama', 'a', -3)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>❌ GELMEDİ (-3 M, Seri Bozar)</button>
+                  <button onClick={() => saveData('yoklama', 't', pointsConfig.yoklama_takkeli)} className="premium-btn" style={{ background: '#d4af37', color: 'white', padding: '20px' }}>👳‍♂️ TAKKELİ (+{getCalculatedPoints(selectedStudent, pointsConfig.yoklama_takkeli, 'yoklama')} M)</button>
+                  <button onClick={() => saveData('yoklama', 'p', pointsConfig.yoklama_geldi)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>✅ GELDİ (+{getCalculatedPoints(selectedStudent, pointsConfig.yoklama_geldi, 'yoklama')} M)</button>
+                  <button onClick={() => saveData('yoklama', 'l', pointsConfig.yoklama_gec)} className="premium-btn" style={{ background: '#f59e0b', color: 'white', padding: '20px' }}>⏳ GEÇ (+{getCalculatedPoints(selectedStudent, pointsConfig.yoklama_gec, 'yoklama')} M)</button>
+                  <button onClick={() => saveData('yoklama', 'a', pointsConfig.yoklama_gelmedi)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>❌ GELMEDİ ({pointsConfig.yoklama_gelmedi} M, Seri Bozar)</button>
                 </>
               )}
               {currentModule === 'telefon' && (
-                <>
-                  <button onClick={() => saveData('telefon', 'p', 2)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>📱 TESLİM (+{getCalculatedPoints(selectedStudent, 2, 'telefon')} M)</button>
-                  <button onClick={() => saveData('telefon', 'e', 2)} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '20px' }}>📵 TELEFONU YOK (+{getCalculatedPoints(selectedStudent, 2, 'telefon')} M)</button>
-                  <button onClick={() => saveData('telefon', 'a', 0)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🚫 VERMEDİ (Seri Bozar)</button>
-                </>
+                <><button onClick={() => saveData('telefon', 'p', pointsConfig.telefon_teslim)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>📱 TESLİM (+{getCalculatedPoints(selectedStudent, pointsConfig.telefon_teslim, 'telefon')} M)</button><button onClick={() => saveData('telefon', 'e', pointsConfig.telefon_teslim)} className="premium-btn" style={{ background: '#3b82f6', color: 'white', padding: '20px' }}>📵 TELEFONU YOK (+{getCalculatedPoints(selectedStudent, pointsConfig.telefon_teslim, 'telefon')} M)</button><button onClick={() => saveData('telefon', 'a', pointsConfig.telefon_vermedi)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🚫 VERMEDİ ({pointsConfig.telefon_vermedi} M, Seri Bozar)</button></>
               )}
               {currentModule === 'yatak' && (
-                <>
-                  <button onClick={() => saveData('yatak', 'yatak', 1)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🛏️ YATAK DÜZENLİ (+{getCalculatedPoints(selectedStudent, 1, 'yatak')} M)</button>
-                  <button onClick={() => saveData('yatak', 'yatak', 0)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🕸️ YATAK BOZUK (Seri Bozar)</button>
-                  <button onClick={() => saveData('yatak', 'dolap', 1)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🚪 DOLAP DÜZENLİ (+{getCalculatedPoints(selectedStudent, 1, 'yatak')} M)</button>
-                  <button onClick={() => saveData('yatak', 'dolap', 0)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🏚️ DOLAP BOZUK (Seri Bozar)</button>
-                </>
+                <><button onClick={() => saveData('yatak', 'yatak', pointsConfig.yatak_duzenli)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🛏️ YATAK DÜZENLİ (+{getCalculatedPoints(selectedStudent, pointsConfig.yatak_duzenli, 'yatak')} M)</button><button onClick={() => saveData('yatak', 'yatak', pointsConfig.yatak_bozuk)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🕸️ YATAK BOZUK ({pointsConfig.yatak_bozuk} M, Seri Bozar)</button><button onClick={() => saveData('yatak', 'dolap', pointsConfig.dolap_duzenli)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '20px' }}>🚪 DOLAP DÜZENLİ (+{getCalculatedPoints(selectedStudent, pointsConfig.dolap_duzenli, 'yatak')} M)</button><button onClick={() => saveData('yatak', 'dolap', pointsConfig.dolap_bozuk)} className="premium-btn" style={{ background: '#ef4444', color: 'white', padding: '20px' }}>🏚️ DOLAP BOZUK ({pointsConfig.dolap_bozuk} M, Seri Bozar)</button></>
               )}
               <button onClick={() => { setSelectedStudent(null); setModalType(null); }} className="btn-iptal" style={{ marginTop: '10px' }}>İPTAL</button>
             </div>
@@ -1605,7 +1617,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                   if(window.confirm(`${selectedStudent} adlı öğrencinin ${modalType === 'deneme' ? 'Deneme' : 'Yazılı'} geçmişi tamamen silinecek. Onaylıyor musun?`)) {
                       db.ref(`mavikent_premium/exams/${selectedStudent}/${modalType}`).set(null);
                       setExamData({});
-                      alert('Geçmiş başarıyla temizlendi!');
+                      toast('Geçmiş başarıyla temizlendi!');
                   }
               }} style={{ position: 'absolute', top: '20px', right: '20px', background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5', padding: '8px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', transition: '0.2s' }}>🗑️ Geçmişi Sil</button>
 
