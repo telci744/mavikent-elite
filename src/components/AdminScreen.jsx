@@ -27,6 +27,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const [pointsDraft, setPointsDraft] = useState({});
   const [studentModal, setStudentModal] = useState(null);
   const [studentEdit, setStudentEdit] = useState({});
+  const [showStudentPassword, setShowStudentPassword] = useState(false);
 
   const [pointsConfig, setPointsConfig] = useState({
     okul_dondu: appData?.settings?.points_config?.okul_dondu ?? 10,
@@ -1993,6 +1994,7 @@ const renderStudentGrid = (students, type) => {
                   <div key={name} onClick={() => {
                     const creds = appData?.student_credentials?.[name] || {};
                     setStudentEdit({ username: creds.username || '', password: creds.password || '', recoveryPin: creds.recoveryPin || '', sinif, mcoin: String(coins) });
+                    setShowStudentPassword(false);
                     setStudentModal(name);
                   }} className="card-hover" style={{ background: 'white', borderRadius: '20px', padding: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.04)', border: elite ? '2px solid #d4af37' : '1.5px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.3s' }}>
                     <div style={{ fontSize: '22px', marginBottom: '8px' }}>{elite ? '👑' : '🎓'}</div>
@@ -2023,7 +2025,12 @@ const renderStudentGrid = (students, type) => {
                       </div>
                       <div>
                         <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', marginBottom: '6px' }}>ŞİFRE</div>
-                        <input type="password" value={studentEdit.password} onChange={e => setStudentEdit({...studentEdit, password: e.target.value})} className="elite-input" placeholder="Şifre" style={{ padding: '12px' }} />
+                        <div style={{ position: 'relative' }}>
+                          <input type={showStudentPassword ? 'text' : 'password'} value={studentEdit.password} onChange={e => setStudentEdit({...studentEdit, password: e.target.value})} className="elite-input" placeholder="Şifre" style={{ padding: '12px', paddingRight: '44px', width: '100%', boxSizing: 'border-box' }} />
+                          <button onClick={() => setShowStudentPassword(v => !v)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: '#64748b', padding: '4px', lineHeight: 1 }} title={showStudentPassword ? 'Gizle' : 'Göster'}>
+                            {showStudentPassword ? '🙈' : '👁️'}
+                          </button>
+                        </div>
                       </div>
                       <div>
                         <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', marginBottom: '6px' }}>SINIF</div>
@@ -2562,6 +2569,52 @@ const renderStudentGrid = (students, type) => {
                             </div>
                         </div>
                         <button onClick={savePins} className="premium-btn" style={{ width: '100%', background: '#0f172a', color: 'white', padding: '18px', fontSize: '16px' }}>🔒 ŞİFRELERİ GÜNCELLE</button>
+
+                        {/* Kayıtlı Hızlı Giriş Cihazları */}
+                        <div style={{ background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', border: '1.5px solid #e2e8f0', marginTop: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                                <span style={{ fontSize: '20px' }}>🪪</span>
+                                <div>
+                                    <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '15px' }}>Kayıtlı Hızlı Giriş Cihazları</div>
+                                    <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>Windows Hello / Biyometrik ile giriş yetkisi verilen cihazlar</div>
+                                </div>
+                            </div>
+                            {Object.keys(appData?.settings?.trusted_devices || {}).length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: '13px', fontWeight: 600 }}>
+                                    <div style={{ fontSize: '28px', marginBottom: '8px' }}>📭</div>
+                                    Henüz kayıtlı cihaz yok
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {Object.entries(appData?.settings?.trusted_devices || {}).map(([id, device]) => (
+                                        <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                <div style={{ width: '36px', height: '36px', background: device.role === 'admin' ? '#fffbeb' : '#f0fdfa', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
+                                                    {device.role === 'admin' ? '👑' : '👔'}
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '13px' }}>{device.deviceName}</div>
+                                                    <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
+                                                        {device.role === 'admin' ? 'Yönetici' : 'Personel'} · {device.registeredAt}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={async () => {
+                                                    if (window.confirm('Bu cihazın hızlı giriş yetkisini kaldırmak istiyor musunuz?')) {
+                                                        await db.ref(`mavikent_premium/settings/trusted_devices/${id}`).remove();
+                                                        toast('✅ Cihaz listeden kaldırıldı.');
+                                                    }
+                                                }}
+                                                style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '8px', padding: '6px 14px', fontWeight: 800, cursor: 'pointer', fontSize: '12px', flexShrink: 0 }}
+                                            >
+                                                Kaldır
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 ) : adminSettingsView === 'points' ? (
                     <div className="fade-in" style={{ maxWidth: '700px', margin: '0 auto' }}>

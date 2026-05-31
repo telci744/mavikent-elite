@@ -7,6 +7,47 @@ import Toast from './Toast.jsx';
 import { generateSecret, generateURI, verifySync } from 'otplib';
 import QRCode from 'qrcode';
 
+// WebAuthn yardımcı fonksiyonlar
+const bufferToBase64url = (buffer) => {
+  const bytes = new Uint8Array(buffer);
+  let str = '';
+  for (const byte of bytes) str += String.fromCharCode(byte);
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+};
+
+const base64urlToBuffer = (base64url) => {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
+  const str = atob(padded);
+  const buffer = new ArrayBuffer(str.length);
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i);
+  return buffer;
+};
+
+const getDeviceName = () => {
+  const ua = navigator.userAgent;
+  let os = 'Bilinmeyen OS';
+  if (ua.includes('Windows NT')) os = 'Windows';
+  else if (ua.includes('Macintosh')) os = 'macOS';
+  else if (ua.includes('iPhone')) os = 'iPhone';
+  else if (ua.includes('iPad')) os = 'iPad';
+  else if (ua.includes('Android')) os = 'Android';
+  else if (ua.includes('Linux')) os = 'Linux';
+  let browser = 'Tarayıcı';
+  if (ua.includes('Edg/')) browser = 'Edge';
+  else if (ua.includes('OPR/') || ua.includes('Opera')) browser = 'Opera';
+  else if (ua.includes('Chrome/')) browser = 'Chrome';
+  else if (ua.includes('Firefox/')) browser = 'Firefox';
+  else if (ua.includes('Safari/') && !ua.includes('Chrome')) browser = 'Safari';
+  return `${browser} / ${os}`;
+};
+
+const getBiometricCred = (role) => {
+  try { return JSON.parse(localStorage.getItem(`mavikent_biometric_${role}`) || 'null'); }
+  catch { return null; }
+};
+
 const App = () => {
   const [appData, setAppData] = useState(null);
   const [role, setRole] = useState(null);
@@ -31,6 +72,7 @@ const App = () => {
   const [setupQrUrl, setSetupQrUrl] = useState('');
   const [setupSecret, setSetupSecret] = useState('');
   const [setupConfirmCode, setSetupConfirmCode] = useState('');
+  const webAuthnSupported = typeof window !== 'undefined' && !!window.PublicKeyCredential;
 
   // Veritabanını Dinle
   useEffect(() => {
@@ -127,13 +169,14 @@ const App = () => {
       if (result?.valid) {
         const path = pendingRole === 'admin' ? 'settings/admin_totp_secret' : 'settings/staff_totp_secret';
         db.ref(`mavikent_premium/${path}`).set(setupSecret).then(() => {
-          setRole(pendingRole);
-          setLoginMode('select');
-          setLoginStep('pin');
           setSetupSecret('');
           setSetupQrUrl('');
           setSetupConfirmCode('');
-          setPendingRole(null);
+          if (webAuthnSupported && !getBiometricCred(pendingRole)) {
+            setLoginStep('biometric_offer');
+          } else {
+            completeLogin(pendingRole);
+          }
         });
       } else {
         alert('❌ Hatalı kod! Google Authenticator\'dan güncel 6 haneli kodu girin.');
@@ -155,11 +198,12 @@ const App = () => {
     try {
       const result = verifySync({ token: totpInput, secret: secretKey, type: 'totp' });
       if (result?.valid) {
-        setRole(pendingRole);
-        setLoginMode('select');
-        setLoginStep('pin');
         setTotpInput('');
-        setPendingRole(null);
+        if (webAuthnSupported && !getBiometricCred(pendingRole)) {
+          setLoginStep('biometric_offer');
+        } else {
+          completeLogin(pendingRole);
+        }
       } else {
         alert('❌ Hatalı kod! Google Authenticator\'dan güncel kodu girin.');
         setTotpInput('');
@@ -176,6 +220,90 @@ const App = () => {
     setSetupSecret('');
     setSetupQrUrl('');
     setSetupConfirmCode('');
+  };
+
+  const completeLogin = (role) => {
+    setRole(role);
+    setLoginMode('select');
+    setLoginStep('pin');
+    setPendingRole(null);
+    setTotpInput('');
+    setSetupSecret('');
+    setSetupQrUrl('');
+    setSetupConfirmCode('');
+  };
+
+  const handleBiometricRegister = async () => {
+    const role = pendingRole;
+    try {
+      const challenge = new Uint8Array(32);
+      crypto.getRandomValues(challenge);
+      const userId = new TextEncoder().encode(`mavikent-${role}-${Date.now()}`);
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: appData?.settings?.org_name || 'Mavikent', id: window.location.hostname },
+          user: { id: userId, name: role === 'admin' ? 'Yönetici' : 'Personel', displayName: role === 'admin' ? 'Yönetici' : 'Personel' },
+          pubKeyCredParams: [{ alg: -7, type: 'public-key' }, { alg: -257, type: 'public-key' }],
+          authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+          timeout: 60000,
+        }
+      });
+      if (credential) {
+        const credentialId = bufferToBase64url(credential.rawId);
+        const deviceName = getDeviceName();
+        const registeredAt = new Date().toLocaleString('tr-TR');
+        const deviceRef = db.ref('mavikent_premium/settings/trusted_devices').push();
+        await deviceRef.set({ role, deviceName, registeredAt, credentialId });
+        localStorage.setItem(`mavikent_biometric_${role}`, JSON.stringify({ credentialId, deviceId: deviceRef.key }));
+        completeLogin(role);
+      }
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        // Kullanıcı iptal etti
+        completeLogin(role);
+      } else if (err.name === 'NotSupportedError' || err.name === 'InvalidStateError' || err.message?.includes('platform')) {
+        alert('Bu cihazda Windows Hello / biyometrik giriş kurulu değil.\nAyarlar → Hesaplar → Windows Hello\'dan PIN veya parmak izi ekleyebilirsiniz.\nŞimdi normal girişle devam ediliyor.');
+        completeLogin(role);
+      } else {
+        alert('Cihaz kaydedilemedi: ' + err.message + '\nNormal girişle devam ediliyor.');
+        completeLogin(role);
+      }
+    }
+  };
+
+  const skipBiometricOffer = () => completeLogin(pendingRole);
+
+  const handleBiometricLogin = async (role) => {
+    const cred = getBiometricCred(role);
+    if (!cred) return;
+    try {
+      const challenge = new Uint8Array(32);
+      crypto.getRandomValues(challenge);
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          rpId: window.location.hostname,
+          allowCredentials: [{ id: base64urlToBuffer(cred.credentialId), type: 'public-key', transports: ['internal'] }],
+          userVerification: 'required',
+          timeout: 60000,
+        }
+      });
+      if (assertion) {
+        const snapshot = await db.ref(`mavikent_premium/settings/trusted_devices/${cred.deviceId}`).once('value');
+        if (snapshot.val()) {
+          setRole(role);
+          setLoginMode('select');
+        } else {
+          localStorage.removeItem(`mavikent_biometric_${role}`);
+          alert('Bu cihaz yetkili listesinden kaldırılmış. Lütfen PIN ile giriş yapın.');
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'NotAllowedError') {
+        alert('Biyometrik doğrulama başarısız: ' + err.message);
+      }
+    }
   };
 
   const handleStudentLogin = () => {
@@ -282,6 +410,10 @@ const App = () => {
 
         .totp-input { background: #f8fafc; border: 2px solid #e2e8f0; color: #0f172a; padding: 18px; border-radius: 16px; font-size: 28px; width: 100%; text-align: center; letter-spacing: 12px; font-weight: 900; transition: all 0.3s; }
         .totp-input:focus { border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99,102,241,0.15); background: #fff; }
+
+        .btn-biometric { background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%); color: white; padding: 16px 24px; border-radius: 16px; font-weight: 900; border: none; cursor: pointer; width: 100%; font-size: 15px; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 8px 20px -5px rgba(99,102,241,0.4); margin-bottom: 10px; }
+        .btn-biometric:hover { transform: translateY(-2px); box-shadow: 0 12px 25px -5px rgba(99,102,241,0.5); }
+        .btn-biometric:active { transform: scale(0.97); }
       `}</style>
 
       <div className="popIn-anim" style={{ width: '100%', maxWidth: '440px', textAlign: 'center' }}>
@@ -351,6 +483,11 @@ const App = () => {
             >
               DEVAM ET
             </button>
+            {webAuthnSupported && getBiometricCred(loginMode) && (
+              <button onClick={() => handleBiometricLogin(loginMode)} className="btn-biometric" style={{ marginTop: '12px' }}>
+                🪪 Windows Hello / Biyometrik ile Hızlı Giriş
+              </button>
+            )}
             <button
               onClick={() => { setLoginMode('select'); setPinInput(''); setLoginStep('pin'); }}
               className="btn-back"
@@ -394,6 +531,25 @@ const App = () => {
               KURULUMU TAMAMLA
             </button>
             <button onClick={cancel2fa} className="btn-back">İptal</button>
+          </div>
+        )}
+
+        {/* BİYOMETRİK KAYIT TEKLİFİ */}
+        {loginStep === 'biometric_offer' && (
+          <div className="popIn-anim" style={{ background: 'white', padding: '40px', borderRadius: '32px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', border: '1px solid rgba(226,232,240,0.6)' }}>
+            <div style={{ fontSize: '50px', marginBottom: '15px' }}>🪪</div>
+            <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0f172a', margin: '0 0 8px 0' }}>Hızlı Giriş Kur</h2>
+            <p style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600, margin: '0 0 20px 0', lineHeight: 1.7 }}>
+              Bir sonraki girişten itibaren {pendingRole === 'admin' ? 'Yönetici' : 'Personel'} paneline<br />
+              <strong style={{ color: '#6366f1' }}>Windows Hello / Parmak İzi / Yüz Tanıma</strong> ile<br />
+              tek tıkla girebilirsiniz. Authenticator'a gerek kalmaz.
+            </p>
+            <button onClick={handleBiometricRegister} className="btn-biometric">
+              🪪 Bu Cihazı Kaydet
+            </button>
+            <button onClick={skipBiometricOffer} className="btn-back">
+              Şimdi Değil
+            </button>
           </div>
         )}
 
