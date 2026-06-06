@@ -8,7 +8,6 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const [dashboardView, setDashboardView] = useState('main'); 
   const [currentModule, setCurrentModule] = useState(null); 
   
-  const [hygieneTab, setHygieneTab] = useState('wc'); 
   const [hygieneForm, setHygieneForm] = useState({ areaId: '', score: 5, note: '' });
   const [generalCleaningList, setGeneralCleaningList] = useState({}); 
   const [isHygieneSaving, setIsHygieneSaving] = useState(false);
@@ -17,6 +16,21 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const [roomEditMode, setRoomEditMode] = useState(false);
   const [tempRoomData, setTempRoomData] = useState({});
   const [roomForm, setRoomForm] = useState({ areaId: '', score: 5, note: '' });
+
+  const [adminHygSection, setAdminHygSection] = useState(null);
+  const [adminHygFloor, setAdminHygFloor] = useState(null);
+  const [adminHygAreaId, setAdminHygAreaId] = useState(null);
+  const [adminHygScore, setAdminHygScore] = useState(5);
+  const [adminHygEditMode, setAdminHygEditMode] = useState(false);
+  const [adminHygNewArea, setAdminHygNewArea] = useState({ name: '', type: 'genel' });
+
+  const [istirahatSelectedRoom, setIstirahatSelectedRoom] = useState(null);
+  const [istirahatScore, setIstirahatScore] = useState(5);
+  const [isIstirahatSaving, setIsIstirahatSaving] = useState(false);
+  const [istirahatNote, setIstirahatNote] = useState('');
+  const [istirahatView, setIstirahatView] = useState(null);
+  const [istirahatEditMode, setIstirahatEditMode] = useState(false);
+  const [tempIstirahatRooms, setTempIstirahatRooms] = useState({});
 
   const [corporateIdentity, setCorporateIdentity] = useState({
     logoUrl: appData?.settings?.corporate_logo_url || '',
@@ -42,6 +56,16 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     yatak_bozuk: appData?.settings?.points_config?.yatak_bozuk ?? 0,
     dolap_duzenli: appData?.settings?.points_config?.dolap_duzenli ?? 1,
     dolap_bozuk: appData?.settings?.points_config?.dolap_bozuk ?? 0,
+    hygiene_star_5: appData?.settings?.points_config?.hygiene_star_5 ?? 30,
+    hygiene_star_4: appData?.settings?.points_config?.hygiene_star_4 ?? 20,
+    hygiene_star_3: appData?.settings?.points_config?.hygiene_star_3 ?? 10,
+    hygiene_star_2: appData?.settings?.points_config?.hygiene_star_2 ?? -30,
+    hygiene_star_1: appData?.settings?.points_config?.hygiene_star_1 ?? -60,
+    istirahat_star_5: appData?.settings?.points_config?.istirahat_star_5 ?? 30,
+    istirahat_star_4: appData?.settings?.points_config?.istirahat_star_4 ?? 20,
+    istirahat_star_3: appData?.settings?.points_config?.istirahat_star_3 ?? 10,
+    istirahat_star_2: appData?.settings?.points_config?.istirahat_star_2 ?? -30,
+    istirahat_star_1: appData?.settings?.points_config?.istirahat_star_1 ?? -60,
   });
 
   const handleLogoUpload = (e) => {
@@ -105,6 +129,10 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
       items: [{ key: 'yoklama_takkeli', label: 'Takkeli', icon: '👳‍♂️' }, { key: 'yoklama_geldi', label: 'Geldi', icon: '✅' }, { key: 'yoklama_gec', label: 'Geç', icon: '⏳' }, { key: 'yoklama_gelmedi', label: 'Gelmedi', icon: '❌' }] },
     { id: 'yatak', icon: '🛏️', label: 'Yatak & Dolap', desc: 'Sabah oda düzeni', color: '#8b5cf6', bg: '#faf5ff',
       items: [{ key: 'yatak_duzenli', label: 'Yatak Düzenli', icon: '✅' }, { key: 'yatak_bozuk', label: 'Yatak Bozuk', icon: '❌' }, { key: 'dolap_duzenli', label: 'Dolap Düzenli', icon: '✅' }, { key: 'dolap_bozuk', label: 'Dolap Bozuk', icon: '❌' }] },
+    { id: 'hygiene_stars', icon: '🧹', label: 'Hijyen Denetimi', desc: 'Yıldız puanları → M-Coin', color: '#06b6d4', bg: '#ecfeff',
+      items: [{ key: 'hygiene_star_5', label: '5 Yıldız ⭐⭐⭐⭐⭐', icon: '⭐' }, { key: 'hygiene_star_4', label: '4 Yıldız ⭐⭐⭐⭐', icon: '⭐' }, { key: 'hygiene_star_3', label: '3 Yıldız ⭐⭐⭐', icon: '⭐' }, { key: 'hygiene_star_2', label: '2 Yıldız ⭐⭐', icon: '⭐' }, { key: 'hygiene_star_1', label: '1 Yıldız ⭐', icon: '⭐' }] },
+    { id: 'istirahat_stars', icon: '🛌', label: 'İstirahat Denetimi', desc: 'Yıldız puanları → M-Coin', color: '#10b981', bg: '#f0fdf4',
+      items: [{ key: 'istirahat_star_5', label: '5 Yıldız ⭐⭐⭐⭐⭐', icon: '⭐' }, { key: 'istirahat_star_4', label: '4 Yıldız ⭐⭐⭐⭐', icon: '⭐' }, { key: 'istirahat_star_3', label: '3 Yıldız ⭐⭐⭐', icon: '⭐' }, { key: 'istirahat_star_2', label: '2 Yıldız ⭐⭐', icon: '⭐' }, { key: 'istirahat_star_1', label: '1 Yıldız ⭐', icon: '⭐' }] },
   ];
 
   const openPointsModal = (catId) => {
@@ -141,13 +169,116 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
     }
   }, [appData?.hygiene_assignments, appData?.roster]);
 
-  const getCoinImpact = (score) => {
-      if (score === 5) return 30;
-      if (score === 4) return 20;
-      if (score === 3) return 10;
-      if (score === 2) return -30;
-      if (score === 1) return -60;
-      return 0;
+  const getCoinImpact = (score, type = 'hygiene') => {
+      const prefix = type === 'istirahat' ? 'istirahat_star_' : 'hygiene_star_';
+      const defaults = { 5: 30, 4: 20, 3: 10, 2: -30, 1: -60 };
+      const val = pointsConfig[`${prefix}${score}`];
+      return val !== undefined ? val : (defaults[score] ?? 0);
+  };
+
+  const autoAssignRecoveryMission = async (studentName) => {
+      const existing = appData?.kurtarma_gorevleri?.[studentName];
+      if (existing && existing.status !== 'tamamlandi') {
+          if (existing.status === 'reddedildi' && existing.rejected_at && Date.now() - existing.rejected_at < 12 * 60 * 60 * 1000) return;
+          if (existing.status !== 'reddedildi') return;
+      }
+      const starReward = { 1: 80, 2: 60, 3: 40, 4: 20 };
+      const todayStart = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+      const failedAreas = Object.values(appData?.hygiene_logs || {})
+          .filter(l => l.timestamp >= todayStart && l.score < 5 && (l.responsibles || []).includes(studentName))
+          .map(l => ({ name: l.areaName, type: l.type || 'genel', score: l.score, reward: starReward[l.score] || 20 }));
+      let missionAreas = failedAreas;
+      let totalReward = missionAreas.reduce((s, a) => s + a.reward, 0);
+      // Denetim yoksa → sorumlu alanlarından birini 40 coin ile ata
+      if (missionAreas.length === 0) {
+          const floors = appData?.hygiene_floors || {};
+          const responsible = [];
+          ['rutin','temizlik'].forEach(sec => {
+              ['kat2','kat3','kat4'].forEach(fl => {
+                  Object.entries(floors[sec]?.[fl]?.areas || {}).forEach(([,a]) => {
+                      if ((a.responsibles || []).includes(studentName)) responsible.push({ name: a.name, type: a.type || 'genel', reward: 40 });
+                  });
+              });
+          });
+          missionAreas = responsible.slice(0, 1);
+          totalReward = 40;
+      }
+      if (missionAreas.length === 0) { missionAreas = [{ name: 'Genel Temizlik Görevi', type: 'genel', reward: 40 }]; totalReward = 40; }
+      await db.ref(`mavikent_premium/kurtarma_gorevleri/${studentName}`).set({
+          status: 'bekliyor',
+          assigned_at: Date.now(),
+          reward_coins: totalReward,
+          areas: missionAreas,
+      });
+  };
+
+  const FLOOR_AREA_TYPES = {
+      wc:        { icon: '🚽', label: 'WC / Tuvalet',   color: '#0ea5e9', bg: '#f0f9ff' },
+      etut:      { icon: '📚', label: 'Etüt Salonu',    color: '#8b5cf6', bg: '#faf5ff' },
+      yatakhane: { icon: '🛏️', label: 'Yatakhane',      color: '#10b981', bg: '#f0fdf4' },
+      genel:     { icon: '🧹', label: 'Genel Temizlik', color: '#f59e0b', bg: '#fffbeb' },
+  };
+
+  const saveAdminFloorInspection = async (section, floorKey, areaId) => {
+      const area = appData?.hygiene_floors?.[section]?.[floorKey]?.areas?.[areaId];
+      if (!area) return toast('Alan bulunamadı!');
+      const responsibles = area.responsibles || [];
+      if (responsibles.length === 0) return toast('Bu alanda sorumlu öğrenci yok!');
+      const todayMidnight = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+      const alreadyDone = Object.values(appData?.hygiene_logs || {}).some(
+          l => l.areaName === area.name && l.section === section && l.floor === floorKey && l.timestamp >= todayMidnight
+      );
+      if (alreadyDone) return toast(`⚠️ ${area.name} bugün zaten denetlendi.`);
+      setIsHygieneSaving(true);
+      const coinImpact = getCoinImpact(adminHygScore);
+      const updates = {};
+      const logId = `floor_${Date.now()}`;
+      const sectionLabel = section === 'rutin' ? 'Rutin' : 'Temizlik';
+      updates[`hygiene_logs/${logId}`] = {
+          areaName: area.name, score: adminHygScore,
+          responsibles, timestamp: Date.now(), inspector: 'Yönetici',
+          coinImpact, type: area.type, floor: floorKey, section,
+      };
+      responsibles.forEach(name => {
+          updates[`wallet/${name}`] = (Number(appData?.wallet?.[name]) || 0) + coinImpact;
+          updates[`transactions/${name}/txn_${logId}`] = {
+              desc: `${area.name} ${sectionLabel} Denetimi`, amt: coinImpact,
+              date: new Date().toLocaleString('tr-TR'),
+          };
+      });
+      try {
+          await db.ref('mavikent_premium').update(updates);
+          for (const sid of responsibles) {
+              const newBal = (Number(appData?.wallet?.[sid]) || 0) + coinImpact;
+              if (newBal < 50) autoAssignRecoveryMission(sid);
+          }
+          toast(`✅ ${area.name} denetimi kaydedildi!`);
+          setAdminHygScore(5);
+          setAdminHygAreaId(null);
+      } catch(e) { toast('Hata!'); } finally { setIsHygieneSaving(false); }
+  };
+
+  const addAdminFloorArea = async (section, floorKey) => {
+      if (!adminHygNewArea.name.trim()) return toast('Alan adı girin!');
+      const areaId = `area_${Date.now()}`;
+      await db.ref(`mavikent_premium/hygiene_floors/${section}/${floorKey}/areas/${areaId}`).set({
+          name: adminHygNewArea.name.trim(),
+          type: adminHygNewArea.type,
+          responsibles: [],
+      });
+      toast('✅ Alan eklendi!');
+      setAdminHygNewArea({ name: '', type: 'genel' });
+  };
+
+  const deleteAdminFloorArea = async (section, floorKey, areaId, areaName) => {
+      if (!window.confirm(`"${areaName}" alanını silmek istediğine emin misin?`)) return;
+      await db.ref(`mavikent_premium/hygiene_floors/${section}/${floorKey}/areas/${areaId}`).remove();
+      if (adminHygAreaId === areaId) setAdminHygAreaId(null);
+      toast('Alan silindi.');
+  };
+
+  const updateAreaResponsibles = async (section, floorKey, areaId, newResponsibles) => {
+      await db.ref(`mavikent_premium/hygiene_floors/${section}/${floorKey}/areas/${areaId}/responsibles`).set(newResponsibles.filter(Boolean));
   };
 
   const saveInspection = async () => {
@@ -174,6 +305,10 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
       try {
           await db.ref('mavikent_premium').update(updates);
+          for (const sid of responsibles) {
+              const newBal = (Number(appData?.wallet?.[sid]) || 0) + coinImpact;
+              if (newBal < 50) autoAssignRecoveryMission(sid);
+          }
           toast(`✅ Denetim kaydedildi! ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
           setHygieneForm({ areaId: '', score: 5, note: '' });
       } catch (e) { toast("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
@@ -264,9 +399,65 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
 
       try {
           await db.ref('mavikent_premium').update(updates);
+          for (const sid of responsibles) {
+              const newBal = (Number(appData?.wallet?.[sid]) || 0) + coinImpact;
+              if (newBal < 50) autoAssignRecoveryMission(sid);
+          }
           toast(`✅ Oda denetimi kaydedildi! Odadaki öğrencilere ${coinImpact > 0 ? '+' : ''}${coinImpact} M-Coin yansıtıldı.`);
           setRoomForm({ areaId: '', score: 5, note: '' });
       } catch (e) { toast("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
+  };
+
+  const openIstirahatEditMode = () => {
+      const initial = {};
+      for (let i = 1; i <= 6; i++) {
+          const key = `ist_room_${i}`;
+          const existing = appData?.istirahat_rooms?.[key] || { name: `Yatakhane ${i}`, responsibles: [] };
+          initial[key] = { ...existing, responsibles: (existing.responsibles || []).filter(s => roster.includes(s)) };
+      }
+      setTempIstirahatRooms(initial);
+      setIstirahatEditMode(true);
+  };
+
+  const saveIstirahatRooms = async () => {
+      try {
+          await db.ref('mavikent_premium/istirahat_rooms').set(tempIstirahatRooms);
+          toast('✅ Yatakhaneler kaydedildi!');
+          setIstirahatEditMode(false);
+      } catch(e) { toast('Hata!'); }
+  };
+
+  const saveIstirahatInspection = async (roomKey) => {
+      const room = appData?.istirahat_rooms?.[roomKey] || { name: `Yatakhane ${roomKey.replace('ist_room_','')}`, responsibles: [] };
+      const responsibles = room.responsibles || [];
+      if (responsibles.length === 0) return toast('Bu odada kayıtlı öğrenci yok!');
+      setIsIstirahatSaving(true);
+      const coinImpact = getCoinImpact(istirahatScore);
+      const updates = {};
+      const logId = `ist_${Date.now()}`;
+      updates[`istirahat_logs/${logId}`] = {
+          roomName: room.name, roomKey,
+          responsibles, score: istirahatScore, note: istirahatNote,
+          timestamp: Date.now(), inspector: 'Yönetici', coinImpact,
+      };
+      responsibles.forEach(name => {
+          updates[`wallet/${name}`] = (Number(appData?.wallet?.[name]) || 0) + coinImpact;
+          updates[`transactions/${name}/txn_${logId}`] = {
+              desc: `${room.name} İstirahat Kontrol`, amt: coinImpact,
+              date: new Date().toLocaleString('tr-TR'),
+          };
+      });
+      try {
+          await db.ref('mavikent_premium').update(updates);
+          for (const sid of responsibles) {
+              const newBal = (Number(appData?.wallet?.[sid]) || 0) + coinImpact;
+              if (newBal < 50) autoAssignRecoveryMission(sid);
+          }
+          toast(`✅ ${room.name} kontrolü kaydedildi!`);
+          setIstirahatSelectedRoom(null);
+          setIstirahatScore(5);
+          setIstirahatNote('');
+      } catch(e) { toast('Hata!'); } finally { setIsIstirahatSaving(false); }
   };
 
   const [selectedSession, setSelectedSession] = useState(''); 
@@ -1192,16 +1383,15 @@ const renderStudentGrid = (students, type) => {
         {!currentModule && (
           <div className="premium-grid">
 {dashboardView === 'main' && [
-              { id: 'egitim', icon: '📚', label: 'EĞİTİM KONTROL' }, 
-              { id: 'degerler', icon: '🕌', label: 'DAHİLİ DERS & DEĞERLER' },
               { id: 'isleyis', icon: '⚙️', label: 'YURT İŞLEYİŞ' },
+              { id: 'egitim', icon: '📚', label: 'EĞİTİM KONTROL' },
+              { id: 'degerler', icon: '🕌', label: 'DAHİLİ DERS & DEĞERLER' },
+              { id: 'hygiene', icon: '✨', label: 'HİJYEN DENETİM', bg: '#f0fdf4' },
               { id: 'turnuva', icon: '🎮', label: 'OYUN ODASI & TURNUVA' },
-              { id: 'yonetim', icon: '👑', label: 'SİSTEM YÖNETİMİ' },
-              { id: 'admin_custom_slot', icon: '⏰', label: 'Özel Seans Ekle' },
-              { id: 'hygiene', icon: '✨', label: 'HİJYEN DENETİM', bg: '#f0fdf4' }
+              { id: 'yonetim', icon: '👑', label: 'SİSTEM YÖNETİMİ' }
             ].map(mod => (
               <div key={mod.id} onClick={() => {
-                  if (mod.id === 'admin_custom_slot' || mod.id === 'hygiene') setCurrentModule(mod.id);
+                  if (mod.id === 'hygiene') setCurrentModule(mod.id);
                   else setDashboardView(mod.id);
               }} className="premium-card card-hover" style={{ background: mod.bg || 'white' }}>
                 <div className="icon">{mod.icon}</div><div className="label">{mod.label}</div>
@@ -1218,7 +1408,8 @@ const renderStudentGrid = (students, type) => {
 
 {dashboardView === 'turnuva' && [
                 { id: 'admin_ban', icon: '🕵️‍♂️', label: 'Oyun Odası Denetim Merkezi' },
-                { id: 'admin_turnuva', icon: '🏆', label: 'Turnuva Organizasyonu' }
+                { id: 'admin_turnuva', icon: '🏆', label: 'Turnuva Organizasyonu' },
+                { id: 'admin_custom_slot', icon: '⏰', label: 'Özel Seans Ekle' }
             ].map(mod => (
                 <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
             ))}
@@ -1240,9 +1431,10 @@ const renderStudentGrid = (students, type) => {
               { id: 'telefon', icon: '📱', label: 'Telefon' }, 
               { id: 'yatak', icon: '🛏️', label: 'Yatak / Dolap' }, 
               { id: 'tutanak', icon: '⚖️', label: 'Tutanak / Ceza' },
-              { id: 'devamsizlik', icon: '📉', label: 'Devamsızlık' }
+              { id: 'devamsizlik', icon: '📉', label: 'Devamsızlık' },
+              { id: 'istirahat', icon: '🛌', label: 'İstirahat Kontrol', bg: '#f0fdf4' }
             ].map(mod => (
-              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
+              <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover" style={{ background: mod.bg || 'white' }}><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
             ))}
             
             {dashboardView === 'yonetim' && [ 
@@ -2744,280 +2936,500 @@ const renderStudentGrid = (students, type) => {
         )}
 
       </div> 
-{/* --- HİJYEN DENETİM MERKEZİ (PREMIUM TASARIM) --- */}
-        {currentModule === 'hygiene' && (
-            <div className="fade-in" style={{ animation: 'fadeIn 0.4s ease-out' }}>
-                
-                {/* ŞIK ÜST SEKME MENÜSÜ */}
-                <div className="clean-scroll" style={{ display: 'flex', gap: '10px', overflowX: 'auto', background: 'white', padding: '12px', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.03)', marginBottom: '25px', border: '1px solid #f1f5f9' }}>
-                    <button onClick={() => setHygieneTab('wc')} style={{ flexShrink: 0, padding: '14px 24px', borderRadius: '16px', border: 'none', background: hygieneTab === 'wc' ? '#0ea5e9' : 'transparent', color: hygieneTab === 'wc' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '18px' }}>🚽</span> WC Paneli
-                    </button>
-                    <button onClick={() => setHygieneTab('general')} style={{ flexShrink: 0, padding: '14px 24px', borderRadius: '16px', border: 'none', background: hygieneTab === 'general' ? '#10b981' : 'transparent', color: hygieneTab === 'general' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '18px' }}>🧹</span> Temizlik Kontrol
-                    </button>
-                    <button onClick={() => setHygieneTab('rooms')} style={{ flexShrink: 0, padding: '14px 24px', borderRadius: '16px', border: 'none', background: hygieneTab === 'rooms' ? '#8b5cf6' : 'transparent', color: hygieneTab === 'rooms' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '18px' }}>🛏️</span> Oda Düzeni
-                    </button>
-                    <button onClick={() => setHygieneTab('history')} style={{ flexShrink: 0, padding: '14px 24px', borderRadius: '16px', border: 'none', background: hygieneTab === 'history' ? '#f59e0b' : 'transparent', color: hygieneTab === 'history' ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '18px' }}>📜</span> Geçmiş
-                    </button>
-                </div>
+{/* --- HİJYEN DENETİM MERKEZİ --- */}
+        {currentModule === 'hygiene' && (() => {
+            const FLOORS = [
+                { key: 'kat2', label: 'Kat 2', icon: '2️⃣', color: '#0ea5e9', bg: '#e0f2fe' },
+                { key: 'kat3', label: 'Kat 3', icon: '3️⃣', color: '#8b5cf6', bg: '#ede9fe' },
+                { key: 'kat4', label: 'Kat 4', icon: '4️⃣', color: '#10b981', bg: '#d1fae5' },
+            ];
+            const allLogs    = Object.values(appData?.hygiene_logs || {});
+            const todayStart = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+            const missions   = appData?.kurtarma_gorevleri || {};
+            const mEntries   = Object.entries(missions);
+            const pendingM   = mEntries.filter(([,m]) => m.status === 'talep_edildi');
+            const waitingM   = mEntries.filter(([,m]) => m.status === 'bekliyor');
+            const doneM      = mEntries.filter(([,m]) => m.status === 'tamamlandi').slice(0,10);
 
-                {/* 1. PANEL: WC DENETİM */}
-                {hygieneTab === 'wc' && (
-                    <div className="fade-in" style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 10px 40px rgba(15,23,42,0.04)', border: '1px solid #f8fafc' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px', flexWrap: 'wrap', gap: '15px' }}>
+            const rutinTotal  = FLOORS.reduce((t,f) => t + Object.keys(appData?.hygiene_floors?.rutin?.[f.key]?.areas||{}).length, 0);
+            const temizTotal  = FLOORS.reduce((t,f) => t + Object.keys(appData?.hygiene_floors?.temizlik?.[f.key]?.areas||{}).length, 0);
+            const rutinToday  = allLogs.filter(l => l.section === 'rutin'    && l.timestamp >= todayStart).length;
+            const temizToday  = allLogs.filter(l => l.section === 'temizlik' && l.timestamp >= todayStart).length;
+            const totalToday  = rutinToday + temizToday;
+            const totalAll    = rutinTotal + temizTotal;
+            const totalPct    = totalAll > 0 ? Math.round(totalToday / totalAll * 100) : 0;
+
+            const approveMission = async (name) => {
+                const m = missions[name]; if (!m) return;
+                const reward = m.reward_coins || 40;
+                const upd = {};
+                upd[`wallet/${name}`] = (Number(appData?.wallet?.[name])||0) + reward;
+                upd[`transactions/${name}/txn_rec_${Date.now()}`] = { desc: 'Kurtarma Görevi Tamamlandı', amt: reward, date: new Date().toLocaleString('tr-TR') };
+                upd[`kurtarma_gorevleri/${name}/status`] = 'tamamlandi';
+                upd[`kurtarma_gorevleri/${name}/completed_at`] = Date.now();
+                await db.ref('mavikent_premium').update(upd);
+                toast(`✅ ${name} onaylandı! +${reward} M-Coin`);
+            };
+            const rejectMission = async (name) => {
+                await db.ref(`mavikent_premium/kurtarma_gorevleri/${name}`).update({ status: 'reddedildi', rejected_at: Date.now() });
+                toast('Görev reddedildi. Öğrenci 12 saat sonra tekrar alabilir.');
+            };
+
+            // ── Level 3: Puanlama formu ──
+            if (adminHygSection && adminHygSection !== 'gorevler' && adminHygFloor && adminHygAreaId) {
+                const area  = appData?.hygiene_floors?.[adminHygSection]?.[adminHygFloor]?.areas?.[adminHygAreaId];
+                const atype = FLOOR_AREA_TYPES[area?.type] || FLOOR_AREA_TYPES.genel;
+                const sColor = adminHygSection === 'rutin' ? '#0ea5e9' : '#10b981';
+                return (
+                    <div className="fade-in" style={{ background: 'white', borderRadius: '28px', overflow: 'hidden', boxShadow: '0 8px 40px rgba(15,23,42,0.08)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '20px 28px', background: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
+                            <button onClick={() => setAdminHygAreaId(null)} style={{ background: 'white', border: '1.5px solid #e2e8f0', color: '#64748b', borderRadius: '12px', padding: '9px 16px', fontWeight: 900, cursor: 'pointer', fontSize: '13px' }}>← Geri</button>
+                            <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: atype.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>{atype.icon}</div>
                             <div>
-                                <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a', fontSize: '22px' }}>WC Denetim Paneli</h3>
-                                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, marginTop: '4px' }}>Denetlemek istediğiniz alanı şık kartlardan seçin.</div>
+                                <div style={{ fontWeight: 900, fontSize: '17px', color: '#0f172a' }}>{area?.name}</div>
+                                <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>{(area?.responsibles||[]).join(', ') || 'Sorumlu atanmamış'}</div>
                             </div>
-                            <button onClick={wcEditMode ? saveWcAssignments : openWcEditMode} className="premium-btn" style={{ background: wcEditMode ? '#10b981' : '#f1f5f9', color: wcEditMode ? 'white' : '#0ea5e9', padding: '12px 20px', fontSize: '13px', border: `1px solid ${wcEditMode ? '#10b981' : '#e0f2fe'} !important` }}>
-                                {wcEditMode ? '💾 LİSTEYİ KAYDET' : '🛠️ Nöbetçileri Ata'}
+                        </div>
+                        <div style={{ padding: '40px 28px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 700, marginBottom: '20px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Temizlik Puanı</div>
+                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '28px' }}>
+                                {[1,2,3,4,5].map(n => (
+                                    <button key={n} onClick={() => setAdminHygScore(n)} style={{ width: '60px', height: '60px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '26px', background: adminHygScore >= n ? atype.color : '#f1f5f9', color: adminHygScore >= n ? 'white' : '#cbd5e1', fontWeight: 900, transition: 'all 0.15s', transform: adminHygScore >= n ? 'scale(1.1)' : 'scale(1)', boxShadow: adminHygScore >= n ? `0 6px 20px ${atype.color}50` : 'none' }}>★</button>
+                                ))}
+                            </div>
+                            <div style={{ display: 'inline-block', padding: '14px 36px', background: adminHygScore >= 4 ? '#ecfdf5' : adminHygScore <= 2 ? '#fef2f2' : '#fffbeb', borderRadius: '20px', marginBottom: '28px' }}>
+                                <span style={{ fontWeight: 900, fontSize: '22px', color: adminHygScore >= 4 ? '#059669' : adminHygScore <= 2 ? '#dc2626' : '#d97706' }}>
+                                    {getCoinImpact(adminHygScore) >= 0 ? '+' : ''}{getCoinImpact(adminHygScore)} M-Coin
+                                </span>
+                            </div>
+                            <br />
+                            <button onClick={() => saveAdminFloorInspection(adminHygSection, adminHygFloor, adminHygAreaId)} className="premium-btn" style={{ padding: '18px 52px', background: atype.color, color: 'white', fontWeight: 900, fontSize: '16px', border: 'none', boxShadow: `0 8px 28px ${atype.color}50` }}>✅ Kaydet</button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // ── Level 2: Alan grid ──
+            if (adminHygSection && adminHygSection !== 'gorevler' && adminHygFloor) {
+                const floorData    = appData?.hygiene_floors?.[adminHygSection]?.[adminHygFloor] || {};
+                const areaEntries  = Object.entries(floorData.areas || {});
+                const todayLogs    = allLogs.filter(l => l.section === adminHygSection && l.floor === adminHygFloor && l.timestamp >= todayStart);
+                const scoredIds    = new Set(todayLogs.map(l => l.areaId));
+                const floorMeta    = FLOORS.find(f => f.key === adminHygFloor);
+                const sColor       = adminHygSection === 'rutin' ? '#0ea5e9' : '#10b981';
+                const sLabel       = adminHygSection === 'rutin' ? 'Rutin Kontrol' : 'Temizlik Kontrol';
+                return (
+                    <div className="fade-in">
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <button onClick={() => { setAdminHygFloor(null); setAdminHygEditMode(false); }} style={{ background: 'white', border: '1.5px solid #e2e8f0', color: '#64748b', borderRadius: '14px', padding: '10px 18px', fontWeight: 900, cursor: 'pointer', fontSize: '14px' }}>← Geri</button>
+                                <span style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a' }}>{sLabel} — {floorMeta?.label}</span>
+                            </div>
+                            <button onClick={() => setAdminHygEditMode(e => !e)} style={{ background: adminHygEditMode ? sColor : 'white', color: adminHygEditMode ? 'white' : sColor, border: `1.5px solid ${sColor}40`, borderRadius: '14px', padding: '10px 20px', fontWeight: 900, cursor: 'pointer', fontSize: '13px' }}>
+                                👥 {adminHygEditMode ? 'Atama Modu Açık' : 'Öğrenci Ataması'}
                             </button>
                         </div>
-
-                        {wcEditMode ? (
-                            <div className="fade-in">
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px' }}>
-                                    {Object.entries(tempWcData).map(([wcKey, wcData]) => (
-                                        <div key={wcKey} style={{ background: '#f8fafc', padding: '20px', borderRadius: '24px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ fontWeight: 900, color: '#0ea5e9', fontSize: '16px', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}><span>🚽</span> {wcData.name}</div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                {[0, 1, 2, 3, 4].map(slot => (
-                                                    <select key={slot} value={wcData.responsibles[slot] || ''} onChange={(e) => {
-                                                            const newArr = [...(wcData.responsibles || [])];
-                                                            newArr[slot] = e.target.value;
-                                                            setTempWcData({...tempWcData, [wcKey]: {...wcData, responsibles: newArr.filter(Boolean)}});
-                                                        }}
-                                                        className="elite-input" style={{ padding: '12px', fontSize: '13px', borderRadius: '12px', background: 'white' }}
-                                                    >
-                                                        <option value="">-- Öğrenci Seç --</option>
-                                                        {roster.map(s => <option key={s} value={s}>{s}</option>)}
-                                                    </select>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <button onClick={() => setWcEditMode(false)} className="btn-iptal" style={{ width: '100%', marginTop: '20px' }}>İPTAL ET</button>
-                            </div>
+                        {areaEntries.length === 0 ? (
+                            <div style={{ background: 'white', borderRadius: '24px', padding: '60px', textAlign: 'center', color: '#94a3b8', fontWeight: 700 }}>Henüz alan eklenmemiş</div>
                         ) : (
-                            <div className="fade-in">
-                                {/* DOKUNMATİK WC SEÇİCİ (Select yerine kullanıyoruz) */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '30px' }}>
-                                    {['wc_1', 'wc_2', 'wc_3', 'wc_4', 'wc_5', 'wc_6'].map(key => {
-                                        const area = appData?.hygiene_areas?.[key];
-                                        if(!area) return null;
-                                        const isSelected = hygieneForm.areaId === key;
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '14px' }}>
+                                {areaEntries.map(([areaId, area]) => {
+                                    const atype  = FLOOR_AREA_TYPES[area.type] || FLOOR_AREA_TYPES.genel;
+                                    const isDone = scoredIds.has(areaId);
+                                    if (adminHygEditMode) {
                                         return (
-                                            <div key={key} onClick={() => setHygieneForm({...hygieneForm, areaId: key})} className="card-hover" style={{ background: isSelected ? '#0ea5e9' : '#f8fafc', border: `2px solid ${isSelected ? '#0284c7' : '#e2e8f0'}`, padding: '16px', borderRadius: '20px', cursor: 'pointer', textAlign: 'center', transition: '0.2s', boxShadow: isSelected ? '0 10px 20px rgba(14,165,233,0.3)' : 'none' }}>
-                                                <div style={{ fontSize: '24px', marginBottom: '6px', opacity: isSelected ? 1 : 0.6 }}>🚽</div>
-                                                <div style={{ fontWeight: 900, fontSize: '14px', color: isSelected ? 'white' : '#0f172a' }}>{area.name}</div>
-                                                <div style={{ fontSize: '11px', fontWeight: 700, color: isSelected ? '#e0f2fe' : '#64748b', marginTop: '4px' }}>{(area.responsibles || []).length} Nöbetçi</div>
+                                            <div key={areaId} style={{ background: 'white', borderRadius: '20px', padding: '18px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(15,23,42,0.04)' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                                    <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: atype.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>{atype.icon}</div>
+                                                    <span style={{ fontWeight: 900, fontSize: '14px', color: '#0f172a' }}>{area.name}</span>
+                                                </div>
+                                                {(area.responsibles||[]).map((r,i) => (
+                                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderRadius: '10px', padding: '6px 10px', marginBottom: '4px' }}>
+                                                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#374151' }}>{r}</span>
+                                                        <button onClick={() => updateAreaResponsibles(adminHygSection, adminHygFloor, areaId, area.responsibles.filter((_,j) => j !== i))} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: 0 }}>×</button>
+                                                    </div>
+                                                ))}
+                                                <select onChange={(e) => { if(e.target.value){ updateAreaResponsibles(adminHygSection, adminHygFloor, areaId, [...(area.responsibles||[]), e.target.value]); e.target.value=''; }}} style={{ width: '100%', marginTop: '8px', padding: '8px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', background: 'white', fontSize: '13px', fontWeight: 700, color: '#0f172a', cursor: 'pointer' }}>
+                                                    <option value="">+ Öğrenci Ekle</option>
+                                                    {roster.filter(st => !(area.responsibles||[]).includes(st)).map(st => <option key={st} value={st}>{st}</option>)}
+                                                </select>
                                             </div>
                                         );
-                                    })}
-                                </div>
-
-                                <div style={{ background: '#f8fafc', borderRadius: '24px', padding: '25px', border: '1px solid #e2e8f0' }}>
-                                    <div style={{ textAlign: 'center', fontWeight: 900, color: '#0ea5e9', fontSize: '16px', marginBottom: '15px' }}>TEMİZLİK PUANINI BELİRLE</div>
-                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '20px' }}>
-                                        {[1, 2, 3, 4, 5].map(star => (
-                                            <button key={star} onClick={() => setHygieneForm({...hygieneForm, score: star})} style={{ flex: 1, maxWidth: '70px', padding: '15px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer', background: hygieneForm.score >= star ? 'linear-gradient(135deg, #fcd34d, #f59e0b)' : '#ffffff', color: hygieneForm.score >= star ? '#fff' : '#cbd5e1', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: hygieneForm.score >= star ? '0 8px 15px rgba(245,158,11,0.3)' : '0 2px 5px rgba(0,0,0,0.05)' }}>
-                                                ★
-                                            </button>
-                                        ))}
-                                    </div>
-                                    
-                                    <div style={{ textAlign: 'center', marginBottom: '20px', fontSize: '13px', fontWeight: 800, color: hygieneForm.score >= 3 ? '#10b981' : '#ef4444' }}>
-                                        Bu puana göre nöbetçilere {hygieneForm.score === 5 ? '+30 M-Coin' : hygieneForm.score === 4 ? '+20 M-Coin' : hygieneForm.score === 3 ? '+10 M-Coin' : hygieneForm.score === 2 ? '-30 M-Coin' : '-60 M-Coin'} yansıtılacak.
-                                    </div>
-
-                                    <button onClick={saveInspection} disabled={isHygieneSaving} className="premium-btn badge-glow" style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #1e3a8a, #0f172a)', color: 'white', fontWeight: 900, fontSize: '16px', border: 'none', boxShadow: '0 10px 20px rgba(30,58,138,0.4)' }}>
-                                    {isHygieneSaving ? '⏳ İşleniyor...' : '✅ DENETİMİ ONAYLA VE KAYDET'}
-                                </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* 2. PANEL: ODA DENETİMİ (DOKUNMATİK) */}
-                {hygieneTab === 'rooms' && (
-                    <div className="fade-in" style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 10px 40px rgba(15,23,42,0.04)', border: '1px solid #f8fafc' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px', flexWrap: 'wrap', gap: '15px' }}>
-                            <div>
-                                <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a', fontSize: '22px' }}>Oda Düzeni Paneli</h3>
-                                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, marginTop: '4px' }}>Odaların genel tertip düzenini denetleyin.</div>
-                            </div>
-                            <button onClick={roomEditMode ? saveRoomAssignments : openRoomEditMode} className="premium-btn" style={{ background: roomEditMode ? '#10b981' : '#f1f5f9', color: roomEditMode ? 'white' : '#8b5cf6', padding: '12px 20px', fontSize: '13px', border: `1px solid ${roomEditMode ? '#10b981' : '#ede9fe'} !important` }}>
-                                {roomEditMode ? '💾 ODALARI KAYDET' : '🛠️ Odaları Düzenle'}
-                            </button>
-                        </div>
-
-                        {roomEditMode ? (
-                            <div className="fade-in">
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
-                                    {Object.entries(tempRoomData).map(([roomKey, roomData]) => (
-                                        <div key={roomKey} style={{ background: '#f8fafc', padding: '20px', borderRadius: '24px', border: '1px solid #e2e8f0' }}>
-                                            <input value={roomData.name} onChange={e => setTempRoomData({...tempRoomData, [roomKey]: {...roomData, name: e.target.value}})} className="elite-input" style={{ marginBottom: '15px', fontWeight: 900, color: '#8b5cf6', borderColor: '#8b5cf6', background: 'white' }} />
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                                                {Array.from({ length: 10 }, (_, i) => i).map(slot => (
-                                                    <select key={slot} value={roomData.responsibles[slot] || ''} onChange={(e) => {
-                                                            const newArr = [...(roomData.responsibles || [])];
-                                                            newArr[slot] = e.target.value;
-                                                            setTempRoomData({...tempRoomData, [roomKey]: {...roomData, responsibles: newArr.filter(Boolean)}});
-                                                        }}
-                                                        className="elite-input" style={{ padding: '10px', fontSize: '12px', borderRadius: '10px', background: 'white' }}
-                                                    >
-                                                        <option value="">-- Seç --</option>
-                                                        {roster.map(s => <option key={s} value={s}>{s}</option>)}
-                                                    </select>
-                                                ))}
-                                            </div>
+                                    }
+                                    return (
+                                        <div key={areaId} onClick={() => { setAdminHygAreaId(areaId); setAdminHygScore(5); }} style={{ background: isDone ? '#ecfdf5' : 'white', border: `2px solid ${isDone ? '#6ee7b7' : '#f1f5f9'}`, borderRadius: '20px', padding: '22px 18px', cursor: 'pointer', transition: 'all 0.15s', boxShadow: isDone ? '0 4px 16px rgba(16,185,129,0.12)' : '0 2px 10px rgba(15,23,42,0.05)' }}>
+                                            <div style={{ width: '44px', height: '44px', borderRadius: '14px', background: isDone ? '#d1fae5' : atype.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', marginBottom: '12px' }}>{isDone ? '✅' : atype.icon}</div>
+                                            <div style={{ fontWeight: 900, fontSize: '15px', color: '#0f172a', marginBottom: '5px' }}>{area.name}</div>
+                                            <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>{(area.responsibles||[]).join(', ')||'Sorumlu yok'}</div>
                                         </div>
-                                    ))}
-                                </div>
-                                <button onClick={() => setRoomEditMode(false)} className="btn-iptal" style={{ width: '100%', marginTop: '25px' }}>İPTAL ET</button>
+                                    );
+                                })}
                             </div>
-                        ) : (
-                            <div className="fade-in">
-                                {/* DOKUNMATİK ODA SEÇİCİ */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '30px' }}>
-                                    {Object.entries(appData?.room_areas || {}).filter(([k, v]) => v.responsibles?.length > 0).map(([key, area]) => {
-                                        const isSelected = roomForm.areaId === key;
-                                        return (
-                                            <div key={key} onClick={() => setRoomForm({...roomForm, areaId: key})} className="card-hover" style={{ background: isSelected ? '#8b5cf6' : '#f8fafc', border: `2px solid ${isSelected ? '#7c3aed' : '#e2e8f0'}`, padding: '16px', borderRadius: '20px', cursor: 'pointer', textAlign: 'center', transition: '0.2s', boxShadow: isSelected ? '0 10px 20px rgba(139,92,246,0.3)' : 'none' }}>
-                                                <div style={{ fontSize: '24px', marginBottom: '6px', opacity: isSelected ? 1 : 0.6 }}>🛏️</div>
-                                                <div style={{ fontWeight: 900, fontSize: '14px', color: isSelected ? 'white' : '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{area.name}</div>
-                                                <div style={{ fontSize: '11px', fontWeight: 700, color: isSelected ? '#ede9fe' : '#64748b', marginTop: '4px' }}>{(area.responsibles || []).length} Öğrenci</div>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-
-                                <div style={{ background: '#f8fafc', borderRadius: '24px', padding: '25px', border: '1px solid #e2e8f0' }}>
-                                    <div style={{ textAlign: 'center', fontWeight: 900, color: '#8b5cf6', fontSize: '16px', marginBottom: '15px' }}>ODA DÜZENİ PUANINI BELİRLE</div>
-                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '20px' }}>
-                                        {[1, 2, 3, 4, 5].map(star => (
-                                            <button key={star} onClick={() => setRoomForm({...roomForm, score: star})} style={{ flex: 1, maxWidth: '70px', padding: '15px 0', fontSize: '28px', borderRadius: '16px', border: 'none', cursor: 'pointer', background: roomForm.score >= star ? 'linear-gradient(135deg, #a78bfa, #8b5cf6)' : '#ffffff', color: roomForm.score >= star ? '#fff' : '#cbd5e1', transition: 'all 0.2s', boxShadow: roomForm.score >= star ? '0 8px 15px rgba(139,92,246,0.3)' : '0 2px 5px rgba(0,0,0,0.05)' }}>
-                                                ★
-                                            </button>
-                                        ))}
-                                    </div>
-                                    
-                                    <div style={{ textAlign: 'center', marginBottom: '20px', fontSize: '13px', fontWeight: 800, color: roomForm.score >= 3 ? '#10b981' : '#ef4444' }}>
-                                        Bu puana göre odadaki öğrencilere {getRoomCoinImpact(roomForm.score)} M-Coin yansıtılacak.
-                                    </div>
-
-                                    <button onClick={saveRoomInspection} disabled={isHygieneSaving} className="premium-btn badge-glow" style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #4c1d95, #2e1065)', color: 'white', fontWeight: 900, fontSize: '16px', border: 'none', boxShadow: '0 10px 20px rgba(76,29,149,0.4)' }}>
-                                        {isHygieneSaving ? '⏳ İşleniyor...' : '✅ ODA DENETİMİNİ KAYDET'}
-                                    </button>
+                        )}
+                        {adminHygEditMode && (
+                            <div style={{ marginTop: '16px', background: '#f0f9ff', borderRadius: '20px', padding: '18px 20px', border: '1.5px dashed #0ea5e9' }}>
+                                <div style={{ fontWeight: 900, fontSize: '13px', color: '#0ea5e9', marginBottom: '12px' }}>+ Yeni Alan Ekle</div>
+                                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                    <input value={adminHygNewArea.name} onChange={e => setAdminHygNewArea({...adminHygNewArea, name: e.target.value})} placeholder="Alan adı" className="elite-input" style={{ flex: 1, minWidth: '140px', padding: '10px 14px', fontSize: '13px' }} />
+                                    <select value={adminHygNewArea.type} onChange={e => setAdminHygNewArea({...adminHygNewArea, type: e.target.value})} style={{ padding: '10px 12px', borderRadius: '14px', border: '2px solid #e2e8f0', background: 'white', fontWeight: 700, fontSize: '13px', color: '#0f172a', cursor: 'pointer' }}>
+                                        {Object.entries(FLOOR_AREA_TYPES).map(([k,v]) => <option key={k} value={k}>{v.icon} {v.label}</option>)}
+                                    </select>
+                                    <button onClick={() => addAdminFloorArea(adminHygSection, adminHygFloor)} className="premium-btn" style={{ background: sColor, color: 'white', padding: '10px 20px', fontWeight: 900, fontSize: '13px', border: 'none' }}>+ Ekle</button>
                                 </div>
                             </div>
                         )}
                     </div>
-                )}
+                );
+            }
 
-                {/* 3. PANEL: GENEL TEMİZLİK (KOMPAKT KARTLI SİSTEM) */}
-                {hygieneTab === 'general' && (
-                    <div className="fade-in" style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 10px 40px rgba(15,23,42,0.04)', border: '1px solid #f8fafc' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '25px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px', flexWrap: 'wrap', gap: '15px' }}>
-                            <div>
-                                <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a', fontSize: '22px' }}>🧹 Bireysel Temizlik Kontrolü</h3>
-                                <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Öğrencilerin görev alanlarını şık ve hızlı bir şekilde puanlayın.</p>
-                            </div>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <button onClick={saveCleaningTasks} className="premium-btn" style={{ background: 'linear-gradient(135deg, #334155, #0f172a)', color: 'white', padding: '10px 20px', fontSize: '13px', border: 'none', boxShadow: '0 5px 15px rgba(15,23,42,0.3)' }}>📍 YERLERİ KAYDET</button>
-                                <button onClick={async () => {
-                                        const entries = Object.entries(generalCleaningList).filter(([name, data]) => data.area && data.score);
-                                        if(entries.length === 0) return toast("En az bir öğrenci için alan ve puan girmelisiniz!");
-                                        if(!window.confirm(`${entries.length} öğrencinin puanı kaydedilecek. Onaylıyor musun?`)) return;
-                                        
-                                        setIsHygieneSaving(true);
-                                        const updates = {};
-                                        const now = Date.now();
-                                        
-                                        entries.forEach(([student, data]) => {
-                                            const impact = getCoinImpact(data.score);
-                                            const logId = `gen_${student}_${now}`;
-                                            updates[`hygiene_logs/${logId}`] = { student, areaName: data.area, score: data.score, timestamp: now, coinImpact: impact, type: 'general' };
-                                            updates[`wallet/${student}`] = (Number(appData?.wallet?.[student]) || 0) + impact;
-                                            updates[`transactions/${student}/txn_${logId}`] = { desc: `${data.area} Temizlik Kontrolü`, amt: impact, date: new Date().toLocaleString('tr-TR') };
-                                        });
-
-                                        try {
-                                            await db.ref('mavikent_premium').update(updates);
-                                            toast("✅ Günlük temizlik kontrolleri kaydedildi ve M-Coin'ler dağıtıldı!");
-                                            setGeneralCleaningList({}); 
-                                        } catch (e) { toast("Hata oluştu!"); } finally { setIsHygieneSaving(false); }
-                                    }} 
-                                    disabled={isHygieneSaving} className="premium-btn badge-glow" style={{ background: 'linear-gradient(135deg, #065f46, #022c22)', color: 'white', padding: '10px 24px', fontSize: '13px', border: 'none', boxShadow: '0 5px 15px rgba(6,78,59,0.4)' }}>
-                                    {isHygieneSaving ? '⏳...' : '🚀 PUANLARI DAĞIT'}
-                                </button>
-                            </div>
+            // ── Level 1: Kat grid ──
+            if (adminHygSection && adminHygSection !== 'gorevler') {
+                const sColor  = adminHygSection === 'rutin' ? '#0ea5e9' : '#10b981';
+                const sBg     = adminHygSection === 'rutin' ? '#f0f9ff' : '#f0fdf4';
+                const sLabel  = adminHygSection === 'rutin' ? 'Rutin Kontrol' : 'Temizlik Kontrol';
+                const sFloors = appData?.hygiene_floors?.[adminHygSection] || {};
+                return (
+                    <div className="fade-in">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
+                            <button onClick={() => { setAdminHygSection(null); setAdminHygFloor(null); setAdminHygAreaId(null); }} style={{ background: 'white', border: '1.5px solid #e2e8f0', color: '#64748b', borderRadius: '14px', padding: '10px 18px', fontWeight: 900, cursor: 'pointer', fontSize: '14px' }}>← Geri</button>
+                            <span style={{ fontWeight: 900, fontSize: '20px', color: '#0f172a' }}>{sLabel}</span>
                         </div>
-
-                        {/* DERLİ TOPLU LİSTE GÖRÜNÜMÜ */}
-                        <div className="clean-scroll" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px', maxHeight: '550px', overflowY: 'auto', paddingRight: '10px' }}>
-                            {roster.map(student => {
-                                const data = generalCleaningList[student] || {};
-                                const isScored = data.score > 0;
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                            {FLOORS.map(floor => {
+                                const areaCnt  = Object.keys(sFloors[floor.key]?.areas||{}).length;
+                                const todayCnt = allLogs.filter(l => l.section === adminHygSection && l.floor === floor.key && l.timestamp >= todayStart).length;
+                                const pct = areaCnt > 0 ? Math.round(todayCnt/areaCnt*100) : 0;
                                 return (
-                                    <div key={student} style={{ background: isScored ? '#f0fdf4' : '#f8fafc', border: `1px solid ${isScored ? '#a7f3d0' : '#e2e8f0'}`, borderRadius: '20px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', transition: 'all 0.2s', boxShadow: isScored ? '0 4px 10px rgba(16,185,129,0.1)' : 'none' }}>
-                                        <div style={{ fontWeight: 900, fontSize: '15px', color: '#0f172a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span>{student}</span>
-                                            {isScored && <span style={{ fontSize: '12px', background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: '8px' }}>Hazır</span>}
+                                    <div key={floor.key} onClick={() => setAdminHygFloor(floor.key)} style={{ background: 'white', borderRadius: '24px', padding: '28px 20px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 4px 20px rgba(15,23,42,0.06)', border: `1px solid ${floor.bg}`, transition: 'all 0.15s' }} className="card-hover">
+                                        <div style={{ width: '60px', height: '60px', borderRadius: '20px', background: floor.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', margin: '0 auto 16px' }}>{floor.icon}</div>
+                                        <div style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a', marginBottom: '4px' }}>{floor.label}</div>
+                                        <div style={{ fontSize: '32px', fontWeight: 900, color: floor.color, marginBottom: '4px' }}>{areaCnt}</div>
+                                        <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700, marginBottom: '14px' }}>toplam alan</div>
+                                        <div style={{ background: '#f1f5f9', borderRadius: '10px', overflow: 'hidden', height: '6px', marginBottom: '6px' }}>
+                                            <div style={{ height: '100%', width: pct+'%', background: floor.color, borderRadius: '10px', transition: 'width 0.3s' }} />
                                         </div>
-                                        <input placeholder="Görev Alanı (Örn: Mescid)" value={data.area || ''} onChange={(e) => setGeneralCleaningList({...generalCleaningList, [student]: {...data, area: e.target.value}})} className="elite-input" style={{ padding: '10px 14px', fontSize: '13px', borderRadius: '12px', background: 'white' }} />
-                                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'space-between' }}>
-                                            {[1,2,3,4,5].map(s => (
-                                                <button key={s} onClick={() => setGeneralCleaningList({...generalCleaningList, [student]: {...data, score: s}})} style={{ flex: 1, padding: '10px 0', border: 'none', borderRadius: '10px', cursor: 'pointer', background: (data.score || 0) >= s ? '#10b981' : '#e2e8f0', color: (data.score || 0) >= s ? 'white' : '#94a3b8', fontSize: '16px', transition: '0.2s' }}>★</button>
-                                            ))}
-                                        </div>
+                                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>{todayCnt}/{areaCnt} tamamlandı</div>
                                     </div>
                                 );
                             })}
                         </div>
                     </div>
-                )}
+                );
+            }
 
-                {/* 4. PANEL: GEÇMİŞ LOGLAR (TEMİZ TASARIM) */}
-                {hygieneTab === 'history' && (
-                    <div className="fade-in" style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 10px 40px rgba(15,23,42,0.04)', border: '1px solid #f8fafc' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
-                            <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a', fontSize: '22px' }}>📜 Son Denetim Kayıtları</h3>
-                            <button onClick={() => { if(window.confirm('Tüm geçmişi silmek istediğine emin misin?')) db.ref('mavikent_premium/hygiene_logs').set(null); }} style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5', padding: '8px 16px', borderRadius: '12px', fontSize: '12px', fontWeight: 900, cursor: 'pointer' }}>Geçmişi Temizle</button>
+            // ── Kurtarma Görevleri drill-down ──
+            if (adminHygSection === 'gorevler') {
+                return (
+                    <div className="fade-in">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
+                            <button onClick={() => setAdminHygSection(null)} style={{ background: 'white', border: '1.5px solid #fca5a5', color: '#ef4444', borderRadius: '14px', padding: '10px 18px', fontWeight: 900, cursor: 'pointer', fontSize: '14px' }}>← Geri</button>
+                            <span style={{ fontWeight: 900, fontSize: '20px', color: '#0f172a' }}>🚨 Kurtarma Görevleri</span>
                         </div>
-                        
-                        <div className="clean-scroll" style={{ maxHeight: '500px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '10px' }}>
-                            {Object.values(appData?.hygiene_logs || {}).length === 0 ? (
-                                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontWeight: 700 }}>Henüz kayıt bulunmuyor.</div>
-                            ) : (
-                                Object.values(appData.hygiene_logs).sort((a,b) => b.timestamp - a.timestamp).slice(0, 50).map((log, i) => (
-                                    <div key={i} style={{ padding: '16px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div>
-                                            <div style={{ fontWeight: 900, fontSize: '15px', color: '#0f172a', marginBottom: '4px' }}>{log.type === 'room' ? '🛏️' : log.type === 'wc' ? '🚽' : '🧹'} {log.areaName}</div>
-                                            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>
-                                                {log.student || (log.responsibles && log.responsibles.length > 0 ? log.responsibles.join(', ') : 'Kişi Yok')}
-                                            </div>
-                                            <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800, marginTop: '4px' }}>{new Date(log.timestamp).toLocaleString('tr-TR')} • {log.inspector}</div>
-                                        </div>
-                                        <div style={{ textAlign: 'right' }}>
-                                            <div style={{ fontWeight: 900, color: log.coinImpact >= 0 ? '#10b981' : '#ef4444', fontSize: '18px', background: log.coinImpact >= 0 ? '#ecfdf5' : '#fef2f2', padding: '4px 12px', borderRadius: '12px', display: 'inline-block' }}>
-                                                {log.coinImpact >= 0 ? '+' : ''}{log.coinImpact} M
-                                            </div>
-                                            <div style={{ fontSize: '12px', color: '#fbbf24', marginTop: '6px', letterSpacing: '2px' }}>{'★'.repeat(log.score)}</div>
+                        {mEntries.length === 0 ? (
+                            <div style={{ background: 'white', borderRadius: '24px', padding: '60px', textAlign: 'center', color: '#94a3b8', fontWeight: 700 }}>Aktif kurtarma görevi yok</div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                {pendingM.length > 0 && (
+                                    <div style={{ background: 'white', borderRadius: '24px', padding: '22px', border: '1px solid #fca5a5' }}>
+                                        <div style={{ fontWeight: 900, fontSize: '14px', color: '#dc2626', marginBottom: '14px' }}>🔔 Onay Bekleyen ({pendingM.length})</div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                            {pendingM.map(([name, m]) => (
+                                                <div key={name} style={{ background: '#fef2f2', borderRadius: '16px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                                    <div>
+                                                        <div style={{ fontWeight: 900, fontSize: '14px', color: '#0f172a', marginBottom: '5px' }}>👤 {name}</div>
+                                                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '5px' }}>{(m.areas||[]).map((a,i) => <span key={i} style={{ background: 'white', color: '#b91c1c', padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: 800 }}>{a.name}</span>)}</div>
+                                                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>Ödül: +{m.reward_coins} M-Coin</div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                        <button onClick={() => approveMission(name)} className="premium-btn" style={{ background: '#10b981', color: 'white', padding: '9px 16px', fontSize: '13px', fontWeight: 900, border: 'none' }}>✅ Onayla</button>
+                                                        <button onClick={() => rejectMission(name)} style={{ background: 'white', color: '#ef4444', border: '1px solid #fca5a5', padding: '9px 12px', borderRadius: '12px', fontSize: '13px', fontWeight: 900, cursor: 'pointer' }}>❌</button>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
-                                ))
-                            )}
+                                )}
+                                {waitingM.length > 0 && (
+                                    <div style={{ background: 'white', borderRadius: '24px', padding: '22px', border: '1px solid #fde68a' }}>
+                                        <div style={{ fontWeight: 900, fontSize: '14px', color: '#d97706', marginBottom: '12px' }}>⏳ Devam Ediyor ({waitingM.length})</div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px,1fr))', gap: '8px' }}>
+                                            {waitingM.map(([name, m]) => (
+                                                <div key={name} style={{ background: '#fffbeb', borderRadius: '12px', padding: '12px 14px', border: '1px solid #fde68a' }}>
+                                                    <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '13px' }}>👤 {name}</div>
+                                                    <div style={{ fontSize: '11px', color: '#92400e', fontWeight: 700, marginTop: '3px' }}>+{m.reward_coins} M-Coin</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {doneM.length > 0 && (
+                                    <div style={{ background: 'white', borderRadius: '24px', padding: '22px', border: '1px solid #a7f3d0' }}>
+                                        <div style={{ fontWeight: 900, fontSize: '14px', color: '#059669', marginBottom: '12px' }}>✅ Son Tamamlananlar</div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px,1fr))', gap: '8px' }}>
+                                            {doneM.map(([name, m]) => (
+                                                <div key={name} style={{ background: '#f0fdf4', borderRadius: '12px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
+                                                    <span style={{ fontWeight: 800, color: '#065f46', fontSize: '13px' }}>✅ {name}</span>
+                                                    <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>+{m.reward_coins} M</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
+            // ── Ana ekran: Hero + 3 kart (AÇIK RENK) ──
+            return (
+                <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {/* HERO CARD - açık tema */}
+                    <div style={{ background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 60%, #f0fdf4 100%)', borderRadius: '28px', padding: '32px', boxShadow: '0 4px 24px rgba(14,165,233,0.1)', border: '1px solid #bae6fd', position: 'relative', overflow: 'hidden' }}>
+                        <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '180px', height: '180px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(14,165,233,0.12) 0%, transparent 70%)' }} />
+                        <div style={{ position: 'absolute', bottom: '-20px', left: '20%', width: '140px', height: '140px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 70%)' }} />
+                        <div style={{ fontSize: '12px', color: '#0ea5e9', fontWeight: 900, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '20px' }}>Yönetici Bakışı</div>
+                        <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                            <div>
+                                <div style={{ fontSize: '52px', fontWeight: 900, color: '#0f172a', lineHeight: 1, marginBottom: '6px' }}>{totalToday}</div>
+                                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>Bugün Tamamlanan Alanlar</div>
+                            </div>
+                            <div style={{ flex: 1, minWidth: '160px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                    <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 700 }}>Toplam Progress</span>
+                                    <span style={{ fontSize: '14px', color: '#0ea5e9', fontWeight: 900 }}>{totalPct}%</span>
+                                </div>
+                                <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: '12px', overflow: 'hidden', height: '10px' }}>
+                                    <div style={{ height: '100%', width: totalPct+'%', background: 'linear-gradient(90deg, #0ea5e9, #38bdf8)', borderRadius: '12px', transition: 'width 0.5s ease', boxShadow: '0 2px 8px rgba(14,165,233,0.4)' }} />
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700, marginTop: '6px' }}>{totalToday} / {totalAll} alan tamamlandı</div>
+                            </div>
                         </div>
                     </div>
-                )}
-            </div>
-        )}
+
+                    {/* 3 KART - açık tema */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                        {/* Rutin Kontrol */}
+                        <div onClick={() => { setAdminHygSection('rutin'); setAdminHygFloor(null); setAdminHygAreaId(null); }} style={{ background: 'white', borderRadius: '24px', padding: '28px 22px', cursor: 'pointer', boxShadow: '0 4px 20px rgba(14,165,233,0.1)', border: '1px solid #e0f2fe', transition: 'all 0.15s' }} className="card-hover">
+                            <div style={{ width: '52px', height: '52px', borderRadius: '16px', background: 'linear-gradient(135deg, #0ea5e9, #0284c7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', marginBottom: '16px', boxShadow: '0 6px 20px rgba(14,165,233,0.35)' }}>🛏️</div>
+                            <div style={{ fontWeight: 900, fontSize: '17px', color: '#0f172a', marginBottom: '6px' }}>Rutin Kontrol</div>
+                            <div style={{ fontSize: '32px', fontWeight: 900, color: '#0ea5e9', marginBottom: '2px' }}>{rutinTotal}</div>
+                            <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>Aktif Rutin Alan</div>
+                        </div>
+
+                        {/* Temizlik Kontrol */}
+                        <div onClick={() => { setAdminHygSection('temizlik'); setAdminHygFloor(null); setAdminHygAreaId(null); }} style={{ background: 'white', borderRadius: '24px', padding: '28px 22px', cursor: 'pointer', boxShadow: '0 4px 20px rgba(16,185,129,0.1)', border: '1px solid #d1fae5', transition: 'all 0.15s' }} className="card-hover">
+                            <div style={{ width: '52px', height: '52px', borderRadius: '16px', background: 'linear-gradient(135deg, #10b981, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', marginBottom: '16px', boxShadow: '0 6px 20px rgba(16,185,129,0.35)' }}>🧹</div>
+                            <div style={{ fontWeight: 900, fontSize: '17px', color: '#0f172a', marginBottom: '6px' }}>Temizlik Kontrol</div>
+                            <div style={{ fontSize: '32px', fontWeight: 900, color: '#10b981', marginBottom: '2px' }}>{temizTotal}</div>
+                            <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>Temizlik Alanı</div>
+                        </div>
+
+                        {/* Kurtarma Görevleri */}
+                        <div onClick={() => setAdminHygSection('gorevler')} style={{ background: 'white', borderRadius: '24px', padding: '28px 22px', cursor: 'pointer', boxShadow: pendingM.length > 0 ? '0 4px 20px rgba(239,68,68,0.15)' : '0 4px 20px rgba(15,23,42,0.06)', border: pendingM.length > 0 ? '1px solid #fca5a5' : '1px solid #f1f5f9', transition: 'all 0.15s', position: 'relative' }} className="card-hover">
+                            {pendingM.length > 0 && <div style={{ position: 'absolute', top: '14px', right: '14px', background: '#ef4444', color: 'white', borderRadius: '20px', padding: '3px 10px', fontSize: '12px', fontWeight: 900 }}>{pendingM.length}</div>}
+                            <div style={{ width: '52px', height: '52px', borderRadius: '16px', background: 'linear-gradient(135deg, #ef4444, #dc2626)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', marginBottom: '16px', boxShadow: '0 6px 20px rgba(239,68,68,0.35)' }}>🚨</div>
+                            <div style={{ fontWeight: 900, fontSize: '17px', color: '#0f172a', marginBottom: '6px' }}>Görev Kartları</div>
+                            <div style={{ fontSize: '32px', fontWeight: 900, color: '#ef4444', marginBottom: '2px' }}>{mEntries.length}</div>
+                            <div style={{ fontSize: '12px', color: pendingM.length > 0 ? '#ef4444' : '#94a3b8', fontWeight: 700 }}>{pendingM.length > 0 ? `${pendingM.length} Onay Bekliyor` : 'Görev Bekliyor'}</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        })()}
+
+            {/* --- İSTİRAHAT KONTROL --- */}
+      {currentModule === 'istirahat' && (() => {
+        const allLogs = Object.values(appData?.istirahat_logs || {});
+        const todayStart = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+        const scoreLabels = { 1: 'Çok Kötü', 2: 'Kötü', 3: 'Orta', 4: 'İyi', 5: 'Mükemmel' };
+        const scoreColors = { 1: '#ef4444', 2: '#f97316', 3: '#f59e0b', 4: '#10b981', 5: '#059669' };
+        const rooms = (() => {
+          const r = {};
+          for (let i = 1; i <= 6; i++) {
+            const key = `ist_room_${i}`;
+            r[key] = appData?.istirahat_rooms?.[key] || { name: `Yatakhane ${i}`, responsibles: [] };
+          }
+          return r;
+        })();
+        const lastRatingForRoom = (roomKey) => {
+          const logs = allLogs.filter(l => l.roomKey === roomKey).sort((a,b) => b.timestamp - a.timestamp);
+          return logs.length ? logs[0] : null;
+        };
+        return (
+          <div className="fade-in" style={{ animation: 'fadeIn 0.4s ease-out' }}>
+            {istirahatSelectedRoom || istirahatView ? (
+              <div style={{ marginBottom: '20px' }}>
+                <button onClick={() => { setIstirahatSelectedRoom(null); setIstirahatView(null); setIstirahatScore(5); setIstirahatNote(''); }}
+                  style={{ background: '#f1f5f9', color: '#0f172a', border: 'none', padding: '10px 20px', borderRadius: '14px', fontWeight: 800, fontSize: '14px', cursor: 'pointer' }}>← Geri</button>
+              </div>
+            ) : null}
+
+            {/* ANA EKRAN: YATAKHANE LİSTESİ */}
+            {!istirahatSelectedRoom && !istirahatView && (
+              <div className="fade-in">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <div style={{ fontWeight: 900, fontSize: '22px', color: '#0f172a' }}>🛌 İstirahat Kontrol Raporu</div>
+                    <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600, marginTop: '4px' }}>Kontrol edilecek yatakhaneyi seçin</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={() => setIstirahatView('history')}
+                      style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b', padding: '10px 18px', borderRadius: '14px', fontWeight: 800, fontSize: '13px', cursor: 'pointer' }}>
+                      📜 Geçmiş
+                    </button>
+                    <button onClick={istirahatEditMode ? saveIstirahatRooms : openIstirahatEditMode}
+                      className="premium-btn" style={{ background: istirahatEditMode ? '#10b981' : '#f1f5f9', color: istirahatEditMode ? 'white' : '#8b5cf6', padding: '10px 18px', fontSize: '13px' }}>
+                      {istirahatEditMode ? '💾 Kaydet' : '🛠️ Düzenle'}
+                    </button>
+                    {istirahatEditMode && (
+                      <button onClick={() => setIstirahatEditMode(false)}
+                        style={{ background: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 16px', borderRadius: '14px', fontWeight: 800, fontSize: '13px', cursor: 'pointer' }}>İptal</button>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+                  {Object.entries(rooms).map(([roomKey, room]) => {
+                    const last = lastRatingForRoom(roomKey);
+                    const doneToday = allLogs.some(l => l.roomKey === roomKey && l.timestamp >= todayStart);
+                    const responsibles = room.responsibles || [];
+                    if (istirahatEditMode) {
+                      return (
+                        <div key={roomKey} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '24px', padding: '20px', boxShadow: '0 2px 12px rgba(15,23,42,0.04)' }}>
+                          <input value={room.name} onChange={e => setTempIstirahatRooms({...tempIstirahatRooms, [roomKey]: {...tempIstirahatRooms[roomKey], name: e.target.value}})}
+                            className="elite-input" style={{ marginBottom: '14px', fontWeight: 900, color: '#8b5cf6', borderColor: '#ede9fe', background: '#faf5ff', width: '100%', boxSizing: 'border-box' }} />
+                          <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', marginBottom: '8px' }}>Öğrenciler</div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                            {Array.from({ length: 8 }, (_, i) => i).map(slot => (
+                              <select key={slot}
+                                value={(tempIstirahatRooms[roomKey]?.responsibles || [])[slot] || ''}
+                                onChange={e => {
+                                  const arr = [...(tempIstirahatRooms[roomKey]?.responsibles || [])];
+                                  arr[slot] = e.target.value;
+                                  setTempIstirahatRooms({...tempIstirahatRooms, [roomKey]: {...tempIstirahatRooms[roomKey], responsibles: arr.filter(Boolean)}});
+                                }}
+                                className="elite-input" style={{ padding: '8px', fontSize: '12px', borderRadius: '10px', background: 'white' }}>
+                                <option value="">-- Seç --</option>
+                                {roster.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={roomKey} onClick={doneToday ? undefined : () => { setIstirahatSelectedRoom(roomKey); setIstirahatScore(5); setIstirahatNote(''); }}
+                        className={doneToday ? '' : 'card-hover'}
+                        style={{ background: doneToday ? '#f8fafc' : 'white', border: `2px solid ${doneToday ? '#e2e8f0' : '#e2e8f0'}`, borderRadius: '24px', padding: '20px', cursor: doneToday ? 'default' : 'pointer', opacity: doneToday ? 0.7 : 1, transition: 'all 0.2s', boxShadow: '0 2px 12px rgba(15,23,42,0.04)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                          <div style={{ fontSize: '32px' }}>🛌</div>
+                          {doneToday && <span style={{ background: '#ecfdf5', color: '#10b981', fontSize: '11px', fontWeight: 900, padding: '3px 10px', borderRadius: '10px' }}>✓ Kontrol Edildi</span>}
+                        </div>
+                        <div style={{ fontWeight: 900, fontSize: '17px', color: doneToday ? '#94a3b8' : '#0f172a', marginBottom: '8px' }}>{room.name}</div>
+                        {responsibles.length > 0 ? (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
+                            {responsibles.map(r => (
+                              <span key={r} style={{ background: '#f1f5f9', color: '#475569', fontSize: '11px', fontWeight: 700, padding: '3px 9px', borderRadius: '8px' }}>{r}</span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '12px', color: '#cbd5e1', fontWeight: 700, marginBottom: '10px' }}>Öğrenci atanmadı</div>
+                        )}
+                        {last && (
+                          <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#fbbf24', letterSpacing: '2px' }}>{'★'.repeat(last.score)}{'☆'.repeat(5-last.score)}</span>
+                            <span>{new Date(last.timestamp).toLocaleDateString('tr-TR')}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* PUAN VERME */}
+            {istirahatSelectedRoom && !istirahatView && (() => {
+              const room = rooms[istirahatSelectedRoom];
+              const responsibles = room?.responsibles || [];
+              return (
+                <div className="fade-in">
+                  <div style={{ background: 'white', borderRadius: '32px', padding: '28px', boxShadow: '0 10px 40px rgba(15,23,42,0.04)', border: '1px solid #f8fafc' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '24px', background: '#f0fdf4', borderRadius: '20px', padding: '18px 22px', border: '1px solid #a7f3d0' }}>
+                      <span style={{ fontSize: '36px' }}>🛌</span>
+                      <div>
+                        <div style={{ fontWeight: 900, fontSize: '20px', color: '#0f172a' }}>{room?.name}</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#10b981', marginTop: '2px' }}>{responsibles.length} Öğrenci</div>
+                      </div>
+                    </div>
+                    <div style={{ background: '#f8fafc', borderRadius: '20px', padding: '18px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontWeight: 900, fontSize: '14px', color: '#0f172a', marginBottom: '12px' }}>👥 Odadaki Öğrenciler</div>
+                      {responsibles.length === 0 ? (
+                        <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 700 }}>Bu odada kayıtlı öğrenci yok.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                          {responsibles.map(r => <span key={r} style={{ background: '#dcfce7', color: '#166534', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 800 }}>{r}</span>)}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ background: '#f8fafc', borderRadius: '20px', padding: '24px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
+                      <div style={{ textAlign: 'center', fontWeight: 900, color: '#0f172a', fontSize: '16px', marginBottom: '20px' }}>İSTİRAHAT KONTROL PUANI</div>
+                      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '16px' }}>
+                        {[1,2,3,4,5].map(star => (
+                          <button key={star} onClick={() => setIstirahatScore(star)}
+                            style={{ flex: 1, maxWidth: '72px', padding: '16px 0', fontSize: '28px', borderRadius: '18px', border: 'none', cursor: 'pointer', background: istirahatScore >= star ? scoreColors[star] : '#ffffff', color: istirahatScore >= star ? '#fff' : '#cbd5e1', transition: 'all 0.2s', boxShadow: istirahatScore >= star ? `0 8px 16px ${scoreColors[star]}50` : '0 2px 6px rgba(0,0,0,0.06)' }}>★</button>
+                        ))}
+                      </div>
+                      <div style={{ textAlign: 'center', fontSize: '15px', fontWeight: 900, color: scoreColors[istirahatScore] }}>
+                        {scoreLabels[istirahatScore]} — {responsibles.length} öğrenciye {getCoinImpact(istirahatScore, 'istirahat') >= 0 ? '+' : ''}{getCoinImpact(istirahatScore, 'istirahat')} M-Coin
+                      </div>
+                    </div>
+                    <textarea value={istirahatNote} onChange={e => setIstirahatNote(e.target.value)}
+                      placeholder="Not ekle (opsiyonel)..." className="elite-input"
+                      style={{ width: '100%', boxSizing: 'border-box', minHeight: '80px', resize: 'vertical', marginBottom: '16px', fontSize: '14px' }} />
+                    <button onClick={() => saveIstirahatInspection(istirahatSelectedRoom)} disabled={isIstirahatSaving}
+                      className="premium-btn badge-glow" style={{ width: '100%', padding: '20px', background: 'linear-gradient(135deg, #10b981cc, #10b981)', color: 'white', fontWeight: 900, fontSize: '17px', border: 'none', boxShadow: '0 12px 24px rgba(16,185,129,0.35)' }}>
+                      {isIstirahatSaving ? '⏳ İşleniyor...' : '✅ KONTROLÜ KAYDET'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* GEÇMİŞ */}
+            {istirahatView === 'history' && (
+              <div className="fade-in" style={{ background: 'white', padding: '30px', borderRadius: '32px', boxShadow: '0 10px 40px rgba(15,23,42,0.04)', border: '1px solid #f8fafc' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
+                  <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a', fontSize: '22px' }}>📜 İstirahat Kontrol Geçmişi</h3>
+                  <button onClick={() => { if(window.confirm('Tüm geçmişi silmek istediğine emin misin?')) db.ref('mavikent_premium/istirahat_logs').set(null); }}
+                    style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5', padding: '8px 16px', borderRadius: '12px', fontSize: '12px', fontWeight: 900, cursor: 'pointer' }}>Geçmişi Temizle</button>
+                </div>
+                <div className="clean-scroll" style={{ maxHeight: '500px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '10px' }}>
+                  {allLogs.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontWeight: 700 }}>Henüz kayıt bulunmuyor.</div>
+                  ) : (
+                    allLogs.sort((a,b) => b.timestamp - a.timestamp).slice(0,60).map((log, i) => (
+                      <div key={i} style={{ padding: '16px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontWeight: 900, fontSize: '15px', color: '#0f172a', marginBottom: '4px' }}>🛌 {log.roomName}</div>
+                          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>{(log.responsibles||[]).join(', ') || 'Kişi Yok'}</div>
+                          <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800, marginTop: '4px' }}>{new Date(log.timestamp).toLocaleString('tr-TR')} • {log.inspector}</div>
+                          {log.note && <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', fontStyle: 'italic' }}>{log.note}</div>}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: 900, color: (log.coinImpact||0) >= 0 ? '#10b981' : '#ef4444', fontSize: '18px', background: (log.coinImpact||0) >= 0 ? '#ecfdf5' : '#fef2f2', padding: '4px 12px', borderRadius: '12px', display: 'inline-block' }}>{(log.coinImpact||0) >= 0 ? '+' : ''}{log.coinImpact} M</div>
+                          <div style={{ fontSize: '13px', color: '#fbbf24', marginTop: '6px', letterSpacing: '2px' }}>{'★'.repeat(log.score||0)}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* --- EKSİK KALAN MODALLAR (YOKLAMA, EĞİTİM, SINAV VB.) --- */}
       {selectedStudent && modalType === 'isleyis' && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px', animation: 'fadeIn 0.3s ease-out' }}>

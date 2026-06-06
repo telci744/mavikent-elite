@@ -419,7 +419,7 @@ const App = () => {
       <div className="popIn-anim" style={{ width: '100%', maxWidth: '440px', textAlign: 'center' }}>
 
         {/* LOGO KISMI */}
-        <div style={{ marginBottom: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div style={{ marginBottom: 'clamp(24px, 6vh, 60px)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           {appData?.settings?.corporate_logo_url ? (
             <img src={appData.settings.corporate_logo_url} alt="Kurumsal Logo" style={{ maxHeight: '100px', objectFit: 'contain', marginBottom: '20px' }} />
           ) : (
@@ -459,7 +459,7 @@ const App = () => {
 
         {/* YÖNETİCİ / PERSONEL GİRİŞİ - PIN ADIMI */}
         {(loginMode === 'admin' || loginMode === 'staff') && loginStep === 'pin' && (
-          <div className="popIn-anim" style={{ background: 'white', padding: '40px', borderRadius: '32px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', border: '1px solid rgba(226,232,240,0.6)' }}>
+          <div className="popIn-anim" style={{ background: 'white', padding: 'clamp(20px, 6vw, 40px)', borderRadius: '32px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', border: '1px solid rgba(226,232,240,0.6)' }}>
             <div style={{ fontSize: '40px', marginBottom: '15px' }}>{loginMode === 'admin' ? '👑' : '👔'}</div>
             <h2 style={{ fontSize: '22px', fontWeight: 900, color: '#0f172a', margin: '0 0 8px 0' }}>
               {loginMode === 'admin' ? 'Yönetici Girişi' : 'Personel Girişi'}
@@ -508,7 +508,7 @@ const App = () => {
 
             {setupQrUrl && (
               <div style={{ background: '#f8fafc', borderRadius: '20px', padding: '20px', marginBottom: '20px', display: 'inline-block' }}>
-                <img src={setupQrUrl} alt="QR Kod" style={{ width: '200px', height: '200px', display: 'block' }} />
+                <img src={setupQrUrl} alt="QR Kod" style={{ width: 'min(200px, 70vw)', height: 'min(200px, 70vw)', display: 'block' }} />
               </div>
             )}
 
@@ -536,7 +536,7 @@ const App = () => {
 
         {/* BİYOMETRİK KAYIT TEKLİFİ */}
         {loginStep === 'biometric_offer' && (
-          <div className="popIn-anim" style={{ background: 'white', padding: '40px', borderRadius: '32px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', border: '1px solid rgba(226,232,240,0.6)' }}>
+          <div className="popIn-anim" style={{ background: 'white', padding: 'clamp(20px, 6vw, 40px)', borderRadius: '32px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', border: '1px solid rgba(226,232,240,0.6)' }}>
             <div style={{ fontSize: '50px', marginBottom: '15px' }}>🪪</div>
             <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0f172a', margin: '0 0 8px 0' }}>Hızlı Giriş Kur</h2>
             <p style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600, margin: '0 0 20px 0', lineHeight: 1.7 }}>
@@ -555,7 +555,7 @@ const App = () => {
 
         {/* 2FA DOĞRULAMA ADIMI (normal giriş) */}
         {loginStep === '2fa_verify' && (
-          <div className="popIn-anim" style={{ background: 'white', padding: '40px', borderRadius: '32px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', border: '1px solid rgba(226,232,240,0.6)' }}>
+          <div className="popIn-anim" style={{ background: 'white', padding: 'clamp(20px, 6vw, 40px)', borderRadius: '32px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', border: '1px solid rgba(226,232,240,0.6)' }}>
             <div style={{ fontSize: '40px', marginBottom: '15px' }}>📱</div>
             <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0f172a', margin: '0 0 8px 0' }}>Google Authenticator</h2>
             <p style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600, margin: '0 0 6px 0' }}>
@@ -585,7 +585,7 @@ const App = () => {
 
         {/* ÖĞRENCİ GİRİŞİ VE ŞİFREMİ UNUTTUM */}
         {loginMode === 'student' && (
-          <div className="popIn-anim" style={{ background: 'white', padding: '40px', borderRadius: '32px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', border: '1px solid rgba(226,232,240,0.6)' }}>
+          <div className="popIn-anim" style={{ background: 'white', padding: 'clamp(20px, 6vw, 40px)', borderRadius: '32px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', border: '1px solid rgba(226,232,240,0.6)' }}>
             <div style={{ fontSize: '40px', marginBottom: '15px' }}>🎓</div>
             <h2 style={{ fontSize: '22px', fontWeight: 900, color: '#0f172a', margin: '0 0 25px 0' }}>
               {isForgot ? 'Şifremi Unuttum' : 'Öğrenci Portalı'}

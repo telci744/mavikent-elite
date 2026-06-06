@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
+import QuizStudent from './QuizStudent';
+import BilgiKulesi from './BilgiKulesi';
+import KelimeAvi from './KelimeAvi';
+import WeeklySummaryCard from './WeeklySummaryCard';
 import { playClick, playCoin, playBooking, playCancel } from '../sounds';
 import { toast } from '../toast';
 import { burst } from '../confetti';
@@ -64,6 +68,13 @@ const SHARD_TYPES = [
     { id: 'ps5', name: 'PS5', icon: '🕹️', color: '#8b5cf6', bg: '#f5f3ff' },
     { id: 'vr', name: 'VR', icon: '🥽', color: '#f59e0b', bg: '#fffbeb' }
 ];
+
+const FLOOR_AREA_TYPES = {
+    wc:        { icon: '🚽', label: 'WC / Tuvalet',   color: '#0ea5e9', bg: '#f0f9ff' },
+    etut:      { icon: '📚', label: 'Etüt Salonu',    color: '#8b5cf6', bg: '#faf5ff' },
+    yatakhane: { icon: '🛏️', label: 'Yatakhane',      color: '#10b981', bg: '#f0fdf4' },
+    genel:     { icon: '🧹', label: 'Genel Temizlik', color: '#f59e0b', bg: '#fffbeb' },
+};
 
 const GAME_SLOTS = {
     'ps4': [
@@ -256,6 +267,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   const [showTxnModal, setShowTxnModal] = useState(false);
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [messageText, setMessageText] = useState('');
+  const [summaryOpen, setSummaryOpen] = useState(false);
   
   const [purchaseModal, setPurchaseModal] = useState({ active: false, item: null, target: 'self', receiver: '' });
 
@@ -263,9 +275,15 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   const [gameDay, setGameDay] = useState(DAYS[currentDayIndex]);
   const [gameDevice, setGameDevice] = useState('ps4');
   
+  const [akademiView, setAkademiView] = useState('menu');
   const [activeTourneyTab, setActiveTourneyTab] = useState({});
   const [activeWeekTab, setActiveWeekTab] = useState({});
   const [expandedTourney, setExpandedTourney] = useState(null);
+  const [stuHygSection, setStuHygSection] = useState(null);
+  const [stuHygFloor, setStuHygFloor] = useState(null);
+  const [stuHygAreaId, setStuHygAreaId] = useState(null);
+  const [stuHygScore, setStuHygScore] = useState(5);
+  const [isHygSaving, setIsHygSaving] = useState(false);
 
   const isController = appData?.settings?.game_room_controller === safeName;
   const [showControlPanel, setShowControlPanel] = useState(false);
@@ -696,6 +714,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   const firstName = safeName || 'Öğrenci';
   const xpDetail = getDetailedLevelInfo(appData?.xp?.[safeName]);
   const mCoin = Number(appData?.wallet?.[safeName] || 0);
+  const isCritical = mCoin < 50;
   const myRp = Number(appData?.season_score?.[safeName] || 0);
   const myBadge = getRankBadge(myRp);
   const isEliteStud = appData?.student_tiers?.[safeName] === 'elite';
@@ -731,8 +750,27 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   const xpSorted = getAllRankings('xp');
   
   const myRpRank = rpSorted.findIndex(s => s.n === safeName) + 1 || '-';
-  const myWealthRank = wealthSorted.findIndex(s => s.n === safeName) + 1 || '-';
-  const myXpRank = xpSorted.findIndex(s => s.n === safeName) + 1 || '-';
+  const myWealthRank = wealthSorted.findIndex(s => s.n === safeName) + 1 || '-';
+  const myXpRank = xpSorted.findIndex(s => s.n === safeName) + 1 || '-';
+
+  const quizResults = appData?.quiz_results || {};
+  const akademiSorted = roster.map(n => {
+    const studentResults = quizResults[n] || {};
+    let totalScore = 0, totalQuestions = 0, totalCoins = 0, setCount = 0;
+    Object.values(studentResults).forEach(r => {
+      if (r?.disqualified) return;
+      if (typeof r?.score === 'number' && typeof r?.total === 'number' && r.total > 0) {
+        totalScore += r.score;
+        totalQuestions += r.total;
+        totalCoins += Number(r.earned_coins || 0);
+        setCount++;
+      }
+    });
+    const avgPct = setCount > 0 ? Math.round((totalScore / totalQuestions) * 100) : 0;
+    return { n: String(n), avgPct, totalCoins, setCount };
+  }).filter(s => s.setCount > 0).sort((a, b) => b.avgPct - a.avgPct || b.totalCoins - a.totalCoins);
+
+  const myAkademiRank = akademiSorted.findIndex(s => s.n === safeName) + 1 || '-';
 
   // --- ZIRHLANMIŞ HESAPLAMALAR ---
   let totalExpected = 0;
@@ -1123,6 +1161,50 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   };
 
 
+  const isHygieneInspector = Object.keys(appData?.hygiene_inspectors?.[safeName] || {}).length > 0;
+
+  const getCoinImpact = (score) => {
+      if (score === 5) return 30;
+      if (score === 4) return 20;
+      if (score === 3) return 10;
+      if (score === 2) return -30;
+      return -60;
+  };
+
+  const saveStuFloorInspection = async (section, floorKey, areaId) => {
+      const area = appData?.hygiene_floors?.[section]?.[floorKey]?.areas?.[areaId];
+      if (!area) return toast('Alan bulunamadı!');
+      const responsibles = area.responsibles || [];
+      if (responsibles.length === 0) return toast('Bu alanda sorumlu öğrenci yok!');
+      const todayMidnight = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+      const alreadyDone = Object.values(appData?.hygiene_logs || {}).some(
+          l => l.areaName === area.name && l.section === section && l.floor === floorKey && l.timestamp >= todayMidnight
+      );
+      if (alreadyDone) return toast(`⚠️ ${area.name} bugün zaten denetlendi.`);
+      setIsHygSaving(true);
+      const coinImpact = getCoinImpact(stuHygScore);
+      const updates = {};
+      const logId = `floor_${Date.now()}`;
+      const sectionLabel = section === 'rutin' ? 'Rutin' : 'Temizlik';
+      updates[`hygiene_logs/${logId}`] = {
+          areaName: area.name, score: stuHygScore,
+          responsibles, timestamp: Date.now(), inspector: safeName,
+          coinImpact, type: area.type, floor: floorKey, section,
+      };
+      responsibles.forEach(name => {
+          updates[`wallet/${name}`] = (Number(appData?.wallet?.[name]) || 0) + coinImpact;
+          updates[`transactions/${name}/txn_${logId}`] = {
+              desc: `${area.name} ${sectionLabel} Denetimi (${safeName})`, amt: coinImpact,
+              date: new Date().toLocaleString('tr-TR'),
+          };
+      });
+      try {
+          await db.ref('mavikent_premium').update(updates);
+          toast(`✅ ${area.name} denetimi kaydedildi!`);
+          setStuHygScore(5);
+      } catch(e) { toast('Hata!'); } finally { setIsHygSaving(false); }
+  };
+
   let myResponsibilities = [];
   if (appData?.hygiene_assignments?.[safeName]) myResponsibilities.push(`🧹 ${appData.hygiene_assignments[safeName]}`);
   Object.entries(appData?.room_areas || {}).forEach(([k, v]) => {
@@ -1430,6 +1512,17 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                 </div>
             )}
 
+            {isHygieneInspector && (
+                <div onClick={() => setActiveTab('hygiene')} style={{ background: 'linear-gradient(135deg,#0ea5e9,#0369a1)', borderRadius: '20px', padding: '18px 22px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '14px', boxShadow: '0 8px 20px rgba(14,165,233,0.3)' }}>
+                    <span style={{ fontSize: '36px' }}>🧹</span>
+                    <div>
+                        <div style={{ fontWeight: 900, fontSize: '16px', color: 'white' }}>Hijyen Denetim Paneli</div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginTop: '3px' }}>Denetçi olarak atandın — Puan vermek için tıkla</div>
+                    </div>
+                    <div style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.6)', fontSize: '20px' }}>→</div>
+                </div>
+            )}
+
             {/* 3. DENETİM SONUÇLARI (3'LÜ PANEL) */}
             {(() => {
                 const allMyLogs = Object.values(appData?.hygiene_logs || {})
@@ -1498,6 +1591,30 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}><span style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a' }}>Seviye {xpDetail.level}</span><span style={{ fontSize: '14px', fontWeight: 800, color: '#64748b' }}>Seviye {xpDetail.level + 1}</span></div>
                <div style={{ width: '100%', height: '16px', background: '#e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '12px' }}><div style={{ background: 'linear-gradient(90deg, #3b82f6, #0ea5e9)', width: `${xpDetail.progress}%`, height: '100%', borderRadius: '10px', transition: 'width 0.5s ease-out' }}></div></div>
                <div style={{ textAlign: 'center', fontSize: '14px', fontWeight: 700, color: '#94a3b8' }}><span style={{ color: '#0f172a', fontWeight: 900 }}>{xpDetail.currentXp} XP</span> / {xpDetail.nextLevelXp} XP</div>
+            </div>
+
+            {/* Haftalık Özet */}
+            <div style={{ borderRadius: '20px', border: '1.5px solid #e2e8f0', overflow: 'hidden', background: 'white', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+              <div
+                onClick={() => setSummaryOpen(o => !o)}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', cursor: 'pointer', background: summaryOpen ? '#0f172a' : 'white', transition: 'background 0.2s' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '18px' }}>📋</span>
+                  <span style={{ fontWeight: 900, fontSize: '14px', color: summaryOpen ? 'white' : '#0f172a' }}>Haftalık Karne</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: summaryOpen ? '#94a3b8' : '#64748b', background: summaryOpen ? 'rgba(255,255,255,0.1)' : '#f1f5f9', padding: '3px 10px', borderRadius: '20px' }}>
+                    Bu Hafta
+                  </span>
+                  <span style={{ fontSize: '14px', color: summaryOpen ? 'white' : '#94a3b8', transition: 'transform 0.2s', display: 'inline-block', transform: summaryOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+                </div>
+              </div>
+              {summaryOpen && (
+                <div style={{ padding: '16px', borderTop: '1.5px solid #e2e8f0' }}>
+                  <WeeklySummaryCard studentName={safeName} appData={appData} compact={true} />
+                </div>
+              )}
             </div>
 
             {/* 🍽️ ZAMAN KİLİTLİ 3 ÖĞÜNLÜ YEMEK PUANLAMA BİLEŞENİ BURADA! */}
@@ -1689,7 +1806,97 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
 
           {activeTab === 'game' && (
             <div className="fade-in">
-               
+              {isCritical ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '55vh', textAlign: 'center', padding: '40px 20px' }}>
+                  <div style={{ fontSize: '72px', marginBottom: '16px' }}>🔒</div>
+                  <div style={{ fontWeight: 900, fontSize: '24px', color: '#dc2626', marginBottom: '8px' }}>Erişim Kısıtlandı</div>
+                  <div style={{ fontSize: '15px', color: '#64748b', fontWeight: 700, marginBottom: '20px' }}>Bakiyen 50 M-Coin altında.</div>
+                  <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '16px 28px', border: '1px solid #fca5a5', marginBottom: '24px' }}>
+                    <div style={{ fontWeight: 900, color: '#b91c1c', fontSize: '22px' }}>{mCoin} M</div>
+                    <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>Min. 50 M-Coin gerekli</div>
+                  </div>
+                  {(() => {
+                    const myMission = appData?.kurtarma_gorevleri?.[safeName];
+                    const claimMission = async () => {
+                      const myM = appData?.kurtarma_gorevleri?.[safeName];
+                      if (myM?.status === 'reddedildi' && myM.rejected_at && Date.now() - myM.rejected_at < 12*60*60*1000) { toast('12 saat beklemelisin.'); return; }
+                      const starReward = { 1: 80, 2: 60, 3: 40, 4: 20 };
+                      const todayStart = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+                      const failedAreas = Object.values(appData?.hygiene_logs || {})
+                        .filter(l => l.timestamp >= todayStart && l.score < 5 && (l.responsibles || []).includes(safeName))
+                        .map(l => ({ name: l.areaName, type: l.type || 'genel', score: l.score, reward: starReward[l.score] || 20 }));
+                      let missionAreas = failedAreas;
+                      let totalReward = missionAreas.reduce((s, a) => s + a.reward, 0);
+                      if (missionAreas.length === 0) {
+                        const floors = appData?.hygiene_floors || {};
+                        const responsible = [];
+                        ['rutin','temizlik'].forEach(sec => {
+                          ['kat2','kat3','kat4'].forEach(fl => {
+                            Object.entries(floors[sec]?.[fl]?.areas || {}).forEach(([,a]) => {
+                              if ((a.responsibles || []).includes(safeName)) responsible.push({ name: a.name, type: a.type || 'genel', reward: 40 });
+                            });
+                          });
+                        });
+                        missionAreas = responsible.slice(0, 1);
+                        totalReward = 40;
+                      }
+                      if (missionAreas.length === 0) { toast('Henüz sorumlu alanın yok. Yöneticine başvur.'); return; }
+                      await db.ref(`mavikent_premium/kurtarma_gorevleri/${safeName}`).set({ status: 'bekliyor', assigned_at: Date.now(), reward_coins: totalReward, areas: missionAreas });
+                      toast('Kurtarma görevi alındı! Tamamlayınca onay iste.');
+                    };
+                    const completeMission = async () => {
+                      await db.ref(`mavikent_premium/kurtarma_gorevleri/${safeName}`).update({ status: 'talep_edildi', claimed_at: Date.now() });
+                      toast('Onay isteğin gönderildi!');
+                    };
+                    // Red sonrası 12 saat bekleme
+                    if (myMission?.status === 'reddedildi') {
+                      const remaining = myMission.rejected_at ? Math.max(0, 12*60*60*1000 - (Date.now() - myMission.rejected_at)) : 0;
+                      const hrs = Math.floor(remaining / 3600000);
+                      const mins = Math.floor((remaining % 3600000) / 60000);
+                      if (remaining > 0) return (
+                        <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '20px 24px', border: '1px solid #fca5a5', textAlign: 'center', maxWidth: '280px' }}>
+                          <div style={{ fontSize: '28px', marginBottom: '8px' }}>❌</div>
+                          <div style={{ fontWeight: 900, fontSize: '14px', color: '#dc2626', marginBottom: '6px' }}>Görev Reddedildi</div>
+                          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700, marginBottom: '10px' }}>Tekrar almak için bekle</div>
+                          <div style={{ background: 'white', borderRadius: '12px', padding: '10px 16px', border: '1px solid #fca5a5' }}>
+                            <div style={{ fontWeight: 900, fontSize: '20px', color: '#dc2626' }}>{hrs}s {mins}dk</div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>kalan süre</div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (!myMission || myMission.status === 'tamamlandi' || (myMission.status === 'reddedildi' && myMission.rejected_at && Date.now() - myMission.rejected_at >= 12*60*60*1000)) return (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 700 }}>Kurtarma görevi ile kilit açabilirsin</div>
+                        <button onClick={claimMission} style={{ background: 'linear-gradient(135deg,#0ea5e9,#0284c7)', color: 'white', border: 'none', padding: '14px 32px', borderRadius: '18px', fontWeight: 900, fontSize: '15px', cursor: 'pointer', boxShadow: '0 6px 20px rgba(14,165,233,0.4)' }}>🚀 Kurtarma Görevi Al</button>
+                      </div>
+                    );
+                    if (myMission.status === 'bekliyor') return (
+                      <div style={{ background: '#fff7ed', borderRadius: '20px', padding: '20px 24px', border: '1px solid #fed7aa', maxWidth: '300px', textAlign: 'left' }}>
+                        <div style={{ fontWeight: 900, fontSize: '14px', color: '#c2410c', marginBottom: '10px' }}>🎯 Aktif Görevin</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
+                          {(myMission.areas || []).map((a, i) => (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', borderRadius: '10px', padding: '8px 12px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 800, color: '#c2410c' }}>{a.name}</span>
+                              <span style={{ fontSize: '12px', fontWeight: 900, color: '#10b981' }}>+{a.reward || myMission.reward_coins} M</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#c2410c', fontWeight: 900, marginBottom: '14px', textAlign: 'right' }}>Toplam: +{myMission.reward_coins} M-Coin</div>
+                        <button onClick={completeMission} style={{ background: '#10b981', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '14px', fontWeight: 900, fontSize: '14px', cursor: 'pointer', width: '100%', boxShadow: '0 4px 14px rgba(16,185,129,0.35)' }}>✅ Tamamladım, Onay İste</button>
+                      </div>
+                    );
+                    if (myMission.status === 'talep_edildi') return (
+                      <div style={{ background: '#f0fdf4', borderRadius: '20px', padding: '18px 24px', border: '1px solid #a7f3d0', textAlign: 'center' }}>
+                        <div style={{ fontSize: '22px', marginBottom: '6px' }}>⏳</div>
+                        <div style={{ fontWeight: 900, fontSize: '14px', color: '#059669' }}>Onay Bekleniyor</div>
+                        <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>Yönetici onayladığında bakiyen yüklenir</div>
+                      </div>
+                    );
+                    return null;
+                  })()}
+                </div>
+              ) : (<>
                {/* 🏆 AKTİF TURNUVALAR EKRANI */}
                {Object.keys(appData?.tournaments || {}).length > 0 && (
                    <div style={{ background: 'white', borderRadius: '32px', padding: '25px', border: '1px solid #f1f5f9', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.05)', marginBottom: '25px' }}>
@@ -2155,7 +2362,10 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                           <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>3. SEANS SEÇİN ({gameDay})</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                              {([...(GAME_SLOTS[gameDevice] || []), ...Object.keys(appData?.custom_game_slots?.[gameDevice]?.[gameDay] || {}).map(k => ({id: k, ...appData.custom_game_slots[gameDevice][gameDay][k]}))].sort((a,b) => a.time.localeCompare(b.time))).map(slot => {
-                                 const bookedBy = appData?.game_room_appointments?.[gameDevice]?.[gameDay]?.[slot.id];
+                                 const rawBookedBy = appData?.game_room_appointments?.[gameDevice]?.[gameDay]?.[slot.id];
+                                 const hasTournaments = Object.keys(appData?.tournaments || {}).length > 0;
+                                 // Turnuva slotu ama aktif turnuva yoksa → boş say
+                                 const bookedBy = (rawBookedBy && String(rawBookedBy).includes('TURNUVA') && !hasTournaments) ? null : rawBookedBy;
                                  const isBooked = !!bookedBy;
                                  const isMyBook = bookedBy === safeName;
 
@@ -2196,6 +2406,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                        </div>
                    </>
                )}
+              </>)}
             </div>
           )}
 
@@ -2335,6 +2546,97 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
 
           {activeTab === 'market' && (
             <div className="fade-in">
+              {isCritical ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '55vh', textAlign: 'center', padding: '40px 20px' }}>
+                  <div style={{ fontSize: '72px', marginBottom: '16px' }}>🔒</div>
+                  <div style={{ fontWeight: 900, fontSize: '24px', color: '#dc2626', marginBottom: '8px' }}>Market Kilitli</div>
+                  <div style={{ fontSize: '15px', color: '#64748b', fontWeight: 700, marginBottom: '20px' }}>Bakiyen 50 M-Coin altında.</div>
+                  <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '16px 28px', border: '1px solid #fca5a5', marginBottom: '24px' }}>
+                    <div style={{ fontWeight: 900, color: '#b91c1c', fontSize: '22px' }}>{mCoin} M</div>
+                    <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>Min. 50 M-Coin gerekli</div>
+                  </div>
+                  {(() => {
+                    const myMission = appData?.kurtarma_gorevleri?.[safeName];
+                    const claimMission = async () => {
+                      const myM = appData?.kurtarma_gorevleri?.[safeName];
+                      if (myM?.status === 'reddedildi' && myM.rejected_at && Date.now() - myM.rejected_at < 12*60*60*1000) { toast('12 saat beklemelisin.'); return; }
+                      const starReward = { 1: 80, 2: 60, 3: 40, 4: 20 };
+                      const todayStart = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+                      const failedAreas = Object.values(appData?.hygiene_logs || {})
+                        .filter(l => l.timestamp >= todayStart && l.score < 5 && (l.responsibles || []).includes(safeName))
+                        .map(l => ({ name: l.areaName, type: l.type || 'genel', score: l.score, reward: starReward[l.score] || 20 }));
+                      let missionAreas = failedAreas;
+                      let totalReward = missionAreas.reduce((s, a) => s + a.reward, 0);
+                      if (missionAreas.length === 0) {
+                        const floors = appData?.hygiene_floors || {};
+                        const responsible = [];
+                        ['rutin','temizlik'].forEach(sec => {
+                          ['kat2','kat3','kat4'].forEach(fl => {
+                            Object.entries(floors[sec]?.[fl]?.areas || {}).forEach(([,a]) => {
+                              if ((a.responsibles || []).includes(safeName)) responsible.push({ name: a.name, type: a.type || 'genel', reward: 40 });
+                            });
+                          });
+                        });
+                        missionAreas = responsible.slice(0, 1);
+                        totalReward = 40;
+                      }
+                      if (missionAreas.length === 0) { toast('Henüz sorumlu alanın yok. Yöneticine başvur.'); return; }
+                      await db.ref(`mavikent_premium/kurtarma_gorevleri/${safeName}`).set({ status: 'bekliyor', assigned_at: Date.now(), reward_coins: totalReward, areas: missionAreas });
+                      toast('Kurtarma görevi alındı! Tamamlayınca onay iste.');
+                    };
+                    const completeMission = async () => {
+                      await db.ref(`mavikent_premium/kurtarma_gorevleri/${safeName}`).update({ status: 'talep_edildi', claimed_at: Date.now() });
+                      toast('Onay isteğin gönderildi!');
+                    };
+                    // Red sonrası 12 saat bekleme
+                    if (myMission?.status === 'reddedildi') {
+                      const remaining = myMission.rejected_at ? Math.max(0, 12*60*60*1000 - (Date.now() - myMission.rejected_at)) : 0;
+                      const hrs = Math.floor(remaining / 3600000);
+                      const mins = Math.floor((remaining % 3600000) / 60000);
+                      if (remaining > 0) return (
+                        <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '20px 24px', border: '1px solid #fca5a5', textAlign: 'center', maxWidth: '280px' }}>
+                          <div style={{ fontSize: '28px', marginBottom: '8px' }}>❌</div>
+                          <div style={{ fontWeight: 900, fontSize: '14px', color: '#dc2626', marginBottom: '6px' }}>Görev Reddedildi</div>
+                          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700, marginBottom: '10px' }}>Tekrar almak için bekle</div>
+                          <div style={{ background: 'white', borderRadius: '12px', padding: '10px 16px', border: '1px solid #fca5a5' }}>
+                            <div style={{ fontWeight: 900, fontSize: '20px', color: '#dc2626' }}>{hrs}s {mins}dk</div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>kalan süre</div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (!myMission || myMission.status === 'tamamlandi' || (myMission.status === 'reddedildi' && myMission.rejected_at && Date.now() - myMission.rejected_at >= 12*60*60*1000)) return (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 700 }}>Kurtarma görevi ile kilit açabilirsin</div>
+                        <button onClick={claimMission} style={{ background: 'linear-gradient(135deg,#0ea5e9,#0284c7)', color: 'white', border: 'none', padding: '14px 32px', borderRadius: '18px', fontWeight: 900, fontSize: '15px', cursor: 'pointer', boxShadow: '0 6px 20px rgba(14,165,233,0.4)' }}>🚀 Kurtarma Görevi Al</button>
+                      </div>
+                    );
+                    if (myMission.status === 'bekliyor') return (
+                      <div style={{ background: '#fff7ed', borderRadius: '20px', padding: '20px 24px', border: '1px solid #fed7aa', maxWidth: '300px', textAlign: 'left' }}>
+                        <div style={{ fontWeight: 900, fontSize: '14px', color: '#c2410c', marginBottom: '10px' }}>🎯 Aktif Görevin</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
+                          {(myMission.areas || []).map((a, i) => (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', borderRadius: '10px', padding: '8px 12px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 800, color: '#c2410c' }}>{a.name}</span>
+                              <span style={{ fontSize: '12px', fontWeight: 900, color: '#10b981' }}>+{a.reward || myMission.reward_coins} M</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#c2410c', fontWeight: 900, marginBottom: '14px', textAlign: 'right' }}>Toplam: +{myMission.reward_coins} M-Coin</div>
+                        <button onClick={completeMission} style={{ background: '#10b981', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '14px', fontWeight: 900, fontSize: '14px', cursor: 'pointer', width: '100%', boxShadow: '0 4px 14px rgba(16,185,129,0.35)' }}>✅ Tamamladım, Onay İste</button>
+                      </div>
+                    );
+                    if (myMission.status === 'talep_edildi') return (
+                      <div style={{ background: '#f0fdf4', borderRadius: '20px', padding: '18px 24px', border: '1px solid #a7f3d0', textAlign: 'center' }}>
+                        <div style={{ fontSize: '22px', marginBottom: '6px' }}>⏳</div>
+                        <div style={{ fontWeight: 900, fontSize: '14px', color: '#059669' }}>Onay Bekleniyor</div>
+                        <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>Yönetici onayladığında bakiyen yüklenir</div>
+                      </div>
+                    );
+                    return null;
+                  })()}
+                </div>
+              ) : (<>
                <h2 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '10px', color: '#0f172a', letterSpacing: '-0.5px' }}>🛍️ Market Vitrini</h2>
                
                {appData?.auction?.active && (
@@ -2391,6 +2693,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                     )
                  })}
                </div>
+              </>)}
             </div>
           )}
 
@@ -2424,32 +2727,353 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
             </div>
           )}
 
-          {activeTab === 'rank' && (
+          {activeTab === 'akademi' && (
             <div className="fade-in">
-               <h2 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '20px', color: '#0f172a', letterSpacing: '-0.5px' }}>💳 M-Coin Sıralaması</h2>
+              {!(appData?.settings?.quiz_enabled) && (
+                <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                  <div style={{ fontSize: '64px', marginBottom: '16px' }}>🔒</div>
+                  <h2 style={{ fontWeight: 900, fontSize: '22px', color: '#0f172a', margin: '0 0 10px' }}>Quiz Bölümü Kapalı</h2>
+                  <p style={{ color: '#64748b', fontSize: '14px', fontWeight: 600, margin: 0 }}>
+                    Yönetici bu bölümü henüz açmadı.<br />Biraz bekle!
+                  </p>
+                </div>
+              )}
+              {!!(appData?.settings?.quiz_enabled) && akademiView === 'menu' && (
 
-               <div style={{ background: '#ffffff', borderRadius: '32px', padding: '20px', boxShadow: '0 15px 40px -10px rgba(0,0,0,0.08)', border: '1px solid #f1f5f9' }}>
-                 {wealthSorted.map((s, idx) => {
-                   const isMe = s.n === safeName; 
-                   const pinned = appData?.pinned_badges?.[s.n] || [];
-                   const title = getStudentTitle(s.n);
-                   return (
-                     <div key={s.n} onClick={() => setViewProfile(s.n)} style={{ display: 'flex', alignItems: 'center', padding: '16px', borderBottom: idx < wealthSorted.length - 1 ? '1px solid #e2e8f0' : 'none', background: isMe ? '#f8fafc' : 'transparent', borderRadius: isMe ? '20px' : '0', cursor: 'pointer', transition: 'all 0.2s' }}>
-                       <div style={{ width: '35px', fontWeight: 900, color: idx < 3 ? '#0f172a' : '#94a3b8', fontSize: '18px' }}>{idx+1}.</div>
-                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontWeight: 900, fontSize: '16px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                             {s.n} 
-                             <TitleBadge title={title} />
-                             {pinned.map(bId => <span key={bId} style={{fontSize: '14px'}}>{BADGES[bId]?.icon}</span>)}
-                          </span>
-                       </div>
-                       <div style={{ color: '#10b981', fontWeight: 900, fontSize: '20px' }}>{s.val} <span style={{ fontSize: '11px', color: '#64748b' }}>M-COIN</span></div>
-                     </div>
-                   )
-                 })}
-               </div>
+                <div>
+                  <h2 style={{ fontSize: '26px', fontWeight: 900, marginBottom: '6px', color: '#0f172a' }}>📚 Akademi</h2>
+                  <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 24px', fontWeight: 600 }}>Öğren, yarış, kazan!</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {[
+                      { key: 'quiz', icon: '📖', title: 'Quiz Bölümleri', desc: 'Soru çöz, M-Coin kazan', gradient: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', shadow: 'rgba(59,130,246,0.3)' },
+                      { key: 'kule', icon: '🏰', title: 'Bilgi Kulesi', desc: 'Her doğru cevap seni bir kat yukarı çıkarır!', gradient: 'linear-gradient(135deg, #f59e0b, #d97706)', shadow: 'rgba(245,158,11,0.3)' },
+                      { key: 'kelimeavi', icon: '🔍', title: 'Kelime Avı', desc: 'İngilizce kelimeleri ızgarada bul, zamana karşı yarış!', gradient: 'linear-gradient(135deg, #10b981, #059669)', shadow: 'rgba(16,185,129,0.3)' },
+                    ].map(item => (
+                      <button key={item.key} onClick={() => setAkademiView(item.key)}
+                        style={{ background: item.gradient, border: 'none', borderRadius: '22px', padding: '22px 20px', cursor: 'pointer', textAlign: 'left', boxShadow: `0 8px 24px ${item.shadow}`, transition: 'transform 0.15s', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <span style={{ fontSize: '40px' }}>{item.icon}</span>
+                        <div>
+                          <div style={{ fontWeight: 900, fontSize: '17px', color: 'white', marginBottom: '4px' }}>{item.title}</div>
+                          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>{item.desc}</div>
+                        </div>
+                        <span style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.7)', fontSize: '20px' }}>›</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!!(appData?.settings?.quiz_enabled) && akademiView === 'quiz' && <QuizStudent studentName={safeName} appData={appData} onBack={() => setAkademiView('menu')} />}
+              {!!(appData?.settings?.quiz_enabled) && akademiView === 'kule' && <BilgiKulesi studentName={safeName} appData={appData} onBack={() => setAkademiView('menu')} />}
+              {!!(appData?.settings?.quiz_enabled) && akademiView === 'kelimeavi' && <KelimeAvi studentName={safeName} appData={appData} onBack={() => setAkademiView('menu')} />}
             </div>
           )}
+
+          {activeTab === 'rank' && (
+            <div className="fade-in">
+              <h2 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '16px', color: '#0f172a', letterSpacing: '-0.5px' }}>🏆 Liderlik</h2>
+
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: '#f1f5f9', borderRadius: '18px', padding: '6px' }}>
+                <button onClick={() => setRankTab('coins')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '14px', fontWeight: 900, fontSize: '13px', cursor: 'pointer', background: rankTab === 'coins' ? 'white' : 'transparent', color: rankTab === 'coins' ? '#0f172a' : '#94a3b8', boxShadow: rankTab === 'coins' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.2s' }}>💰 M-Coin</button>
+                <button onClick={() => setRankTab('akademi')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '14px', fontWeight: 900, fontSize: '13px', cursor: 'pointer', background: rankTab === 'akademi' ? 'white' : 'transparent', color: rankTab === 'akademi' ? '#0f172a' : '#94a3b8', boxShadow: rankTab === 'akademi' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.2s' }}>🎓 Akademi</button>
+              </div>
+
+              {rankTab === 'coins' && (
+                <div style={{ background: '#ffffff', borderRadius: '32px', padding: '20px', boxShadow: '0 15px 40px -10px rgba(0,0,0,0.08)', border: '1px solid #f1f5f9' }}>
+                  {wealthSorted.map((s, idx) => {
+                    const isMe = s.n === safeName;
+                    const pinned = appData?.pinned_badges?.[s.n] || [];
+                    const title = getStudentTitle(s.n);
+                    return (
+                      <div key={s.n} onClick={() => setViewProfile(s.n)} style={{ display: 'flex', alignItems: 'center', padding: '16px', borderBottom: idx < wealthSorted.length - 1 ? '1px solid #e2e8f0' : 'none', background: isMe ? '#f8fafc' : 'transparent', borderRadius: isMe ? '20px' : '0', cursor: 'pointer', transition: 'all 0.2s' }}>
+                        <div style={{ width: '35px', fontWeight: 900, color: idx < 3 ? '#0f172a' : '#94a3b8', fontSize: '18px' }}>{idx + 1}.</div>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontWeight: 900, fontSize: '16px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            {s.n}
+                            <TitleBadge title={title} />
+                            {pinned.map(bId => <span key={bId} style={{ fontSize: '14px' }}>{BADGES[bId]?.icon}</span>)}
+                          </span>
+                        </div>
+                        <div style={{ color: '#10b981', fontWeight: 900, fontSize: '20px' }}>{s.val} <span style={{ fontSize: '11px', color: '#64748b' }}>M-COIN</span></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {rankTab === 'akademi' && (
+                <div>
+                  {akademiSorted.length === 0 ? (
+                    <div style={{ background: 'white', borderRadius: '24px', padding: '50px 24px', textAlign: 'center', border: '1.5px dashed #cbd5e1' }}>
+                      <div style={{ fontSize: '40px', marginBottom: '12px' }}>📚</div>
+                      <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px', marginBottom: '6px' }}>Henüz sıralama yok</div>
+                      <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>Öğrenciler quiz çözdükçe sıralama oluşacak</div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {akademiSorted.map((s, idx) => {
+                        const isMe = s.n === safeName;
+                        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null;
+                        const barColor = s.avgPct >= 80 ? '#10b981' : s.avgPct >= 60 ? '#3b82f6' : s.avgPct >= 40 ? '#f59e0b' : '#ef4444';
+                        return (
+                          <div key={s.n} onClick={() => setViewProfile(s.n)} style={{ background: 'white', borderRadius: '20px', padding: '16px 20px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: isMe ? '2px solid #6366f1' : '1.5px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.2s' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
+                              <div style={{ width: '32px', fontWeight: 900, color: idx < 3 ? '#0f172a' : '#94a3b8', fontSize: '18px', textAlign: 'center' }}>
+                                {medal || (idx + 1) + '.'}
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 900, fontSize: '15px', color: '#0f172a' }}>{s.n}</div>
+                                <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>{s.setCount} bölüm · +{s.totalCoins} M-Coin kazanıldı</div>
+                              </div>
+                              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                <div style={{ fontWeight: 900, fontSize: '22px', color: barColor }}>%{s.avgPct}</div>
+                                <div style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8' }}>BAŞARI</div>
+                              </div>
+                            </div>
+                            <div style={{ background: '#f1f5f9', borderRadius: '8px', height: '6px', overflow: 'hidden' }}>
+                              <div style={{ background: barColor, height: '100%', width: s.avgPct + '%', borderRadius: '8px', transition: 'width 0.5s' }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {myAkademiRank && myAkademiRank !== '-' && (
+                    <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '13px', fontWeight: 700, color: '#6366f1' }}>
+                      Akademi sıralaman: #{myAkademiRank}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'hygiene' && isHygieneInspector && (() => {
+              const allLogs = Object.values(appData?.hygiene_logs || {});
+              const todayStart = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+              const timeAgo = (ts) => {
+                  if (!ts) return null;
+                  const m = Math.floor((Date.now() - ts) / 60000);
+                  if (m < 1) return 'az önce';
+                  if (m < 60) return `${m} dk önce`;
+                  const h = Math.floor(m / 60);
+                  if (h < 24) return `${h} saat önce`;
+                  return `${Math.floor(h / 24)} gün önce`;
+              };
+              const lastLogTs = (filterFn) => {
+                  const f = allLogs.filter(filterFn);
+                  return f.length ? Math.max(...f.map(l => l.timestamp)) : null;
+              };
+              const todayAreaCount = (section) =>
+                  new Set(allLogs.filter(l => l.section === section && l.timestamp >= todayStart).map(l => l.areaName)).size;
+              const lastScoreForArea = (areaName) => {
+                  const f = allLogs.filter(l => l.areaName === areaName).sort((a,b) => b.timestamp - a.timestamp);
+                  return f.length ? f[0].score : null;
+              };
+
+              return (
+              <div className="fade-in" style={{ animation: 'fadeIn 0.4s ease-out' }}>
+
+                  {(stuHygSection || stuHygFloor) && (
+                      <div style={{ marginBottom: '20px' }}>
+                          <button onClick={() => {
+                              if (stuHygAreaId) { setStuHygAreaId(null); setStuHygScore(5); }
+                              else if (stuHygFloor) { setStuHygFloor(null); setStuHygAreaId(null); }
+                              else { setStuHygSection(null); setStuHygFloor(null); setStuHygAreaId(null); }
+                          }} style={{ background: '#f1f5f9', color: '#0f172a', border: 'none', padding: '10px 20px', borderRadius: '14px', fontWeight: 800, fontSize: '14px', cursor: 'pointer' }}>
+                              ← Geri
+                          </button>
+                      </div>
+                  )}
+
+                  {!stuHygSection && (
+                      <div className="fade-in">
+                          <div style={{ marginBottom: '24px' }}>
+                              <div style={{ fontWeight: 900, fontSize: '22px', color: '#0f172a' }}>🏥 Hijyen Denetim Merkezi</div>
+                              <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600, marginTop: '4px' }}>Denetim türünü seç</div>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                              {[
+                                  ['rutin',    '🛏️', 'Rutin Kontrol',    'Yatak, dolap, oda düzeni', '#f59e0b', '#b45309', 'linear-gradient(135deg,#fef3c7,#fde68a)'],
+                                  ['temizlik', '🧹', 'Temizlik Kontrol', 'WC, etüt, koridorlar',     '#10b981', '#065f46', 'linear-gradient(135deg,#d1fae5,#a7f3d0)'],
+                              ].map(([key, icon, label, desc, color, dark, grad]) => {
+                                  const total = ['kat2','kat3','kat4'].reduce((n,fk) => n + Object.keys(appData?.hygiene_floors?.[key]?.[fk]?.areas || {}).length, 0);
+                                  const today = todayAreaCount(key);
+                                  const last  = lastLogTs(l => l.section === key);
+                                  const pct   = total > 0 ? Math.min(100, Math.round(today / total * 100)) : 0;
+                                  return (
+                                      <div key={key} onClick={() => { setStuHygSection(key); setStuHygFloor(null); }} className="card-hover"
+                                          style={{ background: 'white', borderRadius: '20px', overflow: 'hidden', cursor: 'pointer', boxShadow: '0 4px 24px rgba(15,23,42,0.07)', border: '1px solid #f1f5f9', transition: 'all 0.2s' }}>
+                                          <div style={{ background: grad, padding: '24px 24px 18px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                              <div style={{ fontSize: '44px', lineHeight: 1 }}>{icon}</div>
+                                              <div>
+                                                  <div style={{ fontWeight: 900, fontSize: '18px', color: dark }}>{label}</div>
+                                                  <div style={{ fontSize: '12px', fontWeight: 600, color: dark + 'aa', marginTop: '2px' }}>{desc}</div>
+                                              </div>
+                                          </div>
+                                          <div style={{ padding: '16px 24px 20px' }}>
+                                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+                                                  <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '10px 14px' }}>
+                                                      <div style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Toplam Alan</div>
+                                                      <div style={{ fontWeight: 900, fontSize: '22px', color: '#0f172a', marginTop: '2px' }}>{total}</div>
+                                                  </div>
+                                                  <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '10px 14px' }}>
+                                                      <div style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Son Denetim</div>
+                                                      <div style={{ fontWeight: 700, fontSize: '12px', color: last ? '#0f172a' : '#94a3b8', marginTop: '4px' }}>{last ? timeAgo(last) : 'Kayıt yok'}</div>
+                                                  </div>
+                                              </div>
+                                              <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                                  <span>Bugün tamamlanan</span>
+                                                  <span style={{ fontWeight: 900, color }}>{today}/{total}</span>
+                                              </div>
+                                              <div style={{ background: '#f1f5f9', borderRadius: '8px', height: '8px', overflow: 'hidden' }}>
+                                                  <div style={{ height: '100%', width: `${pct}%`, background: `linear-gradient(90deg,${color}88,${color})`, borderRadius: '8px', transition: 'width 0.6s ease' }} />
+                                              </div>
+                                          </div>
+                                      </div>
+                                  );
+                              })}
+                          </div>
+                      </div>
+                  )}
+
+                  {stuHygSection && !stuHygFloor && (
+                      <div className="fade-in">
+                          <div style={{ marginBottom: '20px' }}>
+                              <div style={{ fontSize: '13px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                  {stuHygSection === 'rutin' ? '🛏️ Rutin Kontrol' : '🧹 Temizlik Kontrol'} — Kat seç
+                              </div>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                              {[
+                                  ['kat2','Kat 2','2','#0ea5e9','#0369a1','linear-gradient(135deg,#e0f2fe,#bae6fd)'],
+                                  ['kat3','Kat 3','3','#8b5cf6','#6d28d9','linear-gradient(135deg,#ede9fe,#ddd6fe)'],
+                                  ['kat4','Kat 4','4','#10b981','#065f46','linear-gradient(135deg,#d1fae5,#a7f3d0)'],
+                              ].filter(([key]) => !!appData?.hygiene_inspectors?.[safeName]?.[key])
+                              .map(([key, label, num, color, dark, grad]) => {
+                                  const areaCount = Object.keys(appData?.hygiene_floors?.[stuHygSection]?.[key]?.areas || {}).length;
+                                  const last = lastLogTs(l => l.section === stuHygSection && l.floor === key);
+                                  return (
+                                      <div key={key} onClick={() => { setStuHygFloor(key); setStuHygAreaId(null); }} className="card-hover"
+                                          style={{ background: 'white', borderRadius: '20px', overflow: 'hidden', cursor: 'pointer', boxShadow: '0 4px 20px rgba(15,23,42,0.06)', border: '1px solid #f1f5f9', transition: 'all 0.2s' }}>
+                                          <div style={{ background: grad, padding: '20px 20px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                              <div>
+                                                  <div style={{ fontWeight: 900, fontSize: '36px', color: dark, lineHeight: 1 }}>{num}</div>
+                                                  <div style={{ fontWeight: 900, fontSize: '13px', color: dark, marginTop: '4px', opacity: 0.8 }}>{label}</div>
+                                              </div>
+                                              <div style={{ fontSize: '28px', opacity: 0.5 }}>🏢</div>
+                                          </div>
+                                          <div style={{ padding: '12px 20px 16px' }}>
+                                              <div style={{ fontWeight: 800, color: color, fontSize: '14px' }}>{areaCount} alan tanımlı</div>
+                                              <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, marginTop: '4px' }}>{last ? `Son: ${timeAgo(last)}` : 'Henüz denetim yok'}</div>
+                                          </div>
+                                      </div>
+                                  );
+                              })}
+                          </div>
+                      </div>
+                  )}
+
+                  {stuHygSection && stuHygFloor && (() => {
+                      const section = stuHygSection;
+                      const floorKey = stuHygFloor;
+                      const floorLabel = { kat2: 'Kat 2', kat3: 'Kat 3', kat4: 'Kat 4' }[floorKey];
+                      const floorAreas = appData?.hygiene_floors?.[section]?.[floorKey]?.areas || {};
+                      const selectedArea = stuHygAreaId ? floorAreas[stuHygAreaId] : null;
+                      return (
+                          <div className="fade-in">
+                              <div style={{ marginBottom: '16px' }}>
+                                  <div style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a' }}>🏢 {floorLabel} — {section === 'rutin' ? '🛏️ Rutin' : '🧹 Temizlik'}</div>
+                                  <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginTop: '3px' }}>Denetim yapacağın alana tıkla</div>
+                              </div>
+                              {Object.keys(floorAreas).length === 0 ? (
+                                  <div style={{ textAlign: 'center', padding: '60px 20px', background: 'white', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
+                                      <div style={{ fontSize: '44px', marginBottom: '12px' }}>🏗️</div>
+                                      <div style={{ fontWeight: 900, fontSize: '16px', color: '#64748b' }}>Bu kat için henüz alan tanımlanmadı.</div>
+                                  </div>
+                              ) : !stuHygAreaId ? (
+                                  <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '12px' }}>
+                                      {Object.entries(floorAreas).map(([areaId, area]) => {
+                                          const ti = FLOOR_AREA_TYPES[area.type] || FLOOR_AREA_TYPES.genel;
+                                          const lastScore = lastScoreForArea(area.name);
+                                          const done = allLogs.some(l => l.areaName === area.name && l.section === section && l.floor === floorKey && l.timestamp >= todayStart);
+                                          return (
+                                              <div key={areaId} onClick={done ? undefined : () => { setStuHygAreaId(areaId); setStuHygScore(5); }}
+                                                  style={{ background: done ? '#f8fafc' : 'white', border: `1px solid ${done ? '#e2e8f0' : ti.color + '20'}`, borderRadius: '16px', overflow: 'hidden', cursor: done ? 'default' : 'pointer', boxShadow: '0 2px 12px rgba(15,23,42,0.05)', transition: 'all 0.2s', opacity: done ? 0.55 : 1, pointerEvents: done ? 'none' : 'auto' }}>
+                                                  <div style={{ height: '4px', background: done ? '#e2e8f0' : `linear-gradient(90deg,${ti.color},${ti.color}66)` }} />
+                                                  <div style={{ padding: '14px' }}>
+                                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                                                          <span style={{ fontSize: '26px' }}>{ti.icon}</span>
+                                                          {done ? (
+                                                              <span style={{ background: '#ecfdf5', color: '#10b981', fontSize: '10px', fontWeight: 900, padding: '2px 7px', borderRadius: '8px' }}>✓ Tamam</span>
+                                                          ) : lastScore && (
+                                                              <span style={{ background: lastScore >= 3 ? '#ecfdf5' : '#fef2f2', color: lastScore >= 3 ? '#10b981' : '#ef4444', fontSize: '10px', fontWeight: 900, padding: '2px 7px', borderRadius: '8px' }}>
+                                                                  {'★'.repeat(lastScore)}
+                                                              </span>
+                                                          )}
+                                                      </div>
+                                                      <div style={{ fontWeight: 900, fontSize: '13px', color: done ? '#94a3b8' : '#0f172a', marginBottom: '3px' }}>{area.name}</div>
+                                                      <div style={{ fontSize: '11px', fontWeight: 700, color: done ? '#cbd5e1' : ti.color }}>{ti.label}</div>
+                                                      <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 700, marginTop: '6px' }}>👥 {(area.responsibles || []).length} sorumlu</div>
+                                                  </div>
+                                              </div>
+                                          );
+                                      })}
+                                  </div>
+                              ) : selectedArea && (() => {
+                                  const ti = FLOOR_AREA_TYPES[selectedArea.type] || FLOOR_AREA_TYPES.genel;
+                                  const responsibles = selectedArea.responsibles || [];
+                                  const scoreLabels = { 1: 'Çok Kötü', 2: 'Kötü', 3: 'Orta', 4: 'İyi', 5: 'Mükemmel' };
+                                  return (
+                                      <div className="fade-in">
+                                          <div style={{ marginBottom: '14px' }}>
+                                              <button onClick={() => { setStuHygAreaId(null); setStuHygScore(5); }}
+                                                  style={{ background: '#f1f5f9', color: '#0f172a', border: 'none', padding: '8px 16px', borderRadius: '12px', fontWeight: 800, fontSize: '13px', cursor: 'pointer' }}>
+                                                  ← Geri
+                                              </button>
+                                          </div>
+                                          <div style={{ background: 'white', borderRadius: '20px', overflow: 'hidden', marginBottom: '14px', boxShadow: '0 4px 20px rgba(15,23,42,0.06)', border: '1px solid #f1f5f9' }}>
+                                              <div style={{ height: '5px', background: `linear-gradient(90deg,${ti.color},${ti.color}66)` }} />
+                                              <div style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                                  <div style={{ width: '52px', height: '52px', borderRadius: '16px', background: ti.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', flexShrink: 0 }}>{ti.icon}</div>
+                                                  <div>
+                                                      <div style={{ fontWeight: 900, fontSize: '17px', color: '#0f172a' }}>{selectedArea.name}</div>
+                                                      <div style={{ fontSize: '12px', fontWeight: 700, color: ti.color, marginTop: '2px' }}>{ti.label}</div>
+                                                  </div>
+                                              </div>
+                                          </div>
+                                          {responsibles.length > 0 && (
+                                              <div style={{ background: 'white', borderRadius: '16px', padding: '14px 18px', marginBottom: '14px', border: '1px solid #f1f5f9', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
+                                                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>👥 Sorumlu Öğrenciler</div>
+                                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
+                                                      {responsibles.map(r => <span key={r} style={{ background: ti.color + '15', color: ti.color, padding: '5px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: 800, border: `1px solid ${ti.color}30` }}>{r}</span>)}
+                                                  </div>
+                                              </div>
+                                          )}
+                                          <div style={{ background: 'white', borderRadius: '20px', padding: '22px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(15,23,42,0.06)' }}>
+                                              <div style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', marginBottom: '16px' }}>Denetim Puanı</div>
+                                              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                                                  {[1,2,3,4,5].map(star => (
+                                                      <button key={star} onClick={() => setStuHygScore(star)}
+                                                          style={{ flex: 1, padding: '14px 0', fontSize: '22px', borderRadius: '14px', border: 'none', cursor: 'pointer', background: stuHygScore >= star ? ti.color : '#f8fafc', color: stuHygScore >= star ? '#fff' : '#cbd5e1', transition: 'all 0.18s', boxShadow: stuHygScore >= star ? `0 6px 14px ${ti.color}40` : 'none' }}>★</button>
+                                                  ))}
+                                              </div>
+                                              <div style={{ textAlign: 'center', fontSize: '13px', fontWeight: 900, color: ti.color, marginBottom: '16px' }}>
+                                                  {scoreLabels[stuHygScore]} — {getCoinImpact(stuHygScore) >= 0 ? '+' : ''}{getCoinImpact(stuHygScore)} M-Coin × {responsibles.length} kişi
+                                              </div>
+                                              <button onClick={() => saveStuFloorInspection(section, floorKey, stuHygAreaId)} disabled={isHygSaving}
+                                                  className="profile-btn" style={{ width: '100%', padding: '16px', background: `linear-gradient(135deg,${ti.color}cc,${ti.color})`, color: 'white', fontWeight: 900, fontSize: '15px', border: 'none', borderRadius: '14px', boxShadow: `0 8px 20px ${ti.color}40` }}>
+                                                  {isHygSaving ? '⏳ İşleniyor...' : '✅ DENETİMİ KAYDET'}
+                                              </button>
+                                          </div>
+                                      </div>
+                                  );
+                              })()}
+                          </div>
+                      );
+                  })()}
+              </div>
+              );
+          })()}
         </div>
       </div>
 
@@ -2458,9 +3082,11 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
          <button onClick={() => setActiveTab('chat')} style={getNavStyle('chat')}>💬 Meydan</button>
          <button onClick={() => setActiveTab('banka')} style={getNavStyle('banka')}>🏦 Banka</button>
          <button onClick={() => setActiveTab('market')} style={getNavStyle('market')}>Market</button>
+         <button onClick={() => { if (appData?.settings?.quiz_enabled) { setActiveTab('akademi'); setAkademiView('menu'); } }} style={{ ...getNavStyle('akademi'), opacity: appData?.settings?.quiz_enabled ? 1 : 0.4 }}>📚 Quiz{!appData?.settings?.quiz_enabled ? ' 🔒' : ''}</button>
          <button onClick={() => setActiveTab('game')} style={getNavStyle('game')}>🎮 Oyun</button>
          <button onClick={() => setActiveTab('inventory')} style={getNavStyle('inventory')}>Çanta</button>
          <button onClick={() => setActiveTab('rank')} style={getNavStyle('rank')}>Liderlik</button>
+         {isHygieneInspector && <button onClick={() => setActiveTab('hygiene')} style={getNavStyle('hygiene')}>🧹 Denetim</button>}
       </div>
     </div>
   );
