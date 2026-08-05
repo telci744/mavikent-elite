@@ -55,7 +55,7 @@ const isDigitalItem = (type, name) => {
 };
 
 const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
-const GAME_DEVICES = [
+const DEFAULT_GAME_DEVICES = [
     { id: 'ps4', name: 'PS4', icon: '🎮' },
     { id: 'ps5', name: 'PS5', icon: '🕹️' },
     { id: 'vr', name: 'VR (Sanal Gerçeklik)', icon: '🥽' },
@@ -76,21 +76,21 @@ const FLOOR_AREA_TYPES = {
     genel:     { icon: '🧹', label: 'Genel Temizlik', color: '#f59e0b', bg: '#fffbeb' },
 };
 
-const GAME_SLOTS = {
+const DEFAULT_GAME_SLOTS = {
     'ps4': [
-        { id: 'ps4_3', time: '21:00 - 21:30', price: 5 }, 
+        { id: 'ps4_3', time: '21:00 - 21:30', price: 5 },
         { id: 'ps4_4', time: '21:30 - 22:15', price: 8 }
     ],
     'ps5': [
-        { id: 'ps5_1', time: '21:00 - 21:30', price: 30 }, 
+        { id: 'ps5_1', time: '21:00 - 21:30', price: 30 },
         { id: 'ps5_2', time: '21:30 - 22:15', price: 45 }
     ],
     'vr': [
-        { id: 'vr_1', time: '21:00 - 21:30', price: 60 }, 
+        { id: 'vr_1', time: '21:00 - 21:30', price: 60 },
         { id: 'vr_2', time: '21:30 - 22:15', price: 90 }
     ],
     'pc': [
-        { id: 'pc_1', time: '21:00 - 21:30', price: 30 }, 
+        { id: 'pc_1', time: '21:00 - 21:30', price: 30 },
         { id: 'pc_2', time: '21:30 - 22:15', price: 45 }
     ]
 };
@@ -296,6 +296,21 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
 
   const rawRoster = appData?.roster || [];
   const roster = Array.isArray(rawRoster) ? rawRoster : Object.values(rawRoster || {});
+
+  const dbGameDevices = appData?.settings?.game_devices;
+  const GAME_DEVICES = dbGameDevices && Object.keys(dbGameDevices).length > 0
+      ? Object.entries(dbGameDevices).map(([id, d]) => ({ id, name: d.name || id.toUpperCase(), icon: d.icon || '🎮' }))
+      : DEFAULT_GAME_DEVICES;
+
+  const dbGameSlots = appData?.settings?.game_slots;
+  const GAME_SLOTS = {};
+  GAME_DEVICES.forEach(dev => {
+      const deviceSlots = dbGameSlots?.[dev.id];
+      GAME_SLOTS[dev.id] = (deviceSlots && Object.keys(deviceSlots).length > 0
+          ? Object.entries(deviceSlots).map(([id, s]) => ({ id, time: s.time, price: Number(s.price) || 0 }))
+          : (DEFAULT_GAME_SLOTS[dev.id] || [])
+      ).sort((a, b) => a.time.localeCompare(b.time));
+  });
 
   const now = new Date();
   const liveDayIdx = now.getDay() === 0 ? 6 : now.getDay() - 1;
@@ -539,14 +554,9 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                   updates[`game_room_appointments/${evalForm.device}/${evalForm.day}/${evalForm.slot}`] = null;
               }
               
-              let refundAmt = 0;
               const slotList = GAME_SLOTS[evalForm.device] || [];
               const slotObj = slotList.find(s => s.id === evalForm.slot);
-              if (slotObj && slotObj.price) refundAmt = Number(slotObj.price);
-              else if (evalForm.device === 'ps5') refundAmt = 30;
-              else if (evalForm.device === 'ps4') refundAmt = 5;
-              else if (evalForm.device === 'vr') refundAmt = 60;
-              else if (evalForm.device === 'pc') refundAmt = 30;
+              let refundAmt = slotObj?.price || 0;
 
               const customPrice = appData?.custom_game_slots?.[evalForm.device]?.[evalForm.day]?.[evalForm.slot]?.price;
               if (customPrice) refundAmt = Number(customPrice);
@@ -642,6 +652,31 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
       const bookedArray = currentBookedStr ? String(currentBookedStr).split(', ') : [];
       if (bookedArray.includes(safeName)) return toast("Bu seansa zaten kayıtlısınız!");
       if (bookedArray.length >= capacity) return toast("❌ Bu seans tamamen dolu!");
+
+      const weeklyLimit = Number(appData?.settings?.game_room_weekly_limit) || 0;
+      if (weeklyLimit > 0) {
+          const deviceAppointments = appData?.game_room_appointments?.[gameDevice] || {};
+          let myWeeklyCount = 0;
+          Object.values(deviceAppointments).forEach(dayObj => {
+              Object.values(dayObj || {}).forEach(bookedStr => {
+                  if (String(bookedStr || '').split(', ').includes(safeName)) myWeeklyCount += 1;
+              });
+          });
+          if (myWeeklyCount >= weeklyLimit) {
+              return toast(`⛔ Bu cihaz için haftalık randevu hakkını (${weeklyLimit}) doldurdun! Diğer öğrencilere de fırsat tanı.`);
+          }
+
+          const hasBookingOnDay = (dayName) => {
+              if (!dayName) return false;
+              return Object.values(deviceAppointments[dayName] || {}).some(bookedStr => String(bookedStr || '').split(', ').includes(safeName));
+          };
+          const dayIdx = DAYS.indexOf(gameDay);
+          const prevDay = dayIdx > 0 ? DAYS[dayIdx - 1] : null;
+          const nextDay = dayIdx < DAYS.length - 1 ? DAYS[dayIdx + 1] : null;
+          if (hasBookingOnDay(prevDay) || hasBookingOnDay(nextDay)) {
+              return toast(`⛔ Bu cihazdan art arda iki gün seans alamazsın! Bir gün ara vermelisin.`);
+          }
+      }
 
       const slotPrice = parseInt(slot.price) || 0;
       const universalJokers = Number(appData?.inventory?.[safeName]?.joker_ticket || 0);
@@ -869,37 +904,28 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
       let finalPrice = Math.ceil(baseP * (1 - currentActiveDiscountPercent / 100));
 
       if (mCoin < finalPrice) return toast("❌ Bakiyen yetersiz!");
-      if (purchaseModal.target === 'friend' && !purchaseModal.receiver) return toast("Lütfen hediye göndereceğin arkadaşını seç!");
 
-      const receiver = purchaseModal.target === 'friend' ? purchaseModal.receiver : safeName;
       const updates = {};
-      
+
       updates[`wallet/${safeName}`] = mCoin - finalPrice;
-      updates[`personal_inflation/${safeName}/${pData.key}`] = myInflation + 1; 
-      
-      let txnDesc = `Market: ${pData.n}`;
-      if (purchaseModal.target === 'friend') txnDesc += ` -> ${receiver} (Hediye)`;
-      updates[`transactions/${safeName}/txn_buy_${Date.now()}`] = { desc: txnDesc, amt: -finalPrice, date: new Date().toLocaleString('tr-TR') };
+      updates[`personal_inflation/${safeName}/${pData.key}`] = myInflation + 1;
+
+      updates[`transactions/${safeName}/txn_buy_${Date.now()}`] = { desc: `Market: ${pData.n}`, amt: -finalPrice, date: new Date().toLocaleString('tr-TR') };
 
       if (pData.type === 'ticket') {
-          updates[`tickets/${receiver}`] = (Number(appData?.tickets?.[receiver]) || 0) + 1;
-          if(purchaseModal.target === 'friend') { db.ref('mavikent_premium/global_chat').push({ s: 'SİSTEM', t: `🎁 ${safeName}, ${receiver} adlı arkadaşına Çekiliş Bileti hediye etti! Ne kral adam.`, ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) }); }
+          updates[`tickets/${safeName}`] = (Number(appData?.tickets?.[safeName]) || 0) + 1;
       } else {
-          let delName = pData.n;
-          if (purchaseModal.target === 'friend') delName += ` (🎁 ${safeName} yolladı)`;
-          
           if (pData.type === 'bundle' && pData.bundleItems && pData.bundleItems.length > 0) {
               pData.bundleItems.forEach((bItemName) => {
                   const isDig = isDigitalItem('normal', bItemName);
-                  db.ref('mavikent_premium/deliveries').push({ s: receiver, i: `${bItemName} (Paketten)`, st: isDig ? 'done' : 'wait', type: 'normal', val: '📦', date: new Date().toLocaleDateString('tr-TR') });
+                  db.ref('mavikent_premium/deliveries').push({ s: safeName, i: `${bItemName} (Paketten)`, st: isDig ? 'done' : 'wait', type: 'normal', val: '📦', date: new Date().toLocaleDateString('tr-TR') });
               });
           } else {
               const isDig = isDigitalItem(pData.type, pData.n);
-              db.ref('mavikent_premium/deliveries').push({ s: receiver, i: delName, st: isDig ? 'done' : 'wait', type: pData.type || 'normal', val: pData.val || pData.i, date: new Date().toLocaleDateString('tr-TR') }); 
+              db.ref('mavikent_premium/deliveries').push({ s: safeName, i: pData.n, st: isDig ? 'done' : 'wait', type: pData.type || 'normal', val: pData.val || pData.i, date: new Date().toLocaleDateString('tr-TR') });
           }
 
           if (pData.stock !== undefined) updates[`market_products/${pData.key}/stock`] = pData.stock - 1;
-          if(purchaseModal.target === 'friend') { db.ref('mavikent_premium/global_chat').push({ s: 'SİSTEM', t: `🎁 ${safeName}, ${receiver} adlı arkadaşına ${pData.n} hediye etti! Helal olsun.`, ts: Date.now(), type: 'system', date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) }); }
       }
 
       if (isPersonalDiscountActive && currentActiveDiscountPercent === Number(myDiscountObj.value)) updates[`active_discounts/${safeName}`] = null;
@@ -1311,19 +1337,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
             <div className="popIn-anim" style={{ background: '#ffffff', padding: '40px 30px', borderRadius: '32px', width: '100%', maxWidth: '400px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)', textAlign: 'center' }}>
                <div style={{ fontSize: '60px', marginBottom: '10px' }}>{purchaseModal.item.i || '📦'}</div>
                <h2 style={{ color: '#0f172a', fontSize: '24px', fontWeight: 900, margin: '0 0 5px 0' }}>{purchaseModal.item.n}</h2>
-               <p style={{ color: '#64748b', fontSize: '14px', fontWeight: 600, marginBottom: '25px' }}>Bu ürünü kimin için alıyorsun?</p>
-               
-               <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                   <button onClick={() => setPurchaseModal({...purchaseModal, target: 'self'})} className="profile-btn" style={{ background: purchaseModal.target === 'self' ? '#0f172a' : '#f1f5f9', color: purchaseModal.target === 'self' ? 'white' : '#64748b', flex: 1, padding: '16px' }}>Kendim İçin</button>
-                   <button onClick={() => setPurchaseModal({...purchaseModal, target: 'friend'})} className="profile-btn" style={{ background: purchaseModal.target === 'friend' ? '#10b981' : '#f1f5f9', color: purchaseModal.target === 'friend' ? 'white' : '#64748b', flex: 1, padding: '16px' }}>Hediye Et</button>
-               </div>
-
-               {purchaseModal.target === 'friend' && (
-                   <select value={purchaseModal.receiver} onChange={e => setPurchaseModal({...purchaseModal, receiver: e.target.value})} className="elite-input" style={{ marginBottom: '20px', padding: '16px' }}>
-                       <option value="">Öğrenci Seçin</option>
-                       {roster.filter(n => n !== safeName).map(n => <option key={n} value={n}>{n}</option>)}
-                   </select>
-               )}
+               <p style={{ color: '#64748b', fontSize: '14px', fontWeight: 600, marginBottom: '25px' }}>Bu ürünü almak istediğine emin misin?</p>
 
                <div style={{ display: 'flex', gap: '10px' }}>
                    <button onClick={() => setPurchaseModal({active:false, item:null, target:'self', receiver:''})} className="profile-btn" style={{ background: 'transparent', color: '#ef4444', flex: 1, padding: '16px' }}>İptal</button>
@@ -2360,6 +2374,22 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                           </div>
 
                           <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>3. SEANS SEÇİN ({gameDay})</div>
+                          {Number(appData?.settings?.game_room_weekly_limit) > 0 && (() => {
+                              const weeklyLimit = Number(appData?.settings?.game_room_weekly_limit);
+                              const deviceAppointments = appData?.game_room_appointments?.[gameDevice] || {};
+                              let myWeeklyCount = 0;
+                              Object.values(deviceAppointments).forEach(dayObj => {
+                                  Object.values(dayObj || {}).forEach(bookedStr => {
+                                      if (String(bookedStr || '').split(', ').includes(safeName)) myWeeklyCount += 1;
+                                  });
+                              });
+                              const remaining = Math.max(0, weeklyLimit - myWeeklyCount);
+                              return (
+                                  <div style={{ fontSize: '12px', fontWeight: 800, color: remaining === 0 ? '#ef4444' : '#2563eb', background: remaining === 0 ? '#fef2f2' : '#eff6ff', border: `1px solid ${remaining === 0 ? '#fca5a5' : '#bfdbfe'}`, borderRadius: '14px', padding: '10px 14px', marginBottom: '15px' }}>
+                                      {remaining === 0 ? '⛔ Bu cihaz için bu haftaki randevu hakkını doldurdun!' : `ℹ️ Bu cihaz için bu hafta ${remaining}/${weeklyLimit} randevu hakkın kaldı. Art arda iki gün alamazsın, bir gün ara vermelisin.`}
+                                  </div>
+                              );
+                          })()}
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                              {([...(GAME_SLOTS[gameDevice] || []), ...Object.keys(appData?.custom_game_slots?.[gameDevice]?.[gameDay] || {}).map(k => ({id: k, ...appData.custom_game_slots[gameDevice][gameDay][k]}))].sort((a,b) => a.time.localeCompare(b.time))).map(slot => {
                                  const rawBookedBy = appData?.game_room_appointments?.[gameDevice]?.[gameDay]?.[slot.id];
@@ -2739,7 +2769,6 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                 </div>
               )}
               {!!(appData?.settings?.quiz_enabled) && akademiView === 'menu' && (
-
                 <div>
                   <h2 style={{ fontSize: '26px', fontWeight: 900, marginBottom: '6px', color: '#0f172a' }}>📚 Akademi</h2>
                   <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 24px', fontWeight: 600 }}>Öğren, yarış, kazan!</p>

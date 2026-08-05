@@ -4,6 +4,7 @@ import { playSuccess, playCoin, playCancel, playReward, playPenalty } from '../s
 import { toast } from '../toast';
 import { burst } from '../confetti';
 import QuizAdmin from './QuizAdmin';
+import { IMTIHAN_SORULAR } from './imtihanSorular';
 
 const StaffScreen = ({ appData, goBackToRoles }) => {
   const [dashboardView, setDashboardView] = useState('main'); 
@@ -30,6 +31,8 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   const [eduData, setEduData] = useState({ lessons: [], pages: 0, questions: 0 });
   const [examData, setExamData] = useState({}); 
   const [valuesTopic, setValuesTopic] = useState({ subject: '', topic: '' });
+  const [imtihanStudent, setImtihanStudent] = useState(null);
+  const [imtihanSubject, setImtihanSubject] = useState(null);
 
   // KANTİN STATELERİ
   const [canteenView, setCanteenView] = useState('satis');
@@ -85,13 +88,28 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   };
 
   const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
-  const GAME_DEVICES = [{ id: 'ps4', name: 'PS4' }, { id: 'ps5', name: 'PS5' }, { id: 'vr', name: 'VR' }, { id: 'pc', name: 'Bilgisayar' }];
-  const GAME_SLOTS = {
-      'ps4': [{ id: 'ps4_1', time: '15:45 - 16:15' }, { id: 'ps4_2', time: '16:15 - 16:45' }, { id: 'ps4_3', time: '21:00 - 21:30' }, { id: 'ps4_4', time: '21:30 - 22:15' }],
-      'ps5': [{ id: 'ps5_1', time: '21:00 - 21:30' }, { id: 'ps5_2', time: '21:30 - 22:15' }],
-      'vr':  [{ id: 'vr_1', time: '21:00 - 21:30' }, { id: 'vr_2', time: '21:30 - 22:15' }],
-      'pc':  [{ id: 'pc_1', time: '21:00 - 21:30' }, { id: 'pc_2', time: '21:30 - 22:15' }]
+  const DEFAULT_GAME_DEVICES = [{ id: 'ps4', name: 'PS4', icon: '🎮' }, { id: 'ps5', name: 'PS5', icon: '🕹️' }, { id: 'vr', name: 'VR (Sanal Gerçeklik)', icon: '🥽' }, { id: 'pc', name: 'Bilgisayar', icon: '💻' }];
+  const DEFAULT_GAME_SLOTS = {
+      'ps4': [{ id: 'ps4_3', time: '21:00 - 21:30', price: 5 }, { id: 'ps4_4', time: '21:30 - 22:15', price: 8 }],
+      'ps5': [{ id: 'ps5_1', time: '21:00 - 21:30', price: 30 }, { id: 'ps5_2', time: '21:30 - 22:15', price: 45 }],
+      'vr':  [{ id: 'vr_1', time: '21:00 - 21:30', price: 60 }, { id: 'vr_2', time: '21:30 - 22:15', price: 90 }],
+      'pc':  [{ id: 'pc_1', time: '21:00 - 21:30', price: 30 }, { id: 'pc_2', time: '21:30 - 22:15', price: 45 }]
   };
+
+  const dbGameDevices = appData?.settings?.game_devices;
+  const GAME_DEVICES = dbGameDevices && Object.keys(dbGameDevices).length > 0
+      ? Object.entries(dbGameDevices).map(([id, d]) => ({ id, name: d.name || id.toUpperCase(), icon: d.icon || '🎮' }))
+      : DEFAULT_GAME_DEVICES;
+
+  const dbGameSlots = appData?.settings?.game_slots;
+  const GAME_SLOTS = {};
+  GAME_DEVICES.forEach(dev => {
+      const deviceSlots = dbGameSlots?.[dev.id];
+      GAME_SLOTS[dev.id] = (deviceSlots && Object.keys(deviceSlots).length > 0
+          ? Object.entries(deviceSlots).map(([id, s]) => ({ id, time: s.time, price: Number(s.price) || 0 }))
+          : (DEFAULT_GAME_SLOTS[dev.id] || [])
+      ).sort((a, b) => a.time.localeCompare(b.time));
+  });
 
   const now = new Date();
   const liveDayIdx = now.getDay() === 0 ? 6 : now.getDay() - 1;
@@ -278,11 +296,8 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
           } else {
               updates[`game_room_appointments/${evalForm.device}/${evalForm.day}/${evalForm.slotId}`] = null;
               
-              let refundAmt = 0;
-              if (evalForm.device === 'ps5') refundAmt = 30;
-              else if (evalForm.device === 'ps4') refundAmt = 20;
-              else if (evalForm.device === 'vr') refundAmt = 40;
-              else if (evalForm.device === 'pc') refundAmt = 30;
+              const defaultSlotObj = (GAME_SLOTS[evalForm.device] || []).find(s => s.id === evalForm.slotId);
+              let refundAmt = defaultSlotObj?.price || 0;
 
               const customPrice = appData?.custom_game_slots?.[evalForm.device]?.[evalForm.day]?.[evalForm.slotId]?.price;
               if (customPrice) refundAmt = Number(customPrice);
@@ -315,11 +330,17 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
   const handleBack = () => {
     if (currentModule && (modalType || selectedStudent)) { setModalType(null); setSelectedStudent(null); return; }
     if (currentModule === 'yoklama' && selectedSession) { setSelectedSession(''); return; }
-    if (currentModule) { setCurrentModule(null); setSelectedSession(''); return; } 
-    if (dashboardView !== 'main') { 
-        if (dashboardView.startsWith('egitim_')) setDashboardView('egitim'); 
-        else setDashboardView('main'); 
-        return; 
+    if (currentModule === 'imtihan_view') {
+      if (imtihanSubject) { setImtihanSubject(null); return; }
+      if (imtihanStudent) { setImtihanStudent(null); return; }
+      setCurrentModule(null); setSelectedSession(''); return;
+    }
+    if (currentModule) { setCurrentModule(null); setSelectedSession(''); return; }
+    if (dashboardView !== 'main') {
+        if (dashboardView.startsWith('egitim_')) { setDashboardView('egitim'); return; }
+        if (dashboardView.startsWith('degerler_')) { setDashboardView('degerler'); return; }
+        setDashboardView('main');
+        return;
     }
     goBackToRoles();
   };
@@ -343,7 +364,8 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
     if (!selectedStudent) return;
     
     const todayStr = new Date().toDateString();
-    if (appData?.daily_status?.[todayStr]?.[selectedStudent] === 'a' && type !== 'okul' && type !== 'yoklama') {
+    const okulDateStr = new Date().getHours() < 15 ? new Date(Date.now() - 86400000).toDateString() : new Date().toDateString();
+    if (appData?.daily_status?.[okulDateStr]?.[selectedStudent] === 'a' && type !== 'okul' && type !== 'yoklama') {
         return toast(`⚠️ ${selectedStudent} adlı öğrenci bugün kurumda değil (İzinli/Gelmedi). Puan işlemi yapılamaz.`);
     }
 
@@ -372,8 +394,8 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
     }
     
     if (type === 'okul') {
-        updates[`daily_status/${todayStr}/${selectedStudent}`] = status;
-        if (status === 'a') { 
+        updates[`daily_status/${okulDateStr}/${selectedStudent}`] = status;
+        if (status === 'a') {
             const currentAbs = Number(appData?.absences?.[selectedStudent] || 0) + 1;
             updates[`absences/${selectedStudent}`] = currentAbs;
             if (currentAbs % 10 === 0) { 
@@ -643,6 +665,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
 
   const renderStudentGrid = (students, type) => {
     const todayStr = new Date().toDateString();
+    const okulDateStr = new Date().getHours() < 15 ? new Date(Date.now() - 86400000).toDateString() : new Date().toDateString();
     
     if (currentModule === 'devamsizlik') {
         return (
@@ -666,8 +689,8 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
     return (
     <div className="grid-mobile-2">
       {students.map(name => {
-        const okulDurumu = appData?.daily_status?.[todayStr]?.[name];
-        const isNotAtYurt = okulDurumu === 'a'; 
+        const okulDurumu = appData?.daily_status?.[okulDateStr]?.[name];
+        const isNotAtYurt = okulDurumu === 'a';
         
         let bgColor = '#ffffff'; let subText = ''; let isCompletedToday = false;
         
@@ -824,7 +847,16 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
               </>
             )}
 
-            {dashboardView === 'degerler' && levelList.map(lvl => (<div key={lvl} onClick={() => { setCurrentModule('values_view'); setSelectedSession(lvl); }} className="premium-card card-hover"><div className="icon">🕌</div><div className="label">{lvl}</div></div>))}
+            {dashboardView === 'degerler' && [
+              { id: 'degerler_values', icon: '📖', label: 'DEĞERLER EĞİTİMİ' },
+              { id: 'degerler_imtihan', icon: '📚', label: 'İMTİHAN HAZIRLIK' },
+            ].map(mod => (
+              <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="premium-card card-hover">
+                <div className="icon">{mod.icon}</div><div className="label">{mod.label}</div>
+              </div>
+            ))}
+            {dashboardView === 'degerler_values' && levelList.map(lvl => (<div key={lvl} onClick={() => { setCurrentModule('values_view'); setSelectedSession(lvl); }} className="premium-card card-hover"><div className="icon">🕌</div><div className="label">{lvl}</div></div>))}
+            {dashboardView === 'degerler_imtihan' && levelList.map(lvl => (<div key={lvl} onClick={() => { setCurrentModule('imtihan_view'); setSelectedSession(lvl); setImtihanStudent(null); setImtihanSubject(null); }} className="premium-card card-hover"><div className="icon">📚</div><div className="label">{lvl}</div></div>))}
             
             {dashboardView === 'isleyis' && [ 
               { id: 'okul', icon: '🏫', label: 'Okul Dönüş' },
@@ -1004,11 +1036,8 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
                                     } else {
                                         updates[`game_room_appointments/${evalForm.device}/${evalForm.day}/${evalForm.slot}`] = null;
                                         
-                                        let refundAmt = 0;
-                                        if (evalForm.device === 'ps5') refundAmt = 30;
-                                        else if (evalForm.device === 'ps4') refundAmt = 20;
-                                        else if (evalForm.device === 'vr') refundAmt = 40;
-                                        else if (evalForm.device === 'pc') refundAmt = 30;
+                                        const defaultSlotObj = (GAME_SLOTS[evalForm.device] || []).find(s => s.id === evalForm.slot);
+                                        let refundAmt = defaultSlotObj?.price || 0;
 
                                         const customPrice = appData?.custom_game_slots?.[evalForm.device]?.[evalForm.day]?.[evalForm.slot]?.price;
                                         if (customPrice) refundAmt = Number(customPrice);
@@ -1296,6 +1325,157 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
             </div>
           </>
         )}
+
+        {/* İMTİHAN HAZIRLIK */}
+        {currentModule === 'imtihan_view' && (() => {
+          const levelStudents = roster.filter(n => appData?.student_levels?.[n] === selectedSession);
+          const todayStr = new Date().toDateString();
+          const levelKey = selectedSession.startsWith('SEVİYE 1') ? 'SEVİYE 1' : selectedSession;
+          const subjects = IMTIHAN_SORULAR[levelKey] ? Object.keys(IMTIHAN_SORULAR[levelKey]) : [];
+          const progress = appData?.imtihan_progress || {};
+
+          const addCoin = async (studentName, amount, desc) => {
+            const snap = await db.ref(`mavikent_premium/wallet/${studentName}`).once('value');
+            const cur = snap.val() || 0;
+            const ts = Date.now();
+            const updates = {};
+            updates[`wallet/${studentName}`] = cur + amount;
+            updates[`transactions/${studentName}/txn_imtihan_${ts}`] = { desc, amt: amount, date: new Date().toLocaleString('tr-TR') };
+            await db.ref('mavikent_premium').update(updates);
+          };
+
+          const toggleQuestion = async (q) => {
+            const isDone = !!progress?.[imtihanStudent]?.[q.id]?.done;
+            if (isDone) { toast('Bu soru zaten işaretlendi'); return; }
+            const key = `${imtihanStudent}/${q.id}`;
+            await db.ref(`mavikent_premium/imtihan_progress/${key}`).set({ done: true, date: todayStr, subject: imtihanSubject, soru: q.soru, cevap: q.cevap });
+            await addCoin(imtihanStudent, 3, `📚 İmtihan Hazırlık: ${q.soru.slice(0, 40)}...`);
+            playCoin();
+            toast(`✅ +3 M-Coin — ${imtihanStudent}`);
+          };
+
+          if (!imtihanStudent) {
+            const rankMedals = ['🥇', '🥈', '🥉'];
+            const studentStats = levelStudents.map(name => ({ name, total: Object.keys(progress?.[name] || {}).length, today: Object.values(progress?.[name] || {}).filter(v => v.date === todayStr).length }));
+            const rankedStudents = [...studentStats].sort((a, b) => b.total - a.total);
+            return (
+              <div className="fade-in">
+                <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '16px' }}>
+                  📚 İmtihan Hazırlık — {selectedSession}
+                </h4>
+                <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                  {/* Öğrenci grid */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '10px' }}>
+                      {studentStats.map(({ name, total, today }) => (
+                        <div key={name} onClick={() => setImtihanStudent(name)} className="premium-card card-hover" style={{ cursor: 'pointer', padding: '14px 8px', textAlign: 'center', aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                          <div style={{ fontSize: '26px' }}>👤</div>
+                          <div style={{ fontWeight: 900, fontSize: '11px', color: '#0f172a', lineHeight: 1.3, wordBreak: 'break-word' }}>{name}</div>
+                          <div style={{ fontSize: '10px', color: '#10b981', fontWeight: 800 }}>✅ {today}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Sıralama listesi */}
+                  <div style={{ width: '150px', flexShrink: 0 }}>
+                    <div style={{ fontSize: '11px', fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>🏆 Sıralama</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {rankedStudents.map(({ name, total }, idx) => (
+                        <div key={name} style={{ background: idx === 0 ? '#fef9c3' : idx === 1 ? '#f0f9ff' : idx === 2 ? '#fff7ed' : '#f8fafc', borderRadius: '12px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: idx < 3 ? '16px' : '12px', fontWeight: 900, minWidth: '20px', color: idx >= 3 ? '#94a3b8' : undefined }}>{rankMedals[idx] || `${idx + 1}.`}</span>
+                          <span style={{ fontSize: '11px', fontWeight: 800, color: '#0f172a', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                          <span style={{ fontSize: '11px', fontWeight: 900, color: '#6366f1' }}>{total}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          if (subjects.length === 0) return (
+            <div className="fade-in">
+              <button onClick={() => setImtihanStudent(null)} style={{ background: '#f1f5f9', color: '#0f172a', border: 'none', padding: '10px 20px', borderRadius: '14px', fontWeight: 800, fontSize: '14px', cursor: 'pointer', marginBottom: '16px' }}>← Geri</button>
+              <div style={{ textAlign: 'center', padding: '50px 20px' }}>
+                <div style={{ fontSize: '52px', marginBottom: '16px' }}>📭</div>
+                <div style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a', marginBottom: '8px' }}>{selectedSession} için henüz soru eklenmedi</div>
+                <div style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 600 }}>Bu seviyenin soruları sisteme yüklendiğinde burada görünecek.</div>
+              </div>
+            </div>
+          );
+
+          if (!imtihanSubject) return (
+            <div className="fade-in">
+              <button onClick={() => setImtihanStudent(null)} style={{ background: '#f1f5f9', color: '#0f172a', border: 'none', padding: '10px 20px', borderRadius: '14px', fontWeight: 800, fontSize: '14px', cursor: 'pointer', marginBottom: '16px' }}>← Geri</button>
+              <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '16px' }}>
+                👤 {imtihanStudent} — Ders Seçin
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
+                {subjects.map(subj => {
+                  const questions = IMTIHAN_SORULAR[levelKey][subj];
+                  const done = questions.filter(q => !!progress?.[imtihanStudent]?.[q.id]?.done).length;
+                  return (
+                    <div key={subj} onClick={() => setImtihanSubject(subj)} className="premium-card card-hover" style={{ cursor: 'pointer', padding: '16px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '28px', marginBottom: '8px' }}>📖</div>
+                      <div style={{ fontWeight: 900, fontSize: '13px', color: '#0f172a', marginBottom: '6px' }}>{subj}</div>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: done === questions.length ? '#10b981' : '#6366f1' }}>
+                        {done} / {questions.length}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+
+          const questions = IMTIHAN_SORULAR[levelKey][imtihanSubject] || [];
+          const groupedByKonu = questions.reduce((acc, q) => {
+            if (!acc[q.konu]) acc[q.konu] = [];
+            acc[q.konu].push(q);
+            return acc;
+          }, {});
+
+          return (
+            <div className="fade-in">
+              <button onClick={() => setImtihanSubject(null)} style={{ background: '#f1f5f9', color: '#0f172a', border: 'none', padding: '10px 20px', borderRadius: '14px', fontWeight: 800, fontSize: '14px', cursor: 'pointer', marginBottom: '16px' }}>← Geri</button>
+              <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '4px' }}>
+                📚 {imtihanSubject}
+              </h4>
+              <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#64748b', fontWeight: 700 }}>
+                👤 {imtihanStudent} · {selectedSession} · Tik at = +3 M-Coin
+              </p>
+              {Object.entries(groupedByKonu).map(([konu, qs]) => (
+                <div key={konu} style={{ background: 'white', borderRadius: '20px', padding: '20px', marginBottom: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.04)' }}>
+                  <div style={{ fontWeight: 900, fontSize: '15px', color: '#6366f1', marginBottom: '14px', borderBottom: '2px solid #e0e7ff', paddingBottom: '8px' }}>
+                    📌 {konu}
+                  </div>
+                  {qs.map((q, i) => {
+                    const isDone = !!progress?.[imtihanStudent]?.[q.id]?.done;
+                    return (
+                      <div key={q.id} onClick={() => toggleQuestion(q)} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px', borderRadius: '14px',
+                        marginBottom: i < qs.length - 1 ? '8px' : 0,
+                        background: isDone ? '#f0fdf4' : '#f8fafc',
+                        border: `1.5px solid ${isDone ? '#86efac' : '#e2e8f0'}`,
+                        cursor: isDone ? 'default' : 'pointer', transition: 'all 0.15s',
+                        opacity: isDone ? 0.85 : 1
+                      }}>
+                        <div style={{ width: '24px', height: '24px', borderRadius: '8px', background: isDone ? '#10b981' : 'white', border: `2px solid ${isDone ? '#10b981' : '#cbd5e1'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px' }}>
+                          {isDone && <span style={{ color: 'white', fontSize: '14px' }}>✓</span>}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 800, fontSize: '13px', color: isDone ? '#059669' : '#0f172a', lineHeight: 1.4 }}>{q.soru}</div>
+                          {isDone && <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, marginTop: '4px' }}>💰 +3 M-Coin · {progress[imtihanStudent][q.id].date}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
       {/* --- HİJYEN DENETİM MERKEZİ --- */}
       {currentModule === 'hygiene' && (() => {

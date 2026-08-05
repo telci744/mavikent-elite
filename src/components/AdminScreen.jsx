@@ -3,6 +3,15 @@ import { db } from '../firebase';
 import { playClick, playSuccess, playCoin, playCancel, playReward, playPenalty } from '../sounds';
 import { toast } from '../toast';
 import { burst } from '../confetti';
+import { IMTIHAN_SORULAR } from './imtihanSorular';
+
+const DEFAULT_GAME_DEVICES = [{ id: 'ps4', name: 'PS4', icon: '🎮' }, { id: 'ps5', name: 'PS5', icon: '🕹️' }, { id: 'vr', name: 'VR (Sanal Gerçeklik)', icon: '🥽' }, { id: 'pc', name: 'Bilgisayar', icon: '💻' }];
+const DEFAULT_GAME_SLOTS = {
+    'ps4': [{ id: 'ps4_3', time: '21:00 - 21:30', price: 5 }, { id: 'ps4_4', time: '21:30 - 22:15', price: 8 }],
+    'ps5': [{ id: 'ps5_1', time: '21:00 - 21:30', price: 30 }, { id: 'ps5_2', time: '21:30 - 22:15', price: 45 }],
+    'vr':  [{ id: 'vr_1', time: '21:00 - 21:30', price: 60 }, { id: 'vr_2', time: '21:30 - 22:15', price: 90 }],
+    'pc':  [{ id: 'pc_1', time: '21:00 - 21:30', price: 30 }, { id: 'pc_2', time: '21:30 - 22:15', price: 45 }]
+};
 
 const AdminScreen = ({ appData, goBackToRoles }) => {
   const [dashboardView, setDashboardView] = useState('main'); 
@@ -23,6 +32,7 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const [adminHygScore, setAdminHygScore] = useState(5);
   const [adminHygEditMode, setAdminHygEditMode] = useState(false);
   const [adminHygNewArea, setAdminHygNewArea] = useState({ name: '', type: 'genel' });
+  const [hygSearchStudent, setHygSearchStudent] = useState('');
 
   const [istirahatSelectedRoom, setIstirahatSelectedRoom] = useState(null);
   const [istirahatScore, setIstirahatScore] = useState(5);
@@ -467,6 +477,8 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const [eduData, setEduData] = useState({ lessons: [], pages: 0, questions: 0 });
   const [examData, setExamData] = useState({}); 
   const [valuesTopic, setValuesTopic] = useState({ subject: '', topic: '' });
+  const [imtihanStudent, setImtihanStudent] = useState(null);
+  const [imtihanSubject, setImtihanSubject] = useState(null);
   const [deliveryTab, setDeliveryTab] = useState('wait'); 
 
   const [settingsInputs, setSettingsInputs] = useState({ 
@@ -600,6 +612,15 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   };
   const [tourneyDaysMap, setTourneyDaysMap] = useState({}); 
   const [newCustomSlot, setNewCustomSlot] = useState({ device: 'ps4', day: 'Pazartesi', time: '', price: '' });
+  const [editingCustomSlot, setEditingCustomSlot] = useState(null);
+  const [customSlotDraft, setCustomSlotDraft] = useState({ time: '', price: '' });
+  const [deviceForm, setDeviceForm] = useState({ name: '', icon: '🎮' });
+  const [editingDeviceId, setEditingDeviceId] = useState(null);
+  const [deviceEditDraft, setDeviceEditDraft] = useState({ name: '', icon: '' });
+  const [defaultSlotDevice, setDefaultSlotDevice] = useState('ps4');
+  const [newDefaultSlot, setNewDefaultSlot] = useState({ time: '', price: '' });
+  const [editingDefaultSlot, setEditingDefaultSlot] = useState(null);
+  const [defaultSlotDraft, setDefaultSlotDraft] = useState({ time: '', price: '' });
 
   const csvDenemeRef = useRef(null); const csvYaziliRef = useRef(null);
 
@@ -632,13 +653,32 @@ const AdminScreen = ({ appData, goBackToRoles }) => {
   const collectionTypes = [{ id: 'AKILLI SAAT', label: 'Akıllı Saat', icon: '⌚' }, { id: 'FORMA', label: 'Forma', icon: '👕' }, { id: 'KRAMPON', label: 'Krampon', icon: '👟' }, { id: 'ÇİKOLATA EVİM', label: 'Çikolata Evim', icon: '🍫' }, { id: 'KÜNEFE', label: 'Künefe', icon: '🍮' }, { id: 'NEŞELİ BALIK', label: 'Neşeli Balık', icon: '🐟' }, { id: 'PİZZA', label: 'Pizza', icon: '🍕' }, { id: 'FUTBOL TOPU', label: 'Futbol Topu', icon: '⚽' }];
   const exactCollections = collectionTypes.map(c => c.id);
 
-  const GAME_DEVICES = [{ id: 'ps4', name: 'PS4' }, { id: 'ps5', name: 'PS5' }, { id: 'vr', name: 'VR' }, { id: 'pc', name: 'Bilgisayar' }];
-  const GAME_SLOTS = {
-      'ps4': [{ id: 'ps4_1', time: '15:45 - 16:15' }, { id: 'ps4_2', time: '16:15 - 16:45' }, { id: 'ps4_3', time: '21:00 - 21:30' }, { id: 'ps4_4', time: '21:30 - 22:15' }],
-      'ps5': [{ id: 'ps5_1', time: '21:00 - 21:30' }, { id: 'ps5_2', time: '21:30 - 22:15' }],
-      'vr':  [{ id: 'vr_1', time: '21:00 - 21:30' }, { id: 'vr_2', time: '21:30 - 22:15' }],
-   'pc':  [{ id: 'pc_1', time: '21:00 - 21:30' }, { id: 'pc_2', time: '21:30 - 22:15' }]
-  };
+  const dbGameDevices = appData?.settings?.game_devices;
+  const GAME_DEVICES = dbGameDevices && Object.keys(dbGameDevices).length > 0
+      ? Object.entries(dbGameDevices).map(([id, d]) => ({ id, name: d.name || id.toUpperCase(), icon: d.icon || '🎮' }))
+      : DEFAULT_GAME_DEVICES;
+
+  const dbGameSlots = appData?.settings?.game_slots;
+  const GAME_SLOTS = {};
+  GAME_DEVICES.forEach(dev => {
+      const deviceSlots = dbGameSlots?.[dev.id];
+      GAME_SLOTS[dev.id] = (deviceSlots && Object.keys(deviceSlots).length > 0
+          ? Object.entries(deviceSlots).map(([id, s]) => ({ id, time: s.time, price: Number(s.price) || 0 }))
+          : (DEFAULT_GAME_SLOTS[dev.id] || [])
+      ).sort((a, b) => a.time.localeCompare(b.time));
+  });
+
+  useEffect(() => {
+      if (!appData || appData?.settings?.game_devices) return;
+      const seedDevices = {};
+      DEFAULT_GAME_DEVICES.forEach(d => { seedDevices[d.id] = { name: d.name, icon: d.icon }; });
+      const seedSlots = {};
+      Object.entries(DEFAULT_GAME_SLOTS).forEach(([devId, slots]) => {
+          seedSlots[devId] = {};
+          slots.forEach(s => { seedSlots[devId][s.id] = { time: s.time, price: s.price }; });
+      });
+      db.ref('mavikent_premium/settings').update({ game_devices: seedDevices, game_slots: seedSlots });
+  }, [appData, appData?.settings?.game_devices]);
 
 const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
 
@@ -650,6 +690,62 @@ const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartes
       });
       toast("✅ Özel seans eklendi!");
       setNewCustomSlot({...newCustomSlot, time: ''});
+  };
+
+  const handleSaveCustomSlotEdit = (devId, dayName, slotId) => {
+      if (!customSlotDraft.time || !customSlotDraft.price) return toast("Saat ve Fiyat girin!");
+      db.ref(`mavikent_premium/custom_game_slots/${devId}/${dayName}/${slotId}`).update({
+          time: customSlotDraft.time, price: parseInt(customSlotDraft.price)
+      });
+      toast("✅ Özel seans güncellendi!");
+      setEditingCustomSlot(null);
+  };
+
+  const slugifyDeviceId = (s) => String(s).toLowerCase().trim()
+      .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c')
+      .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+  const handleAddDevice = () => {
+      if (!deviceForm.name.trim()) return toast("Cihaz adı girin!");
+      const id = slugifyDeviceId(deviceForm.name) || `dev_${Date.now()}`;
+      if (GAME_DEVICES.some(d => d.id === id)) return toast("Bu isimde bir cihaz zaten var!");
+      db.ref(`mavikent_premium/settings/game_devices/${id}`).set({ name: deviceForm.name.trim(), icon: deviceForm.icon || '🎮' });
+      toast("✅ Cihaz eklendi!");
+      setDeviceForm({ name: '', icon: '🎮' });
+  };
+
+  const handleSaveDeviceEdit = (id) => {
+      if (!deviceEditDraft.name.trim()) return toast("Cihaz adı boş olamaz!");
+      db.ref(`mavikent_premium/settings/game_devices/${id}`).update({ name: deviceEditDraft.name.trim(), icon: deviceEditDraft.icon || '🎮' });
+      toast("✅ Cihaz güncellendi!");
+      setEditingDeviceId(null);
+  };
+
+  const handleDeleteDevice = (id, name) => {
+      if (!window.confirm(`"${name}" cihazını ve tüm varsayılan seanslarını silmek istediğine emin misin?`)) return;
+      db.ref(`mavikent_premium/settings/game_devices/${id}`).remove();
+      db.ref(`mavikent_premium/settings/game_slots/${id}`).remove();
+      toast("🗑️ Cihaz silindi.");
+  };
+
+  const handleAddDefaultSlot = () => {
+      if (!newDefaultSlot.time || !newDefaultSlot.price) return toast("Saat ve Fiyat girin!");
+      const slotId = `slot_${Date.now()}`;
+      db.ref(`mavikent_premium/settings/game_slots/${defaultSlotDevice}/${slotId}`).set({ time: newDefaultSlot.time, price: parseInt(newDefaultSlot.price) });
+      toast("✅ Seans eklendi!");
+      setNewDefaultSlot({ time: '', price: '' });
+  };
+
+  const handleSaveDefaultSlotEdit = (deviceId, slotId) => {
+      if (!defaultSlotDraft.time || !defaultSlotDraft.price) return toast("Saat ve Fiyat girin!");
+      db.ref(`mavikent_premium/settings/game_slots/${deviceId}/${slotId}`).update({ time: defaultSlotDraft.time, price: parseInt(defaultSlotDraft.price) });
+      toast("✅ Seans güncellendi!");
+      setEditingDefaultSlot(null);
+  };
+
+  const handleDeleteDefaultSlot = (deviceId, slotId, time) => {
+      if (!window.confirm(`${time} seansını silmek istediğine emin misin?`)) return;
+      db.ref(`mavikent_premium/settings/game_slots/${deviceId}/${slotId}`).remove();
   };
 
   const handleAdminPhotoUpload = (e) => {
@@ -690,12 +786,18 @@ const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartes
   const handleBack = () => {
     if (currentModule && (modalType || selectedStudent)) { setModalType(null); setSelectedStudent(null); return; }
     if (currentModule === 'yoklama' && selectedSession) { setSelectedSession(''); return; }
-    if (currentModule === 'admin_settings' && adminSettingsView) {
-        setAdminSettingsView(null);
-        return;
+    if (currentModule === 'admin_settings' && adminSettingsView) { setAdminSettingsView(null); return; }
+    if (currentModule === 'imtihan_view') {
+      if (imtihanSubject) { setImtihanSubject(null); return; }
+      if (imtihanStudent) { setImtihanStudent(null); return; }
+      setCurrentModule(null); setSelectedSession(''); return;
     }
     if (currentModule) { setCurrentModule(null); setSelectedSession(''); setAdminSettingsView(null); return; }
-    if (dashboardView !== 'main') { if (dashboardView.startsWith('egitim_')) setDashboardView('egitim'); else setDashboardView('main'); return; }
+    if (dashboardView !== 'main') {
+      if (dashboardView.startsWith('egitim_')) { setDashboardView('egitim'); return; }
+      if (dashboardView.startsWith('degerler_')) { setDashboardView('degerler'); return; }
+      setDashboardView('main'); return;
+    }
     goBackToRoles();
   };
 
@@ -717,7 +819,8 @@ const saveData = (type, status, basePts) => {
 
     // KURAL 2: Öğrenci kurumda yoksa ödül/ceza puanı (Yoklama ve Okul hariç) verilemez!
     const todayStr = new Date().toDateString();
-    if (appData?.daily_status?.[todayStr]?.[selectedStudent] === 'a' && type !== 'okul' && type !== 'yoklama') {
+    const okulDateStr = new Date().getHours() < 15 ? new Date(Date.now() - 86400000).toDateString() : new Date().toDateString();
+    if (appData?.daily_status?.[okulDateStr]?.[selectedStudent] === 'a' && type !== 'okul' && type !== 'yoklama') {
         return toast(`⚠️ ${selectedStudent} adlı öğrenci bugün kurumda değil (İzinli/Gelmedi). Puan işlemi yapılamaz.`);
     }
 
@@ -741,11 +844,11 @@ const saveData = (type, status, basePts) => {
     }
     
     if (type === 'okul') {
-        updates[`daily_status/${todayStr}/${selectedStudent}`] = status;
-        if (status === 'a') { 
+        updates[`daily_status/${okulDateStr}/${selectedStudent}`] = status;
+        if (status === 'a') {
             const currentAbs = Number(appData?.absences?.[selectedStudent] || 0) + 1;
             updates[`absences/${selectedStudent}`] = currentAbs;
-            if (currentAbs % 10 === 0) { 
+            if (currentAbs % 10 === 0) {
                 updates[`wallet/${selectedStudent}`] = (Number(appData?.wallet?.[selectedStudent]) || 0) + finalPts - 100;
                 updates[`transactions/${selectedStudent}/abs_fine_${Date.now()}`] = { desc: '🚨 10 Günlük Devamsızlık Cezası', amt: -100, date: new Date().toLocaleString('tr-TR') };
                 toast(`🚨 ${selectedStudent} 10. devamsızlığını yaptı! Hesabından ekstra 100 M-Coin düşüldü.`);
@@ -1240,6 +1343,7 @@ const saveEducationData = () => {
 
 const renderStudentGrid = (students, type) => {
     const todayStr = new Date().toDateString();
+    const okulDateStr = new Date().getHours() < 15 ? new Date(Date.now() - 86400000).toDateString() : new Date().toDateString();
     
     if (currentModule === 'devamsizlik') {
         return (
@@ -1263,16 +1367,16 @@ const renderStudentGrid = (students, type) => {
     return (
     <div className="grid-mobile-2">
       {students.map(name => {
-        const okulDurumu = appData?.daily_status?.[todayStr]?.[name];
+        const okulDurumu = appData?.daily_status?.[okulDateStr]?.[name];
         const isNotAtYurt = okulDurumu === 'a'; // Okula gelmediyse tüm modüllerde kilitlenir
-        
+
         let bgColor = '#ffffff'; let subText = ''; let isCompletedToday = false;
-        
+
         if (currentModule === 'okul') {
-            if (okulDurumu) { 
-                isCompletedToday = true; 
-                bgColor = okulDurumu === 'p' ? '#ecfdf5' : (okulDurumu === 'a' ? '#fef2f2' : '#f1f5f9'); 
-                subText = okulDurumu === 'p' ? '✅ Döndü (İşlem Yapıldı)' : (okulDurumu === 'a' ? '❌ Gelmedi (İşlem Yapıldı)' : '✉️ İzinli (İşlem Yapıldı)');
+            // Admin: status gösterilir ama tıklanabilir kalır (düzeltme yapılabilsin)
+            if (okulDurumu) {
+                bgColor = okulDurumu === 'p' ? '#ecfdf5' : (okulDurumu === 'a' ? '#fef2f2' : '#f1f5f9');
+                subText = okulDurumu === 'p' ? '✅ Döndü' : (okulDurumu === 'a' ? '❌ Gelmedi' : '✉️ İzinli');
             } else {
                 subText = '⏳ Bekliyor';
             }
@@ -1409,7 +1513,7 @@ const renderStudentGrid = (students, type) => {
 {dashboardView === 'turnuva' && [
                 { id: 'admin_ban', icon: '🕵️‍♂️', label: 'Oyun Odası Denetim Merkezi' },
                 { id: 'admin_turnuva', icon: '🏆', label: 'Turnuva Organizasyonu' },
-                { id: 'admin_custom_slot', icon: '⏰', label: 'Özel Seans Ekle' }
+                { id: 'admin_custom_slot', icon: '⏰', label: 'Seans Düzenle' }
             ].map(mod => (
                 <div key={mod.id} onClick={() => setCurrentModule(mod.id)} className="premium-card card-hover"><div className="icon">{mod.icon}</div><div className="label">{mod.label}</div></div>
             ))}
@@ -1423,7 +1527,16 @@ const renderStudentGrid = (students, type) => {
               </>
             )}
 
-            {dashboardView === 'degerler' && levelList.map(lvl => (<div key={lvl} onClick={() => { setCurrentModule('values_view'); setSelectedSession(lvl); }} className="premium-card card-hover"><div className="icon">🕌</div><div className="label">{lvl}</div></div>))}
+            {dashboardView === 'degerler' && [
+              { id: 'degerler_values', icon: '📖', label: 'DEĞERLER EĞİTİMİ' },
+              { id: 'degerler_imtihan', icon: '📚', label: 'İMTİHAN HAZIRLIK' },
+            ].map(mod => (
+              <div key={mod.id} onClick={() => setDashboardView(mod.id)} className="premium-card card-hover">
+                <div className="icon">{mod.icon}</div><div className="label">{mod.label}</div>
+              </div>
+            ))}
+            {dashboardView === 'degerler_values' && levelList.map(lvl => (<div key={lvl} onClick={() => { setCurrentModule('values_view'); setSelectedSession(lvl); }} className="premium-card card-hover"><div className="icon">🕌</div><div className="label">{lvl}</div></div>))}
+            {dashboardView === 'degerler_imtihan' && levelList.map(lvl => (<div key={lvl} onClick={() => { setCurrentModule('imtihan_view'); setSelectedSession(lvl); setImtihanStudent(null); setImtihanSubject(null); }} className="premium-card card-hover"><div className="icon">📚</div><div className="label">{lvl}</div></div>))}
             
             {dashboardView === 'isleyis' && [ 
               { id: 'okul', icon: '🏫', label: 'Okul Dönüş' },
@@ -1506,6 +1619,21 @@ const renderStudentGrid = (students, type) => {
                     </button>
                 </div>
 
+                <div style={{ background: '#fef2f2', padding: '30px', borderRadius: '24px', border: '1px solid #fecaca' }}>
+                    <h3 style={{ margin: '0 0 15px 0', color: '#991b1b', fontWeight: 900 }}>⚖️ Haftalık Randevu Limiti (Ambargo Engelleme)</h3>
+                    <p style={{ fontSize: '13px', color: '#b91c1c', marginBottom: '20px', fontWeight: 600 }}>Bazı öğrenciler tüm hafta boyunca aynı cihazın tüm seanslarını satın alıp diğer öğrencilerin oynamasını engelleyebiliyor. Buradan bir öğrencinin, aynı cihazdan haftada en fazla kaç seans alabileceğini sınırlayabilirsiniz. Ayrıca limit aktifken öğrenciler art arda iki gün aynı cihazdan seans alamaz, bir gün ara vermek zorunda kalır. 0 = sınırsız.</p>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <input type="number" min="0" defaultValue={appData?.settings?.game_room_weekly_limit || 0}
+                            onBlur={e => {
+                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                db.ref('mavikent_premium/settings/game_room_weekly_limit').set(val);
+                                toast(val > 0 ? `✅ Haftalık limit ${val} seans olarak ayarlandı!` : '✅ Haftalık limit kaldırıldı (sınırsız).');
+                            }}
+                            className="elite-input" style={{ flex: 1 }} placeholder="Örn: 2" />
+                        <div style={{ fontSize: '13px', fontWeight: 800, color: '#991b1b' }}>seans / cihaz / hafta</div>
+                    </div>
+                </div>
+
                 {/* --- YENİ EKLENEN: AKTİF RANDEVULAR VE İADE YÖNETİMİ --- */}
                 <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', gridColumn: '1 / -1' }}>
                     <h3 style={{ margin: '0 0 15px 0', color: '#0f172a', fontWeight: 900 }}>🔄 Randevu İptal & İade Yönetimi</h3>
@@ -1541,12 +1669,8 @@ const renderStudentGrid = (students, type) => {
                                         </div>
                                         <button onClick={() => {
                                             // Tahmini fiyat belirleme
-                                            let suggestedPrice = 0;
-                                            if (app.device === 'ps5') suggestedPrice = 30;
-                                            else if (app.device === 'ps4') suggestedPrice = 20;
-                                            else if (app.device === 'vr') suggestedPrice = 40;
-                                            else if (app.device === 'pc') suggestedPrice = 30;
-                                            
+                                            let suggestedPrice = slotObj?.price || 0;
+
                                             // Eğer özel bir seans ise onun fiyatını bul
                                             const customSlot = appData?.custom_game_slots?.[app.device]?.[app.day]?.[app.slotId];
                                             if (customSlot && customSlot.price) suggestedPrice = Number(customSlot.price);
@@ -1693,13 +1817,103 @@ const renderStudentGrid = (students, type) => {
             </div>
         )}
 
-{/* --- ÖZEL SEANS EKLEME MERKEZİ --- */}
+{/* --- SEANS DÜZENLE MERKEZİ --- */}
         {currentModule === 'admin_custom_slot' && (
             <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                {/* 1. SEANS EKLEME FORMU */}
+
+                {/* 0. CİHAZ YÖNETİMİ */}
+                <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                    <h3 style={{ margin: '0 0 15px 0', color: '#0f172a', fontWeight: 900 }}>🎮 Cihazlar</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '18px' }}>
+                        {GAME_DEVICES.map(dev => (
+                            <div key={dev.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0', gap: '10px', flexWrap: 'wrap' }}>
+                                {editingDeviceId === dev.id ? (
+                                    <>
+                                        <div style={{ display: 'flex', gap: '8px', flex: 1, minWidth: '220px' }}>
+                                            <input type="text" value={deviceEditDraft.icon} onChange={e => setDeviceEditDraft({...deviceEditDraft, icon: e.target.value})} className="elite-input" style={{ width: '60px', textAlign: 'center' }} />
+                                            <input type="text" value={deviceEditDraft.name} onChange={e => setDeviceEditDraft({...deviceEditDraft, name: e.target.value})} className="elite-input" style={{ flex: 1 }} />
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => handleSaveDeviceEdit(dev.id)} style={{ background: '#10b981', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>✅ Kaydet</button>
+                                            <button onClick={() => setEditingDeviceId(null)} style={{ background: '#e2e8f0', color: '#334155', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>İptal</button>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '15px' }}>{dev.icon} {dev.name} <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '12px' }}>({dev.id})</span></div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => { setEditingDeviceId(dev.id); setDeviceEditDraft({ name: dev.name, icon: dev.icon }); }} style={{ background: '#eff6ff', color: '#3b82f6', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>✏️ Düzenle</button>
+                                            <button onClick={() => handleDeleteDevice(dev.id, dev.name)} style={{ background: '#fee2e2', color: '#ef4444', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>🗑️ Sil</button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr auto', gap: '10px' }}>
+                        <input type="text" placeholder="🎮" value={deviceForm.icon} onChange={e => setDeviceForm({...deviceForm, icon: e.target.value})} className="elite-input" style={{ textAlign: 'center' }} />
+                        <input type="text" placeholder="Yeni Cihaz Adı (Örn: Switch)" value={deviceForm.name} onChange={e => setDeviceForm({...deviceForm, name: e.target.value})} className="elite-input" />
+                        <button onClick={handleAddDevice} className="premium-btn" style={{ background: '#0f172a', color: 'white', padding: '0 20px', fontWeight: 900, border: 'none' }}>+ Cihaz Ekle</button>
+                    </div>
+                </div>
+
+                {/* 1. VARSAYILAN (HAFTALIK SABİT) SEANSLAR */}
+                <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                    <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontWeight: 900 }}>⏰ Varsayılan Seans Saatleri</h3>
+                    <p style={{ margin: '0 0 15px 0', fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Bu seanslar seçilen cihaz için haftanın her günü geçerlidir. Saatini, fiyatını değiştirebilir, yenisini ekleyip silebilirsin.</p>
+
+                    <select value={defaultSlotDevice} onChange={e => setDefaultSlotDevice(e.target.value)} className="elite-input" style={{ marginBottom: '15px', maxWidth: '260px' }}>
+                        {GAME_DEVICES.map(d => <option key={d.id} value={d.id}>{d.icon} {d.name}</option>)}
+                    </select>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '18px' }}>
+                        {(GAME_SLOTS[defaultSlotDevice] || []).length === 0 && (
+                            <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontWeight: 700, border: '2px dashed #e2e8f0', borderRadius: '15px' }}>Bu cihaz için henüz seans tanımlı değil.</div>
+                        )}
+                        {(GAME_SLOTS[defaultSlotDevice] || []).map(slot => {
+                            const isEditing = editingDefaultSlot?.deviceId === defaultSlotDevice && editingDefaultSlot?.slotId === slot.id;
+                            return (
+                                <div key={slot.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0', gap: '10px', flexWrap: 'wrap' }}>
+                                    {isEditing ? (
+                                        <>
+                                            <div style={{ display: 'flex', gap: '8px', flex: 1, minWidth: '220px' }}>
+                                                <input type="text" value={defaultSlotDraft.time} onChange={e => setDefaultSlotDraft({...defaultSlotDraft, time: e.target.value})} className="elite-input" style={{ flex: 2 }} placeholder="Saat (Örn: 21:00 - 21:30)" />
+                                                <input type="number" value={defaultSlotDraft.price} onChange={e => setDefaultSlotDraft({...defaultSlotDraft, price: e.target.value})} className="elite-input" style={{ flex: 1 }} placeholder="Fiyat" />
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button onClick={() => handleSaveDefaultSlotEdit(defaultSlotDevice, slot.id)} style={{ background: '#10b981', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>✅ Kaydet</button>
+                                                <button onClick={() => setEditingDefaultSlot(null)} style={{ background: '#e2e8f0', color: '#334155', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>İptal</button>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div>
+                                                <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '15px' }}>🕒 {slot.time}</div>
+                                                <div style={{ fontSize: '12px', color: '#10b981', fontWeight: 800 }}>{slot.price} M-Coin</div>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button onClick={() => { setEditingDefaultSlot({ deviceId: defaultSlotDevice, slotId: slot.id }); setDefaultSlotDraft({ time: slot.time, price: slot.price }); }} style={{ background: '#eff6ff', color: '#3b82f6', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>✏️ Düzenle</button>
+                                                <button onClick={() => handleDeleteDefaultSlot(defaultSlotDevice, slot.id, slot.time)} style={{ background: '#fee2e2', color: '#ef4444', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>🗑️ Sil</button>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
+                        <input type="text" placeholder="Saat (Örn: 10:00 - 11:00)" value={newDefaultSlot.time} onChange={e => setNewDefaultSlot({...newDefaultSlot, time: e.target.value})} className="elite-input" />
+                        <input type="number" placeholder="Fiyat (M-Coin)" value={newDefaultSlot.price} onChange={e => setNewDefaultSlot({...newDefaultSlot, price: e.target.value})} className="elite-input" />
+                        <button onClick={handleAddDefaultSlot} className="premium-btn" style={{ background: '#0f172a', color: 'white', padding: '16px', fontWeight: 900, border: 'none' }}>+ Seans Ekle</button>
+                    </div>
+                </div>
+
+                {/* 2. ÖZEL (GÜNE ÖZGÜ) SEANS EKLEME FORMU */}
                 <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
                     <h3 style={{ margin: '0 0 10px 0', color: '#0f172a', fontWeight: 900 }}>⏰ Yeni Özel Seans Ekle</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginTop: '15px' }}>
+                    <p style={{ margin: '0 0 15px 0', fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Sadece seçtiğin güne özel, tek seferlik ekstra seans eklemek için kullan.</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
                         <select value={newCustomSlot.device} onChange={e => setNewCustomSlot({...newCustomSlot, device: e.target.value})} className="elite-input">
                             {GAME_DEVICES.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                         </select>
@@ -1712,7 +1926,7 @@ const renderStudentGrid = (students, type) => {
                     </div>
                 </div>
 
-                {/* 2. TÜM ÖZEL SEANSLARIN LİSTESİ (GLOBAL GÖRÜNÜM) */}
+                {/* 3. TÜM ÖZEL SEANSLARIN LİSTESİ (GLOBAL GÖRÜNÜM) */}
                 <div style={{ background: 'white', padding: '30px', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                         <h3 style={{ margin: 0, color: '#0f172a', fontWeight: 900 }}>🌐 Aktif Tüm Özel Seanslar</h3>
@@ -1736,24 +1950,47 @@ const renderStudentGrid = (students, type) => {
                                 return <div style={{ padding: '30px', textAlign: 'center', color: '#94a3b8', fontWeight: 700, border: '2px dashed #e2e8f0', borderRadius: '15px' }}>Henüz hiçbir özel seans eklenmemiş.</div>;
                             }
 
-                            return allSlots.sort((a, b) => DAYS.indexOf(a.dayName) - DAYS.indexOf(b.dayName)).map((item) => (
-                                <div key={item.slotId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', background: '#f8fafc', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                        <div style={{ background: '#0f172a', color: '#d4af37', padding: '8px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 900, textAlign: 'center', minWidth: '85px' }}>
-                                            {item.dayName.toUpperCase()}
-                                        </div>
-                                        <div>
-                                            <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '15px' }}>{item.time} <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '13px' }}>({item.devId.toUpperCase()})</span></div>
-                                            <div style={{ fontSize: '12px', color: '#10b981', fontWeight: 800 }}>{item.price} M-Coin</div>
-                                        </div>
-                                    </div>
-                                    <button onClick={() => {
-                                        if(window.confirm(`${item.dayName} günü ${item.time} seansını silmek istediğine emin misin?`)) {
-                                            db.ref(`mavikent_premium/custom_game_slots/${item.devId}/${item.dayName}/${item.slotId}`).remove();
-                                        }
-                                    }} style={{ background: '#fee2e2', color: '#ef4444', border: 'none', padding: '10px 15px', borderRadius: '12px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>🗑️ SİL</button>
+                            return allSlots.sort((a, b) => DAYS.indexOf(a.dayName) - DAYS.indexOf(b.dayName)).map((item) => {
+                                const isEditing = editingCustomSlot?.devId === item.devId && editingCustomSlot?.dayName === item.dayName && editingCustomSlot?.slotId === item.slotId;
+                                return (
+                                <div key={item.slotId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', background: '#f8fafc', borderRadius: '20px', border: '1px solid #e2e8f0', gap: '10px', flexWrap: 'wrap' }}>
+                                    {isEditing ? (
+                                        <>
+                                            <div style={{ display: 'flex', gap: '8px', flex: 1, minWidth: '260px', alignItems: 'center' }}>
+                                                <div style={{ background: '#0f172a', color: '#d4af37', padding: '8px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 900, textAlign: 'center', minWidth: '85px' }}>
+                                                    {item.dayName.toUpperCase()}
+                                                </div>
+                                                <input type="text" value={customSlotDraft.time} onChange={e => setCustomSlotDraft({...customSlotDraft, time: e.target.value})} className="elite-input" style={{ flex: 2 }} placeholder="Saat" />
+                                                <input type="number" value={customSlotDraft.price} onChange={e => setCustomSlotDraft({...customSlotDraft, price: e.target.value})} className="elite-input" style={{ flex: 1 }} placeholder="Fiyat" />
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button onClick={() => handleSaveCustomSlotEdit(item.devId, item.dayName, item.slotId)} style={{ background: '#10b981', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '12px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>✅ Kaydet</button>
+                                                <button onClick={() => setEditingCustomSlot(null)} style={{ background: '#e2e8f0', color: '#334155', border: 'none', padding: '10px 15px', borderRadius: '12px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>İptal</button>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                                <div style={{ background: '#0f172a', color: '#d4af37', padding: '8px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 900, textAlign: 'center', minWidth: '85px' }}>
+                                                    {item.dayName.toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '15px' }}>{item.time} <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '13px' }}>({item.devId.toUpperCase()})</span></div>
+                                                    <div style={{ fontSize: '12px', color: '#10b981', fontWeight: 800 }}>{item.price} M-Coin</div>
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button onClick={() => { setEditingCustomSlot({ devId: item.devId, dayName: item.dayName, slotId: item.slotId }); setCustomSlotDraft({ time: item.time, price: item.price }); }} style={{ background: '#eff6ff', color: '#3b82f6', border: 'none', padding: '10px 15px', borderRadius: '12px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>✏️ Düzenle</button>
+                                                <button onClick={() => {
+                                                    if(window.confirm(`${item.dayName} günü ${item.time} seansını silmek istediğine emin misin?`)) {
+                                                        db.ref(`mavikent_premium/custom_game_slots/${item.devId}/${item.dayName}/${item.slotId}`).remove();
+                                                    }
+                                                }} style={{ background: '#fee2e2', color: '#ef4444', border: 'none', padding: '10px 15px', borderRadius: '12px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>🗑️ SİL</button>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
-                            ));
+                            )});
                         })()}
                     </div>
                 </div>
@@ -1772,9 +2009,7 @@ const renderStudentGrid = (students, type) => {
                         <input type="text" value={newTourney.name} onChange={e => setNewTourney({...newTourney, name: e.target.value})} placeholder="Turnuva Adı (Örn: FIFA Kış Ligi)" className="elite-input" style={{ gridColumn: '1 / -1' }} />
                         
                         <select value={newTourney.device} onChange={e => setNewTourney({...newTourney, device: e.target.value})} className="elite-input">
-                            <option value="ps5">Oynanacak Cihaz: PS5</option>
-                            <option value="ps4">Oynanacak Cihaz: PS4</option>
-                            <option value="pc">Oynanacak Cihaz: PC</option>
+                            {GAME_DEVICES.map(d => <option key={d.id} value={d.id}>Oynanacak Cihaz: {d.name}</option>)}
                         </select>
                         <input type="text" value={newTourney.game} onChange={e => setNewTourney({...newTourney, game: e.target.value})} placeholder="Oyun (Örn: FC 24)" className="elite-input" />
                         <input type="number" value={newTourney.fee} onChange={e => setNewTourney({...newTourney, fee: e.target.value})} placeholder="Giriş Ücreti (M)" className="elite-input" />
@@ -1952,6 +2187,168 @@ const renderStudentGrid = (students, type) => {
             </div>
           </>
         )}
+
+        {/* İMTİHAN HAZIRLIK */}
+        {currentModule === 'imtihan_view' && (() => {
+          const levelStudents = roster.filter(n => appData?.student_levels?.[n] === selectedSession);
+          const todayStr = new Date().toDateString();
+          const levelKey = selectedSession.startsWith('SEVİYE 1') ? 'SEVİYE 1' : selectedSession;
+          const subjects = IMTIHAN_SORULAR[levelKey] ? Object.keys(IMTIHAN_SORULAR[levelKey]) : [];
+          const progress = appData?.imtihan_progress || {};
+
+          const addCoin = async (studentName, amount, desc) => {
+            const snap = await db.ref(`mavikent_premium/wallet/${studentName}`).once('value');
+            const cur = snap.val() || 0;
+            const ts = Date.now();
+            const updates = {};
+            updates[`wallet/${studentName}`] = cur + amount;
+            updates[`transactions/${studentName}/txn_imtihan_${ts}`] = { desc, amt: amount, date: new Date().toLocaleString('tr-TR') };
+            await db.ref('mavikent_premium').update(updates);
+          };
+
+          const toggleQuestion = async (q) => {
+            const isDone = !!progress?.[imtihanStudent]?.[q.id]?.done;
+            const key = `${imtihanStudent}/${q.id}`;
+            if (isDone) {
+              await db.ref(`mavikent_premium/imtihan_progress/${key}`).remove();
+              const snap = await db.ref(`mavikent_premium/wallet/${imtihanStudent}`).once('value');
+              const cur = snap.val() || 0;
+              await db.ref(`mavikent_premium/wallet/${imtihanStudent}`).set(Math.max(0, cur - 3));
+              toast(`↩️ Düzeltildi — ${imtihanStudent}`);
+            } else {
+              await db.ref(`mavikent_premium/imtihan_progress/${key}`).set({ done: true, date: todayStr, subject: imtihanSubject, soru: q.soru, cevap: q.cevap });
+              await addCoin(imtihanStudent, 3, `📚 İmtihan Hazırlık: ${q.soru.slice(0, 40)}...`);
+              playCoin();
+              toast(`✅ +3 M-Coin — ${imtihanStudent}`);
+            }
+          };
+
+          // Öğrenci seçilmemişse liste göster
+          if (!imtihanStudent) {
+            const rankMedals = ['🥇', '🥈', '🥉'];
+            const studentStats = levelStudents.map(name => ({ name, total: Object.keys(progress?.[name] || {}).length, today: Object.values(progress?.[name] || {}).filter(v => v.date === todayStr).length }));
+            const rankedStudents = [...studentStats].sort((a, b) => b.total - a.total);
+            return (
+              <div className="fade-in">
+                <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '16px' }}>
+                  📚 İmtihan Hazırlık — {selectedSession}
+                </h4>
+                <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                  {/* Öğrenci grid */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '10px' }}>
+                      {studentStats.map(({ name, total, today }) => (
+                        <div key={name} onClick={() => setImtihanStudent(name)} className="premium-card card-hover" style={{ cursor: 'pointer', padding: '14px 8px', textAlign: 'center', aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                          <div style={{ fontSize: '26px' }}>👤</div>
+                          <div style={{ fontWeight: 900, fontSize: '11px', color: '#0f172a', lineHeight: 1.3, wordBreak: 'break-word' }}>{name}</div>
+                          <div style={{ fontSize: '10px', color: '#10b981', fontWeight: 800 }}>✅ {today}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Sıralama listesi */}
+                  <div style={{ width: '150px', flexShrink: 0 }}>
+                    <div style={{ fontSize: '11px', fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>🏆 Sıralama</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {rankedStudents.map(({ name, total }, idx) => (
+                        <div key={name} style={{ background: idx === 0 ? '#fef9c3' : idx === 1 ? '#f0f9ff' : idx === 2 ? '#fff7ed' : '#f8fafc', borderRadius: '12px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: idx < 3 ? '16px' : '12px', fontWeight: 900, minWidth: '20px', color: idx >= 3 ? '#94a3b8' : undefined }}>{rankMedals[idx] || `${idx + 1}.`}</span>
+                          <span style={{ fontSize: '11px', fontWeight: 800, color: '#0f172a', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                          <span style={{ fontSize: '11px', fontWeight: 900, color: '#6366f1' }}>{total}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Bu seviye için soru yoksa bilgi mesajı göster
+          if (subjects.length === 0) return (
+            <div className="fade-in">
+              <button onClick={() => setImtihanStudent(null)} style={{ background: '#f1f5f9', color: '#0f172a', border: 'none', padding: '10px 20px', borderRadius: '14px', fontWeight: 800, fontSize: '14px', cursor: 'pointer', marginBottom: '16px' }}>← Geri</button>
+              <div style={{ textAlign: 'center', padding: '50px 20px' }}>
+                <div style={{ fontSize: '52px', marginBottom: '16px' }}>📭</div>
+                <div style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a', marginBottom: '8px' }}>{selectedSession} için henüz soru eklenmedi</div>
+                <div style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 600 }}>Bu seviyenin soruları sisteme yüklendiğinde burada görünecek.</div>
+              </div>
+            </div>
+          );
+
+          // Konu seçilmemişse ders listesi göster
+          if (!imtihanSubject) return (
+            <div className="fade-in">
+              <button onClick={() => setImtihanStudent(null)} style={{ background: '#f1f5f9', color: '#0f172a', border: 'none', padding: '10px 20px', borderRadius: '14px', fontWeight: 800, fontSize: '14px', cursor: 'pointer', marginBottom: '16px' }}>← Geri</button>
+              <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '16px' }}>
+                👤 {imtihanStudent} — Ders Seçin
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
+                {subjects.map(subj => {
+                  const questions = IMTIHAN_SORULAR[levelKey][subj];
+                  const done = questions.filter(q => !!progress?.[imtihanStudent]?.[q.id]?.done).length;
+                  return (
+                    <div key={subj} onClick={() => setImtihanSubject(subj)} className="premium-card card-hover" style={{ cursor: 'pointer', padding: '16px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '28px', marginBottom: '8px' }}>📖</div>
+                      <div style={{ fontWeight: 900, fontSize: '13px', color: '#0f172a', marginBottom: '6px' }}>{subj}</div>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: done === questions.length ? '#10b981' : '#6366f1' }}>
+                        {done} / {questions.length}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+
+          // Sorular listesi
+          const questions = IMTIHAN_SORULAR[levelKey][imtihanSubject] || [];
+          const groupedByKonu = questions.reduce((acc, q) => {
+            if (!acc[q.konu]) acc[q.konu] = [];
+            acc[q.konu].push(q);
+            return acc;
+          }, {});
+
+          return (
+            <div className="fade-in">
+              <button onClick={() => setImtihanSubject(null)} style={{ background: '#f1f5f9', color: '#0f172a', border: 'none', padding: '10px 20px', borderRadius: '14px', fontWeight: 800, fontSize: '14px', cursor: 'pointer', marginBottom: '16px' }}>← Geri</button>
+              <h4 style={{ marginTop: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px', marginBottom: '4px' }}>
+                📚 {imtihanSubject}
+              </h4>
+              <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#64748b', fontWeight: 700 }}>
+                👤 {imtihanStudent} · {selectedSession} · Tik at = +3 M-Coin
+              </p>
+              {Object.entries(groupedByKonu).map(([konu, qs]) => (
+                <div key={konu} style={{ background: 'white', borderRadius: '20px', padding: '20px', marginBottom: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.04)' }}>
+                  <div style={{ fontWeight: 900, fontSize: '15px', color: '#6366f1', marginBottom: '14px', borderBottom: '2px solid #e0e7ff', paddingBottom: '8px' }}>
+                    📌 {konu}
+                  </div>
+                  {qs.map((q, i) => {
+                    const isDone = !!progress?.[imtihanStudent]?.[q.id]?.done;
+                    return (
+                      <div key={q.id} onClick={() => toggleQuestion(q)} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px', borderRadius: '14px',
+                        marginBottom: i < qs.length - 1 ? '8px' : 0,
+                        background: isDone ? '#f0fdf4' : '#f8fafc',
+                        border: `1.5px solid ${isDone ? '#86efac' : '#e2e8f0'}`,
+                        cursor: 'pointer', transition: 'all 0.15s',
+                        opacity: isDone ? 0.85 : 1
+                      }}>
+                        <div style={{ width: '24px', height: '24px', borderRadius: '8px', background: isDone ? '#10b981' : 'white', border: `2px solid ${isDone ? '#10b981' : '#cbd5e1'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px' }}>
+                          {isDone && <span style={{ color: 'white', fontSize: '14px' }}>✓</span>}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 800, fontSize: '13px', color: isDone ? '#059669' : '#0f172a', lineHeight: 1.4 }}>{q.soru}</div>
+                          {isDone && <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, marginTop: '4px' }}>💰 +3 M-Coin · {progress[imtihanStudent][q.id].date}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* HEDİYE KODU MERKEZİ */}
         {currentModule === 'admin_codes' && (
@@ -2959,6 +3356,27 @@ const renderStudentGrid = (students, type) => {
             const totalAll    = rutinTotal + temizTotal;
             const totalPct    = totalAll > 0 ? Math.round(totalToday / totalAll * 100) : 0;
 
+            // Her öğrencinin sistemde (varsa) hangi tek alana atanmış olduğunu tutar
+            const allAssignments = new Map();
+            FLOORS.forEach(f => {
+                ['rutin', 'temizlik'].forEach(sec => {
+                    Object.entries(appData?.hygiene_floors?.[sec]?.[f.key]?.areas || {}).forEach(([areaId, a]) => {
+                        (a.responsibles || []).forEach(r => {
+                            if (!allAssignments.has(r)) {
+                                allAssignments.set(r, { section: sec, floorKey: f.key, floorLabel: f.label, sectionLabel: sec === 'rutin' ? 'Rutin' : 'Temizlik', areaId, areaName: a.name, currentResponsibles: a.responsibles || [] });
+                            }
+                        });
+                    });
+                });
+            });
+            const unassignStudent = (name) => {
+                const info = allAssignments.get(name);
+                if (!info) return;
+                updateAreaResponsibles(info.section, info.floorKey, info.areaId, info.currentResponsibles.filter(r => r !== name));
+                toast(`✅ ${name} görevden çıkarıldı.`);
+                setHygSearchStudent('');
+            };
+
             const approveMission = async (name) => {
                 const m = missions[name]; if (!m) return;
                 const reward = m.reward_coins || 40;
@@ -2973,6 +3391,54 @@ const renderStudentGrid = (students, type) => {
             const rejectMission = async (name) => {
                 await db.ref(`mavikent_premium/kurtarma_gorevleri/${name}`).update({ status: 'reddedildi', rejected_at: Date.now() });
                 toast('Görev reddedildi. Öğrenci 12 saat sonra tekrar alabilir.');
+            };
+
+            // Her kat + bölüm (grup) kendi JPG'sini ayrı ayrı indirebilsin
+            const downloadHygieneGroupAsJPG = async (section, floorKey) => {
+                const floor = FLOORS.find(f => f.key === floorKey);
+                const secLabel = section === 'rutin' ? 'Rutin Kontrol' : 'Temizlik Kontrol';
+                const btnId = `btn-jpg-hijyen-${section}-${floorKey}`;
+                const btnEl = document.getElementById(btnId);
+                const originalText = btnEl ? btnEl.innerText : '';
+                if (btnEl) btnEl.innerText = '⏳ Hazırlanıyor...';
+                const html2canvas = await loadHtml2Canvas();
+                const container = document.createElement('div');
+                container.style.cssText = "position:absolute;left:-9999px;top:0;width:900px;background:#ffffff;padding:40px;font-family:'Plus Jakarta Sans',sans-serif;color:#0f172a;";
+
+                const areas = appData?.hygiene_floors?.[section]?.[floorKey]?.areas || {};
+                let rows = ''; let rowIdx = 0;
+                Object.values(areas).forEach(area => {
+                    const atype = FLOOR_AREA_TYPES[area.type] || FLOOR_AREA_TYPES.genel;
+                    const responsibles = (area.responsibles || []).join(', ') || '—';
+                    rows += `<tr style="background:${rowIdx % 2 === 0 ? '#f8fafc' : '#ffffff'};">
+                        <td style="padding:14px;border-bottom:1px solid #e2e8f0;font-weight:800;">${atype.icon} ${area.name}</td>
+                        <td style="padding:14px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#10b981;">${responsibles}</td>
+                    </tr>`;
+                    rowIdx++;
+                });
+
+                const tableHTML = `<table style="width:100%;border-collapse:collapse;text-align:left;margin-top:20px;">
+                    <tr style="background:#0f172a;color:white;">
+                        <th style="padding:14px;border-radius:12px 0 0 0;">Alan</th>
+                        <th style="padding:14px;border-radius:0 12px 0 0;">Sorumlu Öğrenciler</th>
+                    </tr>
+                    ${rows || `<tr><td colspan="2" style="padding:30px;text-align:center;color:#94a3b8;">Henüz alan eklenmemiş</td></tr>`}
+                </table>`;
+
+                container.innerHTML = `<div style="background:linear-gradient(135deg, #0f172a, #1e293b);padding:30px;border-radius:24px;display:flex;justify-content:space-between;align-items:center;color:white;box-shadow:0 10px 30px rgba(0,0,0,0.1);"><div><h1 style="margin:0;font-size:36px;font-weight:900;letter-spacing:-1px;">MAVİKENT <span style="color:#d4af37;">ELITE</span></h1><h2 style="margin:5px 0 0 0;font-size:18px;color:#cbd5e1;font-weight:700;">${secLabel} — ${floor?.label || floorKey}</h2></div><div style="text-align:right;"><div style="font-size:16px;font-weight:600;color:#cbd5e1;">Tarih</div><div style="font-size:22px;font-weight:800;color:#d4af37;">${new Date().toLocaleDateString('tr-TR')}</div></div></div>${tableHTML}`;
+                document.body.appendChild(container);
+
+                try {
+                    const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+                    const link = document.createElement('a');
+                    link.download = `Mavikent_${secLabel.replace(/\s+/g,'_')}_${floor?.label?.replace(/\s+/g,'_') || floorKey}_${new Date().toISOString().slice(0,10)}.jpg`;
+                    link.href = canvas.toDataURL('image/jpeg', 0.9);
+                    link.click();
+                } catch (e) { console.error(e); }
+                finally {
+                    document.body.removeChild(container);
+                    if (btnEl) btnEl.innerText = originalText;
+                }
             };
 
             // ── Level 3: Puanlama formu ──
@@ -3018,6 +3484,9 @@ const renderStudentGrid = (students, type) => {
                 const floorMeta    = FLOORS.find(f => f.key === adminHygFloor);
                 const sColor       = adminHygSection === 'rutin' ? '#0ea5e9' : '#10b981';
                 const sLabel       = adminHygSection === 'rutin' ? 'Rutin Kontrol' : 'Temizlik Kontrol';
+
+                // Bir öğrenci sistemde toplamda sadece TEK bir alana sorumlu olabilir (kat/bölüm fark etmez)
+                const occupiedElsewhere = allAssignments;
                 return (
                     <div className="fade-in">
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
@@ -3025,9 +3494,14 @@ const renderStudentGrid = (students, type) => {
                                 <button onClick={() => { setAdminHygFloor(null); setAdminHygEditMode(false); }} style={{ background: 'white', border: '1.5px solid #e2e8f0', color: '#64748b', borderRadius: '14px', padding: '10px 18px', fontWeight: 900, cursor: 'pointer', fontSize: '14px' }}>← Geri</button>
                                 <span style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a' }}>{sLabel} — {floorMeta?.label}</span>
                             </div>
-                            <button onClick={() => setAdminHygEditMode(e => !e)} style={{ background: adminHygEditMode ? sColor : 'white', color: adminHygEditMode ? 'white' : sColor, border: `1.5px solid ${sColor}40`, borderRadius: '14px', padding: '10px 20px', fontWeight: 900, cursor: 'pointer', fontSize: '13px' }}>
-                                👥 {adminHygEditMode ? 'Atama Modu Açık' : 'Öğrenci Ataması'}
-                            </button>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button id={`btn-jpg-hijyen-${adminHygSection}-${adminHygFloor}`} onClick={() => downloadHygieneGroupAsJPG(adminHygSection, adminHygFloor)} style={{ background: 'white', border: '1.5px solid #e2e8f0', color: '#0f172a', borderRadius: '14px', padding: '10px 18px', fontWeight: 900, cursor: 'pointer', fontSize: '13px' }}>
+                                    📸 JPG İndir
+                                </button>
+                                <button onClick={() => setAdminHygEditMode(e => !e)} style={{ background: adminHygEditMode ? sColor : 'white', color: adminHygEditMode ? 'white' : sColor, border: `1.5px solid ${sColor}40`, borderRadius: '14px', padding: '10px 20px', fontWeight: 900, cursor: 'pointer', fontSize: '13px' }}>
+                                    👥 {adminHygEditMode ? 'Atama Modu Açık' : 'Öğrenci Ataması'}
+                                </button>
+                            </div>
                         </div>
                         {areaEntries.length === 0 ? (
                             <div style={{ background: 'white', borderRadius: '24px', padding: '60px', textAlign: 'center', color: '#94a3b8', fontWeight: 700 }}>Henüz alan eklenmemiş</div>
@@ -3051,7 +3525,7 @@ const renderStudentGrid = (students, type) => {
                                                 ))}
                                                 <select onChange={(e) => { if(e.target.value){ updateAreaResponsibles(adminHygSection, adminHygFloor, areaId, [...(area.responsibles||[]), e.target.value]); e.target.value=''; }}} style={{ width: '100%', marginTop: '8px', padding: '8px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', background: 'white', fontSize: '13px', fontWeight: 700, color: '#0f172a', cursor: 'pointer' }}>
                                                     <option value="">+ Öğrenci Ekle</option>
-                                                    {roster.filter(st => !(area.responsibles||[]).includes(st)).map(st => <option key={st} value={st}>{st}</option>)}
+                                                    {roster.filter(st => !(area.responsibles||[]).includes(st) && !occupiedElsewhere.has(st)).map(st => <option key={st} value={st}>{st}</option>)}
                                                 </select>
                                             </div>
                                         );
@@ -3205,6 +3679,28 @@ const renderStudentGrid = (students, type) => {
                                 <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700, marginTop: '6px' }}>{totalToday} / {totalAll} alan tamamlandı</div>
                             </div>
                         </div>
+                    </div>
+
+                    {/* ÖĞRENCİ NEREDE GÖREVLİ ARAMA */}
+                    <div style={{ background: 'white', borderRadius: '24px', padding: '22px 26px', boxShadow: '0 4px 20px rgba(15,23,42,0.06)', border: '1px solid #f1f5f9' }}>
+                        <div style={{ fontWeight: 900, fontSize: '15px', color: '#0f172a', marginBottom: '4px' }}>🔍 Öğrenci Nerede Görevli?</div>
+                        <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '14px' }}>Bir öğrenciyi başka bir alana atamak için önce mevcut görevinden çıkarman gerekir.</div>
+                        <select value={hygSearchStudent} onChange={e => setHygSearchStudent(e.target.value)} className="elite-input" style={{ maxWidth: '320px' }}>
+                            <option value="">Öğrenci seçin...</option>
+                            {roster.map(st => <option key={st} value={st}>{st}</option>)}
+                        </select>
+                        {hygSearchStudent && (() => {
+                            const info = allAssignments.get(hygSearchStudent);
+                            if (!info) return <div style={{ marginTop: '14px', fontSize: '13px', fontWeight: 800, color: '#10b981' }}>✅ {hygSearchStudent} şu an hiçbir alana atanmamış — istediğiniz yere ekleyebilirsiniz.</div>;
+                            return (
+                                <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', background: '#f8fafc', borderRadius: '14px', padding: '12px 16px', border: '1px solid #e2e8f0' }}>
+                                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#374151' }}>
+                                        <b>{hygSearchStudent}</b> şu an: {info.floorLabel}, {info.sectionLabel} — {info.areaName}
+                                    </div>
+                                    <button onClick={() => unassignStudent(hygSearchStudent)} style={{ background: '#fee2e2', color: '#ef4444', border: 'none', padding: '9px 16px', borderRadius: '12px', fontWeight: 900, cursor: 'pointer', fontSize: '12px' }}>Görevden Çıkar</button>
+                                </div>
+                            );
+                        })()}
                     </div>
 
                     {/* 3 KART - açık tema */}
