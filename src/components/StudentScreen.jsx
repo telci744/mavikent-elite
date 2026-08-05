@@ -1024,22 +1024,22 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                       if (rng <= 60) {
                           let dev = Math.random() < 0.5 ? 'ps4' : 'pc';
                           shardsWon[dev] += Math.floor(Math.random() * 2) + 1;
-                      } else if (rng <= 80) totalMcoinWon += 3;
-                      else if (rng <= 95) totalMcoinWon += 7;
+                      } else if (rng <= 80) totalMcoinWon += 2;
+                      else if (rng <= 95) totalMcoinWon += 4;
                       else { jokersWon.push('ps4'); sessionRolled = true; }
                   } else if (boxType === 'mega') {
                       if (rng <= 60) {
                           let dev = Math.random() < 0.5 ? 'pc' : 'ps5';
                           shardsWon[dev] += Math.floor(Math.random() * 2) + 2;
-                      } else if (rng <= 80) totalMcoinWon += 5;
-                      else if (rng <= 95) totalMcoinWon += 12;
+                      } else if (rng <= 80) totalMcoinWon += 3;
+                      else if (rng <= 95) totalMcoinWon += 6;
                       else { jokersWon.push(Math.random() < 0.5 ? 'ps5' : 'pc'); sessionRolled = true; }
                   } else if (boxType === 'elit') {
                       if (rng <= 60) {
                           let dev = Math.random() < 0.5 ? 'ps5' : 'vr';
                           shardsWon[dev] += Math.floor(Math.random() * 2) + 2;
-                      } else if (rng <= 80) totalMcoinWon += 7;
-                      else if (rng <= 95) totalMcoinWon += 18;
+                      } else if (rng <= 80) totalMcoinWon += 5;
+                      else if (rng <= 95) totalMcoinWon += 9;
                       else { jokersWon.push('vr'); sessionRolled = true; }
                   }
               }
