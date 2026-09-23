@@ -433,42 +433,48 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
 
   useEffect(() => {
       if (!appData) return;
-      const dayIndex = new Date().getDay(); // 0:Pazar, 6:Cmt
-      const hour = new Date().getHours();
+      // Haftalık sıfırlama sınırı: en son geçilmiş Cumartesi saat 16:00.
+      // Bu, uygulama hangi gün/saatte açılırsa açılsın doğru hesaplanır;
+      // böylece tam o Cumartesi penceresinde kimse ekranı açık tutmasa bile,
+      // sonraki ilk açılışta gecikmiş sıfırlama yakalanır.
+      const now = new Date();
+      const boundary = new Date(now);
+      const daysSinceSat = (now.getDay() + 1) % 7; // Cmt:0, Paz:1, Pzt:2, ...
+      boundary.setDate(now.getDate() - daysSinceSat);
+      boundary.setHours(16, 0, 0, 0);
+      if (boundary.getTime() > now.getTime()) boundary.setDate(boundary.getDate() - 7);
+      const boundaryStr = boundary.toDateString();
 
-      if (dayIndex === 6 && hour >= 16) {
-          const todayStr = new Date().toDateString();
-          if (appData?.settings?.last_gameroom_reset !== todayStr) {
-              const newAppointments = {};
-              
-              // 1. Oynanmamış tüm turnuva maçlarını bul ve seanslara yerleştir (2. Hafta, 3. Hafta vb.)
-              Object.keys(appData?.tournaments || {}).forEach(tId => {
-                  const t = appData.tournaments[tId];
-                  if (t.status === 'active' && t.fixture) {
-                      Object.values(t.fixture).forEach(m => {
-                          if (!m.played && m.day && m.slotId) {
-                              if (!newAppointments[t.device]) newAppointments[t.device] = {};
-                              if (!newAppointments[t.device][m.day]) newAppointments[t.device][m.day] = {};
-                              newAppointments[t.device][m.day][m.slotId] = `🏆 TURNUVA: ${t.name}`;
-                          }
-                      });
-                  }
-              });
+      if (appData?.settings?.last_gameroom_reset !== boundaryStr) {
+          const newAppointments = {};
 
-              const updates = {};
-              updates['settings/last_gameroom_reset'] = todayStr;
-              updates['game_room_appointments'] = Object.keys(newAppointments).length > 0 ? newAppointments : null;
-              
-              db.ref('mavikent_premium').update(updates).then(() => {
-                  db.ref('mavikent_premium/global_chat').push({ 
-                      s: 'SİSTEM', 
-                      t: `📢 Oyun Odası randevuları sıfırlandı! (Sıradaki lig maçları seanslara otomatik kilitlendi). Yeni hafta rezervasyonları açılmıştır.`, 
-                      ts: Date.now(), 
-                      type: 'system', 
-                      date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) 
+          // 1. Oynanmamış tüm turnuva maçlarını bul ve seanslara yerleştir (2. Hafta, 3. Hafta vb.)
+          Object.keys(appData?.tournaments || {}).forEach(tId => {
+              const t = appData.tournaments[tId];
+              if (t.status === 'active' && t.fixture) {
+                  Object.values(t.fixture).forEach(m => {
+                      if (!m.played && m.day && m.slotId) {
+                          if (!newAppointments[t.device]) newAppointments[t.device] = {};
+                          if (!newAppointments[t.device][m.day]) newAppointments[t.device][m.day] = {};
+                          newAppointments[t.device][m.day][m.slotId] = `🏆 TURNUVA: ${t.name}`;
+                      }
                   });
+              }
+          });
+
+          const updates = {};
+          updates['settings/last_gameroom_reset'] = boundaryStr;
+          updates['game_room_appointments'] = Object.keys(newAppointments).length > 0 ? newAppointments : null;
+
+          db.ref('mavikent_premium').update(updates).then(() => {
+              db.ref('mavikent_premium/global_chat').push({
+                  s: 'SİSTEM',
+                  t: `📢 Oyun Odası randevuları sıfırlandı! (Sıradaki lig maçları seanslara otomatik kilitlendi). Yeni hafta rezervasyonları açılmıştır.`,
+                  ts: Date.now(),
+                  type: 'system',
+                  date: new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'})
               });
-          }
+          });
       }
   }, [appData]);
 

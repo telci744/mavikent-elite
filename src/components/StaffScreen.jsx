@@ -364,7 +364,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
     if (!selectedStudent) return;
     
     const todayStr = new Date().toDateString();
-    const okulDateStr = new Date().getHours() < 15 ? new Date(Date.now() - 86400000).toDateString() : new Date().toDateString();
+    const okulDateStr = new Date().getHours() < 9 ? new Date(Date.now() - 86400000).toDateString() : new Date().toDateString();
     if (appData?.daily_status?.[okulDateStr]?.[selectedStudent] === 'a' && type !== 'okul' && type !== 'yoklama') {
         return toast(`⚠️ ${selectedStudent} adlı öğrenci bugün kurumda değil (İzinli/Gelmedi). Puan işlemi yapılamaz.`);
     }
@@ -665,7 +665,7 @@ const StaffScreen = ({ appData, goBackToRoles }) => {
 
   const renderStudentGrid = (students, type) => {
     const todayStr = new Date().toDateString();
-    const okulDateStr = new Date().getHours() < 15 ? new Date(Date.now() - 86400000).toDateString() : new Date().toDateString();
+    const okulDateStr = new Date().getHours() < 9 ? new Date(Date.now() - 86400000).toDateString() : new Date().toDateString();
     
     if (currentModule === 'devamsizlik') {
         return (
