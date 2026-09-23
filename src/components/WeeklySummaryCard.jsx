@@ -80,22 +80,6 @@ const computeStats = (studentName, appData, start, end) => {
   // Yazılı sınav
   const yaziliData = appData?.exams?.[studentName]?.yazili || null;
 
-  // Quiz
-  const quizResults = appData?.quiz_results?.[studentName] || {};
-  const weekQuiz = Object.values(quizResults).filter(r => {
-    if (r?.disqualified || !r?.completed_at) return false;
-    try {
-      const [datePart] = r.completed_at.split(' ');
-      const [d, mo, y] = datePart.split('.');
-      const dt = new Date(parseInt(y), parseInt(mo) - 1, parseInt(d));
-      return dt.getTime() >= start && dt.getTime() <= end;
-    } catch { return false; }
-  });
-  const completedSets = weekQuiz.length;
-  const totalCorrect = weekQuiz.reduce((s, r) => s + (r.score || 0), 0);
-  const totalQ = weekQuiz.reduce((s, r) => s + (r.total || 0), 0);
-  const avgPct = totalQ > 0 ? Math.round((totalCorrect / totalQ) * 100) : 0;
-
   const studentClass = appData?.student_classes?.[studentName] || '';
   const studentLevel = appData?.student_levels?.[studentName] || '';
 
@@ -105,7 +89,6 @@ const computeStats = (studentName, appData, start, end) => {
     okulDondu, okulGelmedi, totalAbsences,
     hygieneAvg, hygieneCount: myHygieneLogs.length,
     yaziliData,
-    completedSets, avgPct, totalCorrect, totalQ,
     studentClass, studentLevel,
   };
 };
@@ -139,7 +122,6 @@ const WeeklySummaryCard = ({ studentName, appData, compact = false }) => {
   const weekLabel = parseWeekLabel(start, end);
   const stats = computeStats(studentName, appData, start, end);
 
-  const quizBarColor = stats.avgPct >= 80 ? '#10b981' : stats.avgPct >= 60 ? '#3b82f6' : stats.avgPct >= 40 ? '#f59e0b' : '#ef4444';
   const namazPct = stats.namazToplam > 0 ? Math.round((stats.namazGeldi / stats.namazToplam) * 100) : 0;
   const namazBarColor = namazPct >= 80 ? '#10b981' : namazPct >= 60 ? '#3b82f6' : namazPct >= 40 ? '#f59e0b' : '#ef4444';
 
@@ -228,25 +210,6 @@ const WeeklySummaryCard = ({ studentName, appData, compact = false }) => {
             <MiniCell label="BU HAFTA YOK" value={`${stats.okulGelmedi} gün`} valueColor={stats.okulGelmedi > 0 ? '#ef4444' : '#94a3b8'} />
             <MiniCell label="TOPLAM İZİN" value={stats.totalAbsences} valueColor={stats.totalAbsences > 5 ? '#ef4444' : '#64748b'} />
           </div>
-        </div>
-
-        {/* Quiz */}
-        <div style={{ background: '#eff6ff', borderRadius: '14px', padding: '13px', marginBottom: '10px' }}>
-          <SectionTitle icon="📚" title="AKADEMİ QUIZ" color="#2563eb" />
-          {stats.completedSets === 0 ? (
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8' }}>Bu hafta quiz çözülmedi</div>
-          ) : (
-            <>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                <MiniCell label="BÖLÜM" value={stats.completedSets} valueColor="#2563eb" />
-                <MiniCell label="DOĞRU" value={`${stats.totalCorrect}/${stats.totalQ}`} valueColor="#0f172a" />
-                <MiniCell label="BAŞARI" value={`%${stats.avgPct}`} valueColor={quizBarColor} />
-              </div>
-              <div style={{ background: '#dbeafe', borderRadius: '6px', height: '5px', overflow: 'hidden' }}>
-                <div style={{ background: quizBarColor, height: '100%', width: `${stats.avgPct}%`, borderRadius: '6px' }} />
-              </div>
-            </>
-          )}
         </div>
 
         {/* Hijyen Denetim */}

@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
-import QuizStudent from './QuizStudent';
-import BilgiKulesi from './BilgiKulesi';
-import KelimeAvi from './KelimeAvi';
 import WeeklySummaryCard from './WeeklySummaryCard';
 import { playClick, playCoin, playBooking, playCancel } from '../sounds';
 import { toast } from '../toast';
 import { burst } from '../confetti';
+import { TEMIZLIK_FLOORS, RUTIN_AREAS, RUTIN_GROUPS, AREA_TYPE_STYLES } from '../hygieneConfig';
 
 const BADGES = {
   soru_1: { id: 'soru_1', icon: '🥉', name: 'Soru Çırağı', desc: '500 soru çöz.', req: 500, rew: 50, type: 'soru' },
@@ -68,13 +66,6 @@ const SHARD_TYPES = [
     { id: 'ps5', name: 'PS5', icon: '🕹️', color: '#8b5cf6', bg: '#f5f3ff' },
     { id: 'vr', name: 'VR', icon: '🥽', color: '#f59e0b', bg: '#fffbeb' }
 ];
-
-const FLOOR_AREA_TYPES = {
-    wc:        { icon: '🚽', label: 'WC / Tuvalet',   color: '#0ea5e9', bg: '#f0f9ff' },
-    etut:      { icon: '📚', label: 'Etüt Salonu',    color: '#8b5cf6', bg: '#faf5ff' },
-    yatakhane: { icon: '🛏️', label: 'Yatakhane',      color: '#10b981', bg: '#f0fdf4' },
-    genel:     { icon: '🧹', label: 'Genel Temizlik', color: '#f59e0b', bg: '#fffbeb' },
-};
 
 const DEFAULT_GAME_SLOTS = {
     'ps4': [
@@ -256,10 +247,6 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   const [unlockedQueue, setUnlockedQueue] = useState([]);
   const [viewProfile, setViewProfile] = useState(null);
   
-  const [showCreateClan, setShowCreateClan] = useState(false);
-  const [newClan, setNewClan] = useState({ name: '', tag: '', icon: '🛡️', desc: '' });
-  const [inviteUser, setInviteUser] = useState('');
-  
   const [chatInput, setChatInput] = useState('');
   const [lastMsgTime, setLastMsgTime] = useState(0);
   const chatContainerRef = useRef(null);
@@ -275,7 +262,6 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   const [gameDay, setGameDay] = useState(DAYS[currentDayIndex]);
   const [gameDevice, setGameDevice] = useState('ps4');
   
-  const [akademiView, setAkademiView] = useState('menu');
   const [activeTourneyTab, setActiveTourneyTab] = useState({});
   const [activeWeekTab, setActiveWeekTab] = useState({});
   const [expandedTourney, setExpandedTourney] = useState(null);
@@ -399,17 +385,6 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
           return { n: String(n), val }; 
       }).sort((a,b) => b.val - a.val); 
   };
-
-  let myClanId = null; let myClan = {};
-  Object.keys(appData?.clans || {}).forEach(k => { 
-      if ((appData?.clans?.[k]?.members || []).includes(safeName)) { myClanId = k; myClan = appData.clans[k] || {}; } 
-  });
-
-  const clanScores = Object.keys(appData?.clans || {}).map(cId => {
-      const clan = appData.clans[cId] || {}; let warScore = 0; let totalRp = 0;
-      (clan.members || []).forEach(m => { const rp = Number(appData?.season_score?.[m] || 0); totalRp += rp; if (appData?.clan_war_participants?.[m]) warScore += rp; });
-      return { id: cId, ...clan, warScore, totalRp };
-  }).sort((a,b) => b.warScore - a.warScore || b.totalRp - a.totalRp);
 
   useEffect(() => { if (activeTab === 'chat' && chatContainerRef.current) { chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; } }, [activeTab, appData?.global_chat]);
 
@@ -755,7 +730,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   const firstName = safeName || 'Öğrenci';
   const xpDetail = getDetailedLevelInfo(appData?.xp?.[safeName]);
   const mCoin = Number(appData?.wallet?.[safeName] || 0);
-  const isCritical = mCoin < 50;
+  const isCritical = mCoin <= 0;
   const myRp = Number(appData?.season_score?.[safeName] || 0);
   const myBadge = getRankBadge(myRp);
   const isEliteStud = appData?.student_tiers?.[safeName] === 'elite';
@@ -794,24 +769,6 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
   const myWealthRank = wealthSorted.findIndex(s => s.n === safeName) + 1 || '-';
   const myXpRank = xpSorted.findIndex(s => s.n === safeName) + 1 || '-';
 
-  const quizResults = appData?.quiz_results || {};
-  const akademiSorted = roster.map(n => {
-    const studentResults = quizResults[n] || {};
-    let totalScore = 0, totalQuestions = 0, totalCoins = 0, setCount = 0;
-    Object.values(studentResults).forEach(r => {
-      if (r?.disqualified) return;
-      if (typeof r?.score === 'number' && typeof r?.total === 'number' && r.total > 0) {
-        totalScore += r.score;
-        totalQuestions += r.total;
-        totalCoins += Number(r.earned_coins || 0);
-        setCount++;
-      }
-    });
-    const avgPct = setCount > 0 ? Math.round((totalScore / totalQuestions) * 100) : 0;
-    return { n: String(n), avgPct, totalCoins, setCount };
-  }).filter(s => s.setCount > 0).sort((a, b) => b.avgPct - a.avgPct || b.totalCoins - a.totalCoins);
-
-  const myAkademiRank = akademiSorted.findIndex(s => s.n === safeName) + 1 || '-';
 
   // --- ZIRHLANMIŞ HESAPLAMALAR ---
   let totalExpected = 0;
@@ -909,7 +866,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
       let baseP = Number(pData.p || 0) + (myInflation * 5); 
       let finalPrice = Math.ceil(baseP * (1 - currentActiveDiscountPercent / 100));
 
-      if (mCoin < finalPrice) return toast("❌ Bakiyen yetersiz!");
+      if (mCoin < finalPrice && !pData.allowDebt) return toast("❌ Bakiyen yetersiz!");
 
       const updates = {};
 
@@ -1126,72 +1083,6 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
       }
   };
 
-  const leaveClan = () => {
-    if (!myClanId) return;
-    if (window.confirm('Klandan ayrılmak istediğine emin misin? Savaş puanların silinecek.')) {
-      const updates = {};
-      const clanMembers = appData.clans[myClanId].members || [];
-      const newMembers = clanMembers.filter(m => m !== safeName);
-      
-      if (newMembers.length === 0) {
-        updates[`clans/${myClanId}`] = null;
-      } else {
-        updates[`clans/${myClanId}/members`] = newMembers;
-        if (appData.clans[myClanId].leader === safeName) {
-          updates[`clans/${myClanId}/leader`] = newMembers[0];
-        }
-      }
-      updates[`clan_war_participants/${safeName}`] = null;
-      db.ref('mavikent_premium').update(updates);
-    }
-  };
-
-  const acceptInvite = (clanId) => {
-    if (myClanId) return toast('Zaten bir klandasın! Önce mevcut klandan ayrılmalısın.');
-    const clanToJoin = appData.clans[clanId];
-    if (!clanToJoin) return toast('Klan bulunamadı.');
-    if ((clanToJoin.members || []).length >= 3) return toast('Bu klan tamamen dolu (3/3).');
-    
-    const updates = {};
-    updates[`clans/${clanId}/members`] = [...(clanToJoin.members || []), safeName];
-    updates[`clan_invites/${safeName}`] = null;
-    db.ref('mavikent_premium').update(updates);
-    toast(`${clanToJoin.name} klanına katıldın!`);
-  };
-
-  const rejectInvite = (clanId) => {
-    db.ref(`mavikent_premium/clan_invites/${safeName}/${clanId}`).remove();
-  };
-
-  const joinWar = () => {
-    if (!myClanId) return toast('Savaşa katılmak için bir klanda olmalısın!');
-    if ((myClan?.members || []).length < 3) return toast('Klan savaşına katılmak için klanın tam kapasite (3 kişi) olmalıdır!');
-    if (mCoin < 10) return toast('Savaşa giriş ücreti için 10 M-Coin gerekiyor.');
-    
-    if (window.confirm('Klan savaşına 10 M-Coin karşılığında katılmak istiyor musun? Bu andan itibaren kazanacağın tüm RP puanları klan savaş hanesine de yazılacak!')) {
-      const updates = {};
-      updates[`wallet/${safeName}`] = mCoin - 10;
-      updates[`transactions/${safeName}/txn_war_${Date.now()}`] = { desc: `Klan Savaşı Giriş Ücreti`, amt: -10, date: new Date().toLocaleString('tr-TR') };
-      updates[`clan_war_participants/${safeName}`] = true;
-      db.ref('mavikent_premium').update(updates);
-      toast('Savaşa katıldın! Artık kastığın her RP klanı şampiyonluğa taşıyacak.');
-    }
-  };
-
-  const handleInviteUser = () => {
-    if (!inviteUser.trim()) return;
-    if ((myClan?.members || []).length >= 3) return toast('Klanın tamamen dolu (3/3)!');
-    if (!roster.includes(inviteUser.trim())) return toast('Böyle bir öğrenci bulunamadı.');
-    if ((myClan?.members || []).includes(inviteUser.trim())) return toast('Bu oyuncu zaten klanınızda.');
-    
-    db.ref(`mavikent_premium/clan_invites/${inviteUser.trim()}/${myClanId}`).set({
-      clanName: myClan.name,
-      icon: myClan.icon
-    });
-    toast(`${inviteUser} oyuncusuna davet gönderildi!`);
-    setInviteUser('');
-  };
-
 
   const isHygieneInspector = Object.keys(appData?.hygiene_inspectors?.[safeName] || {}).length > 0;
 
@@ -1203,30 +1094,30 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
       return -60;
   };
 
-  const saveStuFloorInspection = async (section, floorKey, areaId) => {
-      const area = appData?.hygiene_floors?.[section]?.[floorKey]?.areas?.[areaId];
+  const saveStuFloorInspection = async (floorKey, areaId) => {
+      const area = appData?.hygiene_floors?.temizlik?.[floorKey]?.areas?.[areaId];
       if (!area) return toast('Alan bulunamadı!');
       const responsibles = area.responsibles || [];
       if (responsibles.length === 0) return toast('Bu alanda sorumlu öğrenci yok!');
       const todayMidnight = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
       const alreadyDone = Object.values(appData?.hygiene_logs || {}).some(
-          l => l.areaName === area.name && l.section === section && l.floor === floorKey && l.timestamp >= todayMidnight
+          l => l.areaName === area.name && l.section === 'temizlik' && l.floor === floorKey && l.timestamp >= todayMidnight
       );
       if (alreadyDone) return toast(`⚠️ ${area.name} bugün zaten denetlendi.`);
       setIsHygSaving(true);
       const coinImpact = getCoinImpact(stuHygScore);
       const updates = {};
       const logId = `floor_${Date.now()}`;
-      const sectionLabel = section === 'rutin' ? 'Rutin' : 'Temizlik';
       updates[`hygiene_logs/${logId}`] = {
-          areaName: area.name, score: stuHygScore,
+          areaId, areaName: area.name, score: stuHygScore,
           responsibles, timestamp: Date.now(), inspector: safeName,
-          coinImpact, type: area.type, floor: floorKey, section,
+          coinImpact, type: area.type, floor: floorKey, section: 'temizlik',
       };
       responsibles.forEach(name => {
-          updates[`wallet/${name}`] = (Number(appData?.wallet?.[name]) || 0) + coinImpact;
+          const newBal = Math.max(0, (Number(appData?.wallet?.[name]) || 0) + coinImpact);
+          updates[`wallet/${name}`] = newBal;
           updates[`transactions/${name}/txn_${logId}`] = {
-              desc: `${area.name} ${sectionLabel} Denetimi (${safeName})`, amt: coinImpact,
+              desc: `${area.name} Temizlik Denetimi (${safeName})`, amt: coinImpact,
               date: new Date().toLocaleString('tr-TR'),
           };
       });
@@ -1237,13 +1128,52 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
       } catch(e) { toast('Hata!'); } finally { setIsHygSaving(false); }
   };
 
+  const saveStuRutinAreaInspection = async (areaKey) => {
+      const area = appData?.hygiene_rutin_areas?.[areaKey];
+      if (!area) return toast('Alan bulunamadı!');
+      const areaMeta = RUTIN_AREAS.find(r => r.key === areaKey);
+      const areaName = area.name || areaMeta?.name || areaKey;
+      const areaType = area.type || areaMeta?.type || 'genel';
+      const responsibles = area.responsibles || [];
+      if (responsibles.length === 0) return toast('Bu alanda sorumlu öğrenci yok!');
+      const todayMidnight = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+      const alreadyDone = Object.values(appData?.hygiene_logs || {}).some(
+          l => l.section === 'rutin' && l.rutinAreaKey === areaKey && l.timestamp >= todayMidnight
+      );
+      if (alreadyDone) return toast(`⚠️ ${areaName} bugün zaten denetlendi.`);
+      setIsHygSaving(true);
+      const coinImpact = getCoinImpact(stuHygScore);
+      const updates = {};
+      const logId = `rutin_${Date.now()}`;
+      updates[`hygiene_logs/${logId}`] = {
+          areaName, score: stuHygScore,
+          responsibles, timestamp: Date.now(), inspector: safeName,
+          coinImpact, type: areaType, floor: null, section: 'rutin', rutinAreaKey: areaKey,
+      };
+      responsibles.forEach(name => {
+          const newBal = Math.max(0, (Number(appData?.wallet?.[name]) || 0) + coinImpact);
+          updates[`wallet/${name}`] = newBal;
+          updates[`transactions/${name}/txn_${logId}`] = {
+              desc: `${areaName} Rutin Denetimi (${safeName})`, amt: coinImpact,
+              date: new Date().toLocaleString('tr-TR'),
+          };
+      });
+      try {
+          await db.ref('mavikent_premium').update(updates);
+          toast(`✅ ${areaName} denetimi kaydedildi!`);
+          setStuHygScore(5);
+      } catch(e) { toast('Hata!'); } finally { setIsHygSaving(false); }
+  };
+
   let myResponsibilities = [];
-  if (appData?.hygiene_assignments?.[safeName]) myResponsibilities.push(`🧹 ${appData.hygiene_assignments[safeName]}`);
-  Object.entries(appData?.room_areas || {}).forEach(([k, v]) => {
-      if ((v.responsibles || []).includes(safeName)) myResponsibilities.push(`🛏️ ${v.name}`);
+  TEMIZLIK_FLOORS.forEach(f => {
+      Object.values(appData?.hygiene_floors?.temizlik?.[f.key]?.areas || {}).forEach(a => {
+          if ((a.responsibles || []).includes(safeName)) myResponsibilities.push(`🧹 ${a.name} (${f.label})`);
+      });
   });
-  Object.entries(appData?.hygiene_areas || {}).forEach(([k, v]) => {
-      if ((v.responsibles || []).includes(safeName)) myResponsibilities.push(`🚽 ${v.name}`);
+  RUTIN_AREAS.forEach(ra => {
+      const a = appData?.hygiene_rutin_areas?.[ra.key];
+      if ((a?.responsibles || []).includes(safeName)) myResponsibilities.push(`${AREA_TYPE_STYLES[ra.type]?.icon || '🛏️'} ${ra.name}`);
   });
 
   const getNavStyle = (tab) => ({ flex: 1, border: 'none', background: activeTab === tab ? '#ffffff' : 'transparent', color: activeTab === tab ? '#0f172a' : '#64748b', fontWeight: activeTab === tab ? 900 : 700, cursor: 'pointer', padding: '14px 0', borderRadius: '50px', fontSize: '11px', outline: 'none', boxShadow: activeTab === tab ? '0 10px 20px -5px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.3s', whiteSpace: 'nowrap' });
@@ -1830,91 +1760,11 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '55vh', textAlign: 'center', padding: '40px 20px' }}>
                   <div style={{ fontSize: '72px', marginBottom: '16px' }}>🔒</div>
                   <div style={{ fontWeight: 900, fontSize: '24px', color: '#dc2626', marginBottom: '8px' }}>Erişim Kısıtlandı</div>
-                  <div style={{ fontSize: '15px', color: '#64748b', fontWeight: 700, marginBottom: '20px' }}>Bakiyen 50 M-Coin altında.</div>
-                  <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '16px 28px', border: '1px solid #fca5a5', marginBottom: '24px' }}>
+                  <div style={{ fontSize: '15px', color: '#64748b', fontWeight: 700, marginBottom: '20px' }}>Bakiyen 0 M-Coin. M-Coin kazanınca erişim otomatik açılır.</div>
+                  <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '16px 28px', border: '1px solid #fca5a5' }}>
                     <div style={{ fontWeight: 900, color: '#b91c1c', fontSize: '22px' }}>{mCoin} M</div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>Min. 50 M-Coin gerekli</div>
+                    <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>Bakiyen 0'ın üzerine çıkınca kilit açılır</div>
                   </div>
-                  {(() => {
-                    const myMission = appData?.kurtarma_gorevleri?.[safeName];
-                    const claimMission = async () => {
-                      const myM = appData?.kurtarma_gorevleri?.[safeName];
-                      if (myM?.status === 'reddedildi' && myM.rejected_at && Date.now() - myM.rejected_at < 12*60*60*1000) { toast('12 saat beklemelisin.'); return; }
-                      const starReward = { 1: 80, 2: 60, 3: 40, 4: 20 };
-                      const todayStart = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
-                      const failedAreas = Object.values(appData?.hygiene_logs || {})
-                        .filter(l => l.timestamp >= todayStart && l.score < 5 && (l.responsibles || []).includes(safeName))
-                        .map(l => ({ name: l.areaName, type: l.type || 'genel', score: l.score, reward: starReward[l.score] || 20 }));
-                      let missionAreas = failedAreas;
-                      let totalReward = missionAreas.reduce((s, a) => s + a.reward, 0);
-                      if (missionAreas.length === 0) {
-                        const floors = appData?.hygiene_floors || {};
-                        const responsible = [];
-                        ['rutin','temizlik'].forEach(sec => {
-                          ['kat2','kat3','kat4'].forEach(fl => {
-                            Object.entries(floors[sec]?.[fl]?.areas || {}).forEach(([,a]) => {
-                              if ((a.responsibles || []).includes(safeName)) responsible.push({ name: a.name, type: a.type || 'genel', reward: 40 });
-                            });
-                          });
-                        });
-                        missionAreas = responsible.slice(0, 1);
-                        totalReward = 40;
-                      }
-                      if (missionAreas.length === 0) { toast('Henüz sorumlu alanın yok. Yöneticine başvur.'); return; }
-                      await db.ref(`mavikent_premium/kurtarma_gorevleri/${safeName}`).set({ status: 'bekliyor', assigned_at: Date.now(), reward_coins: totalReward, areas: missionAreas });
-                      toast('Kurtarma görevi alındı! Tamamlayınca onay iste.');
-                    };
-                    const completeMission = async () => {
-                      await db.ref(`mavikent_premium/kurtarma_gorevleri/${safeName}`).update({ status: 'talep_edildi', claimed_at: Date.now() });
-                      toast('Onay isteğin gönderildi!');
-                    };
-                    // Red sonrası 12 saat bekleme
-                    if (myMission?.status === 'reddedildi') {
-                      const remaining = myMission.rejected_at ? Math.max(0, 12*60*60*1000 - (Date.now() - myMission.rejected_at)) : 0;
-                      const hrs = Math.floor(remaining / 3600000);
-                      const mins = Math.floor((remaining % 3600000) / 60000);
-                      if (remaining > 0) return (
-                        <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '20px 24px', border: '1px solid #fca5a5', textAlign: 'center', maxWidth: '280px' }}>
-                          <div style={{ fontSize: '28px', marginBottom: '8px' }}>❌</div>
-                          <div style={{ fontWeight: 900, fontSize: '14px', color: '#dc2626', marginBottom: '6px' }}>Görev Reddedildi</div>
-                          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700, marginBottom: '10px' }}>Tekrar almak için bekle</div>
-                          <div style={{ background: 'white', borderRadius: '12px', padding: '10px 16px', border: '1px solid #fca5a5' }}>
-                            <div style={{ fontWeight: 900, fontSize: '20px', color: '#dc2626' }}>{hrs}s {mins}dk</div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>kalan süre</div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    if (!myMission || myMission.status === 'tamamlandi' || (myMission.status === 'reddedildi' && myMission.rejected_at && Date.now() - myMission.rejected_at >= 12*60*60*1000)) return (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 700 }}>Kurtarma görevi ile kilit açabilirsin</div>
-                        <button onClick={claimMission} style={{ background: 'linear-gradient(135deg,#0ea5e9,#0284c7)', color: 'white', border: 'none', padding: '14px 32px', borderRadius: '18px', fontWeight: 900, fontSize: '15px', cursor: 'pointer', boxShadow: '0 6px 20px rgba(14,165,233,0.4)' }}>🚀 Kurtarma Görevi Al</button>
-                      </div>
-                    );
-                    if (myMission.status === 'bekliyor') return (
-                      <div style={{ background: '#fff7ed', borderRadius: '20px', padding: '20px 24px', border: '1px solid #fed7aa', maxWidth: '300px', textAlign: 'left' }}>
-                        <div style={{ fontWeight: 900, fontSize: '14px', color: '#c2410c', marginBottom: '10px' }}>🎯 Aktif Görevin</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
-                          {(myMission.areas || []).map((a, i) => (
-                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', borderRadius: '10px', padding: '8px 12px' }}>
-                              <span style={{ fontSize: '13px', fontWeight: 800, color: '#c2410c' }}>{a.name}</span>
-                              <span style={{ fontSize: '12px', fontWeight: 900, color: '#10b981' }}>+{a.reward || myMission.reward_coins} M</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div style={{ fontSize: '13px', color: '#c2410c', fontWeight: 900, marginBottom: '14px', textAlign: 'right' }}>Toplam: +{myMission.reward_coins} M-Coin</div>
-                        <button onClick={completeMission} style={{ background: '#10b981', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '14px', fontWeight: 900, fontSize: '14px', cursor: 'pointer', width: '100%', boxShadow: '0 4px 14px rgba(16,185,129,0.35)' }}>✅ Tamamladım, Onay İste</button>
-                      </div>
-                    );
-                    if (myMission.status === 'talep_edildi') return (
-                      <div style={{ background: '#f0fdf4', borderRadius: '20px', padding: '18px 24px', border: '1px solid #a7f3d0', textAlign: 'center' }}>
-                        <div style={{ fontSize: '22px', marginBottom: '6px' }}>⏳</div>
-                        <div style={{ fontWeight: 900, fontSize: '14px', color: '#059669' }}>Onay Bekleniyor</div>
-                        <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>Yönetici onayladığında bakiyen yüklenir</div>
-                      </div>
-                    );
-                    return null;
-                  })()}
                 </div>
               ) : (<>
                {/* 🏆 AKTİF TURNUVALAR EKRANI */}
@@ -2583,94 +2433,28 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
           {activeTab === 'market' && (
             <div className="fade-in">
               {isCritical ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '55vh', textAlign: 'center', padding: '40px 20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '40vh', textAlign: 'center', padding: '40px 20px' }}>
                   <div style={{ fontSize: '72px', marginBottom: '16px' }}>🔒</div>
                   <div style={{ fontWeight: 900, fontSize: '24px', color: '#dc2626', marginBottom: '8px' }}>Market Kilitli</div>
-                  <div style={{ fontSize: '15px', color: '#64748b', fontWeight: 700, marginBottom: '20px' }}>Bakiyen 50 M-Coin altında.</div>
-                  <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '16px 28px', border: '1px solid #fca5a5', marginBottom: '24px' }}>
+                  <div style={{ fontSize: '15px', color: '#64748b', fontWeight: 700, marginBottom: '20px' }}>Bakiyen 0 M-Coin. M-Coin kazanınca erişim otomatik açılır.</div>
+                  <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '16px 28px', border: '1px solid #fca5a5' }}>
                     <div style={{ fontWeight: 900, color: '#b91c1c', fontSize: '22px' }}>{mCoin} M</div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>Min. 50 M-Coin gerekli</div>
+                    <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>Bakiyen 0'ın üzerine çıkınca kilit açılır</div>
                   </div>
-                  {(() => {
-                    const myMission = appData?.kurtarma_gorevleri?.[safeName];
-                    const claimMission = async () => {
-                      const myM = appData?.kurtarma_gorevleri?.[safeName];
-                      if (myM?.status === 'reddedildi' && myM.rejected_at && Date.now() - myM.rejected_at < 12*60*60*1000) { toast('12 saat beklemelisin.'); return; }
-                      const starReward = { 1: 80, 2: 60, 3: 40, 4: 20 };
-                      const todayStart = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
-                      const failedAreas = Object.values(appData?.hygiene_logs || {})
-                        .filter(l => l.timestamp >= todayStart && l.score < 5 && (l.responsibles || []).includes(safeName))
-                        .map(l => ({ name: l.areaName, type: l.type || 'genel', score: l.score, reward: starReward[l.score] || 20 }));
-                      let missionAreas = failedAreas;
-                      let totalReward = missionAreas.reduce((s, a) => s + a.reward, 0);
-                      if (missionAreas.length === 0) {
-                        const floors = appData?.hygiene_floors || {};
-                        const responsible = [];
-                        ['rutin','temizlik'].forEach(sec => {
-                          ['kat2','kat3','kat4'].forEach(fl => {
-                            Object.entries(floors[sec]?.[fl]?.areas || {}).forEach(([,a]) => {
-                              if ((a.responsibles || []).includes(safeName)) responsible.push({ name: a.name, type: a.type || 'genel', reward: 40 });
-                            });
-                          });
-                        });
-                        missionAreas = responsible.slice(0, 1);
-                        totalReward = 40;
-                      }
-                      if (missionAreas.length === 0) { toast('Henüz sorumlu alanın yok. Yöneticine başvur.'); return; }
-                      await db.ref(`mavikent_premium/kurtarma_gorevleri/${safeName}`).set({ status: 'bekliyor', assigned_at: Date.now(), reward_coins: totalReward, areas: missionAreas });
-                      toast('Kurtarma görevi alındı! Tamamlayınca onay iste.');
-                    };
-                    const completeMission = async () => {
-                      await db.ref(`mavikent_premium/kurtarma_gorevleri/${safeName}`).update({ status: 'talep_edildi', claimed_at: Date.now() });
-                      toast('Onay isteğin gönderildi!');
-                    };
-                    // Red sonrası 12 saat bekleme
-                    if (myMission?.status === 'reddedildi') {
-                      const remaining = myMission.rejected_at ? Math.max(0, 12*60*60*1000 - (Date.now() - myMission.rejected_at)) : 0;
-                      const hrs = Math.floor(remaining / 3600000);
-                      const mins = Math.floor((remaining % 3600000) / 60000);
-                      if (remaining > 0) return (
-                        <div style={{ background: '#fef2f2', borderRadius: '20px', padding: '20px 24px', border: '1px solid #fca5a5', textAlign: 'center', maxWidth: '280px' }}>
-                          <div style={{ fontSize: '28px', marginBottom: '8px' }}>❌</div>
-                          <div style={{ fontWeight: 900, fontSize: '14px', color: '#dc2626', marginBottom: '6px' }}>Görev Reddedildi</div>
-                          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 700, marginBottom: '10px' }}>Tekrar almak için bekle</div>
-                          <div style={{ background: 'white', borderRadius: '12px', padding: '10px 16px', border: '1px solid #fca5a5' }}>
-                            <div style={{ fontWeight: 900, fontSize: '20px', color: '#dc2626' }}>{hrs}s {mins}dk</div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>kalan süre</div>
+                  {products.filter(p => p.allowDebt).length > 0 && (
+                    <div style={{ marginTop: '28px', width: '100%', maxWidth: '360px' }}>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800, marginBottom: '10px', textTransform: 'uppercase' }}>Kilitliyken de satın alınabilir</div>
+                      {products.filter(p => p.allowDebt).map(p => (
+                        <div key={p.key} onClick={() => handleBuy(p)} style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'white', border: '1.5px solid #e2e8f0', borderRadius: '18px', padding: '14px 16px', marginBottom: '10px', cursor: 'pointer', textAlign: 'left' }}>
+                          <span style={{ fontSize: '28px' }}>{p.i || '📦'}</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '14px' }}>{p.n}</div>
+                            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>{p.p} M-Coin · bakiye eksiye düşebilir</div>
                           </div>
                         </div>
-                      );
-                    }
-                    if (!myMission || myMission.status === 'tamamlandi' || (myMission.status === 'reddedildi' && myMission.rejected_at && Date.now() - myMission.rejected_at >= 12*60*60*1000)) return (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 700 }}>Kurtarma görevi ile kilit açabilirsin</div>
-                        <button onClick={claimMission} style={{ background: 'linear-gradient(135deg,#0ea5e9,#0284c7)', color: 'white', border: 'none', padding: '14px 32px', borderRadius: '18px', fontWeight: 900, fontSize: '15px', cursor: 'pointer', boxShadow: '0 6px 20px rgba(14,165,233,0.4)' }}>🚀 Kurtarma Görevi Al</button>
-                      </div>
-                    );
-                    if (myMission.status === 'bekliyor') return (
-                      <div style={{ background: '#fff7ed', borderRadius: '20px', padding: '20px 24px', border: '1px solid #fed7aa', maxWidth: '300px', textAlign: 'left' }}>
-                        <div style={{ fontWeight: 900, fontSize: '14px', color: '#c2410c', marginBottom: '10px' }}>🎯 Aktif Görevin</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
-                          {(myMission.areas || []).map((a, i) => (
-                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', borderRadius: '10px', padding: '8px 12px' }}>
-                              <span style={{ fontSize: '13px', fontWeight: 800, color: '#c2410c' }}>{a.name}</span>
-                              <span style={{ fontSize: '12px', fontWeight: 900, color: '#10b981' }}>+{a.reward || myMission.reward_coins} M</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div style={{ fontSize: '13px', color: '#c2410c', fontWeight: 900, marginBottom: '14px', textAlign: 'right' }}>Toplam: +{myMission.reward_coins} M-Coin</div>
-                        <button onClick={completeMission} style={{ background: '#10b981', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '14px', fontWeight: 900, fontSize: '14px', cursor: 'pointer', width: '100%', boxShadow: '0 4px 14px rgba(16,185,129,0.35)' }}>✅ Tamamladım, Onay İste</button>
-                      </div>
-                    );
-                    if (myMission.status === 'talep_edildi') return (
-                      <div style={{ background: '#f0fdf4', borderRadius: '20px', padding: '18px 24px', border: '1px solid #a7f3d0', textAlign: 'center' }}>
-                        <div style={{ fontSize: '22px', marginBottom: '6px' }}>⏳</div>
-                        <div style={{ fontWeight: 900, fontSize: '14px', color: '#059669' }}>Onay Bekleniyor</div>
-                        <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>Yönetici onayladığında bakiyen yüklenir</div>
-                      </div>
-                    );
-                    return null;
-                  })()}
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (<>
                <h2 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '10px', color: '#0f172a', letterSpacing: '-0.5px' }}>🛍️ Market Vitrini</h2>
@@ -2763,53 +2547,12 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
             </div>
           )}
 
-          {activeTab === 'akademi' && (
-            <div className="fade-in">
-              {!(appData?.settings?.quiz_enabled) && (
-                <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-                  <div style={{ fontSize: '64px', marginBottom: '16px' }}>🔒</div>
-                  <h2 style={{ fontWeight: 900, fontSize: '22px', color: '#0f172a', margin: '0 0 10px' }}>Quiz Bölümü Kapalı</h2>
-                  <p style={{ color: '#64748b', fontSize: '14px', fontWeight: 600, margin: 0 }}>
-                    Yönetici bu bölümü henüz açmadı.<br />Biraz bekle!
-                  </p>
-                </div>
-              )}
-              {!!(appData?.settings?.quiz_enabled) && akademiView === 'menu' && (
-                <div>
-                  <h2 style={{ fontSize: '26px', fontWeight: 900, marginBottom: '6px', color: '#0f172a' }}>📚 Akademi</h2>
-                  <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 24px', fontWeight: 600 }}>Öğren, yarış, kazan!</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    {[
-                      { key: 'quiz', icon: '📖', title: 'Quiz Bölümleri', desc: 'Soru çöz, M-Coin kazan', gradient: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', shadow: 'rgba(59,130,246,0.3)' },
-                      { key: 'kule', icon: '🏰', title: 'Bilgi Kulesi', desc: 'Her doğru cevap seni bir kat yukarı çıkarır!', gradient: 'linear-gradient(135deg, #f59e0b, #d97706)', shadow: 'rgba(245,158,11,0.3)' },
-                      { key: 'kelimeavi', icon: '🔍', title: 'Kelime Avı', desc: 'İngilizce kelimeleri ızgarada bul, zamana karşı yarış!', gradient: 'linear-gradient(135deg, #10b981, #059669)', shadow: 'rgba(16,185,129,0.3)' },
-                    ].map(item => (
-                      <button key={item.key} onClick={() => setAkademiView(item.key)}
-                        style={{ background: item.gradient, border: 'none', borderRadius: '22px', padding: '22px 20px', cursor: 'pointer', textAlign: 'left', boxShadow: `0 8px 24px ${item.shadow}`, transition: 'transform 0.15s', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <span style={{ fontSize: '40px' }}>{item.icon}</span>
-                        <div>
-                          <div style={{ fontWeight: 900, fontSize: '17px', color: 'white', marginBottom: '4px' }}>{item.title}</div>
-                          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>{item.desc}</div>
-                        </div>
-                        <span style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.7)', fontSize: '20px' }}>›</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {!!(appData?.settings?.quiz_enabled) && akademiView === 'quiz' && <QuizStudent studentName={safeName} appData={appData} onBack={() => setAkademiView('menu')} />}
-              {!!(appData?.settings?.quiz_enabled) && akademiView === 'kule' && <BilgiKulesi studentName={safeName} appData={appData} onBack={() => setAkademiView('menu')} />}
-              {!!(appData?.settings?.quiz_enabled) && akademiView === 'kelimeavi' && <KelimeAvi studentName={safeName} appData={appData} onBack={() => setAkademiView('menu')} />}
-            </div>
-          )}
-
           {activeTab === 'rank' && (
             <div className="fade-in">
               <h2 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '16px', color: '#0f172a', letterSpacing: '-0.5px' }}>🏆 Liderlik</h2>
 
               <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: '#f1f5f9', borderRadius: '18px', padding: '6px' }}>
                 <button onClick={() => setRankTab('coins')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '14px', fontWeight: 900, fontSize: '13px', cursor: 'pointer', background: rankTab === 'coins' ? 'white' : 'transparent', color: rankTab === 'coins' ? '#0f172a' : '#94a3b8', boxShadow: rankTab === 'coins' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.2s' }}>💰 M-Coin</button>
-                <button onClick={() => setRankTab('akademi')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '14px', fontWeight: 900, fontSize: '13px', cursor: 'pointer', background: rankTab === 'akademi' ? 'white' : 'transparent', color: rankTab === 'akademi' ? '#0f172a' : '#94a3b8', boxShadow: rankTab === 'akademi' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.2s' }}>🎓 Akademi</button>
               </div>
 
               {rankTab === 'coins' && (
@@ -2832,51 +2575,6 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                       </div>
                     );
                   })}
-                </div>
-              )}
-
-              {rankTab === 'akademi' && (
-                <div>
-                  {akademiSorted.length === 0 ? (
-                    <div style={{ background: 'white', borderRadius: '24px', padding: '50px 24px', textAlign: 'center', border: '1.5px dashed #cbd5e1' }}>
-                      <div style={{ fontSize: '40px', marginBottom: '12px' }}>📚</div>
-                      <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '16px', marginBottom: '6px' }}>Henüz sıralama yok</div>
-                      <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>Öğrenciler quiz çözdükçe sıralama oluşacak</div>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {akademiSorted.map((s, idx) => {
-                        const isMe = s.n === safeName;
-                        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null;
-                        const barColor = s.avgPct >= 80 ? '#10b981' : s.avgPct >= 60 ? '#3b82f6' : s.avgPct >= 40 ? '#f59e0b' : '#ef4444';
-                        return (
-                          <div key={s.n} onClick={() => setViewProfile(s.n)} style={{ background: 'white', borderRadius: '20px', padding: '16px 20px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: isMe ? '2px solid #6366f1' : '1.5px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.2s' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
-                              <div style={{ width: '32px', fontWeight: 900, color: idx < 3 ? '#0f172a' : '#94a3b8', fontSize: '18px', textAlign: 'center' }}>
-                                {medal || (idx + 1) + '.'}
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 900, fontSize: '15px', color: '#0f172a' }}>{s.n}</div>
-                                <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>{s.setCount} bölüm · +{s.totalCoins} M-Coin kazanıldı</div>
-                              </div>
-                              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                                <div style={{ fontWeight: 900, fontSize: '22px', color: barColor }}>%{s.avgPct}</div>
-                                <div style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8' }}>BAŞARI</div>
-                              </div>
-                            </div>
-                            <div style={{ background: '#f1f5f9', borderRadius: '8px', height: '6px', overflow: 'hidden' }}>
-                              <div style={{ background: barColor, height: '100%', width: s.avgPct + '%', borderRadius: '8px', transition: 'width 0.5s' }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {myAkademiRank && myAkademiRank !== '-' && (
-                    <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '13px', fontWeight: 700, color: '#6366f1' }}>
-                      Akademi sıralaman: #{myAkademiRank}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -2928,10 +2626,12 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                           </div>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
                               {[
-                                  ['rutin',    '🛏️', 'Rutin Kontrol',    'Yatak, dolap, oda düzeni', '#f59e0b', '#b45309', 'linear-gradient(135deg,#fef3c7,#fde68a)'],
-                                  ['temizlik', '🧹', 'Temizlik Kontrol', 'WC, etüt, koridorlar',     '#10b981', '#065f46', 'linear-gradient(135deg,#d1fae5,#a7f3d0)'],
+                                  ['temizlik', '🧹', 'Temizlik Kontrol', 'Kat 1-5 temizlik alanları', '#10b981', '#065f46', 'linear-gradient(135deg,#d1fae5,#a7f3d0)'],
+                                  ['rutin',    '🛏️', 'Rutin Kontrol',    'Etüt, yatakhane, WC',      '#0ea5e9', '#0369a1', 'linear-gradient(135deg,#e0f2fe,#bae6fd)'],
                               ].map(([key, icon, label, desc, color, dark, grad]) => {
-                                  const total = ['kat2','kat3','kat4'].reduce((n,fk) => n + Object.keys(appData?.hygiene_floors?.[key]?.[fk]?.areas || {}).length, 0);
+                                  const total = key === 'temizlik'
+                                      ? TEMIZLIK_FLOORS.reduce((n,f) => n + Object.keys(appData?.hygiene_floors?.temizlik?.[f.key]?.areas || {}).length, 0)
+                                      : RUTIN_AREAS.length;
                                   const today = todayAreaCount(key);
                                   const last  = lastLogTs(l => l.section === key);
                                   const pct   = total > 0 ? Math.min(100, Math.round(today / total * 100)) : 0;
@@ -2971,34 +2671,31 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                       </div>
                   )}
 
-                  {stuHygSection && !stuHygFloor && (
+                  {stuHygSection === 'temizlik' && !stuHygFloor && (
                       <div className="fade-in">
                           <div style={{ marginBottom: '20px' }}>
                               <div style={{ fontSize: '13px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                                  {stuHygSection === 'rutin' ? '🛏️ Rutin Kontrol' : '🧹 Temizlik Kontrol'} — Kat seç
+                                  🧹 Temizlik Kontrol — Kat seç
                               </div>
                           </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                              {[
-                                  ['kat2','Kat 2','2','#0ea5e9','#0369a1','linear-gradient(135deg,#e0f2fe,#bae6fd)'],
-                                  ['kat3','Kat 3','3','#8b5cf6','#6d28d9','linear-gradient(135deg,#ede9fe,#ddd6fe)'],
-                                  ['kat4','Kat 4','4','#10b981','#065f46','linear-gradient(135deg,#d1fae5,#a7f3d0)'],
-                              ].filter(([key]) => !!appData?.hygiene_inspectors?.[safeName]?.[key])
-                              .map(([key, label, num, color, dark, grad]) => {
-                                  const areaCount = Object.keys(appData?.hygiene_floors?.[stuHygSection]?.[key]?.areas || {}).length;
-                                  const last = lastLogTs(l => l.section === stuHygSection && l.floor === key);
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
+                              {TEMIZLIK_FLOORS.filter(f => !!appData?.hygiene_inspectors?.[safeName]?.[f.key]).map((floor, idx) => {
+                                  const colors = ['#0ea5e9','#8b5cf6','#10b981','#f59e0b','#ef4444'];
+                                  const color = colors[idx % colors.length];
+                                  const areaCount = Object.keys(appData?.hygiene_floors?.temizlik?.[floor.key]?.areas || {}).length;
+                                  const last = lastLogTs(l => l.section === 'temizlik' && l.floor === floor.key);
                                   return (
-                                      <div key={key} onClick={() => { setStuHygFloor(key); setStuHygAreaId(null); }} className="card-hover"
+                                      <div key={floor.key} onClick={() => { setStuHygFloor(floor.key); setStuHygAreaId(null); }} className="card-hover"
                                           style={{ background: 'white', borderRadius: '20px', overflow: 'hidden', cursor: 'pointer', boxShadow: '0 4px 20px rgba(15,23,42,0.06)', border: '1px solid #f1f5f9', transition: 'all 0.2s' }}>
-                                          <div style={{ background: grad, padding: '20px 20px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                          <div style={{ background: `${color}20`, padding: '20px 20px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                               <div>
-                                                  <div style={{ fontWeight: 900, fontSize: '36px', color: dark, lineHeight: 1 }}>{num}</div>
-                                                  <div style={{ fontWeight: 900, fontSize: '13px', color: dark, marginTop: '4px', opacity: 0.8 }}>{label}</div>
+                                                  <div style={{ fontWeight: 900, fontSize: '36px', color, lineHeight: 1 }}>{idx+1}</div>
+                                                  <div style={{ fontWeight: 900, fontSize: '13px', color, marginTop: '4px', opacity: 0.8 }}>{floor.label}</div>
                                               </div>
                                               <div style={{ fontSize: '28px', opacity: 0.5 }}>🏢</div>
                                           </div>
                                           <div style={{ padding: '12px 20px 16px' }}>
-                                              <div style={{ fontWeight: 800, color: color, fontSize: '14px' }}>{areaCount} alan tanımlı</div>
+                                              <div style={{ fontWeight: 800, color, fontSize: '14px' }}>{areaCount} alan tanımlı</div>
                                               <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, marginTop: '4px' }}>{last ? `Son: ${timeAgo(last)}` : 'Henüz denetim yok'}</div>
                                           </div>
                                       </div>
@@ -3008,16 +2705,15 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                       </div>
                   )}
 
-                  {stuHygSection && stuHygFloor && (() => {
-                      const section = stuHygSection;
+                  {stuHygSection === 'temizlik' && stuHygFloor && (() => {
                       const floorKey = stuHygFloor;
-                      const floorLabel = { kat2: 'Kat 2', kat3: 'Kat 3', kat4: 'Kat 4' }[floorKey];
-                      const floorAreas = appData?.hygiene_floors?.[section]?.[floorKey]?.areas || {};
+                      const floorLabel = TEMIZLIK_FLOORS.find(f => f.key === floorKey)?.label || floorKey;
+                      const floorAreas = appData?.hygiene_floors?.temizlik?.[floorKey]?.areas || {};
                       const selectedArea = stuHygAreaId ? floorAreas[stuHygAreaId] : null;
                       return (
                           <div className="fade-in">
                               <div style={{ marginBottom: '16px' }}>
-                                  <div style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a' }}>🏢 {floorLabel} — {section === 'rutin' ? '🛏️ Rutin' : '🧹 Temizlik'}</div>
+                                  <div style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a' }}>🏢 {floorLabel} — 🧹 Temizlik</div>
                                   <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginTop: '3px' }}>Denetim yapacağın alana tıkla</div>
                               </div>
                               {Object.keys(floorAreas).length === 0 ? (
@@ -3028,9 +2724,9 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                               ) : !stuHygAreaId ? (
                                   <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '12px' }}>
                                       {Object.entries(floorAreas).map(([areaId, area]) => {
-                                          const ti = FLOOR_AREA_TYPES[area.type] || FLOOR_AREA_TYPES.genel;
+                                          const ti = AREA_TYPE_STYLES[area.type] || AREA_TYPE_STYLES.genel;
                                           const lastScore = lastScoreForArea(area.name);
-                                          const done = allLogs.some(l => l.areaName === area.name && l.section === section && l.floor === floorKey && l.timestamp >= todayStart);
+                                          const done = allLogs.some(l => l.areaName === area.name && l.section === 'temizlik' && l.floor === floorKey && l.timestamp >= todayStart);
                                           return (
                                               <div key={areaId} onClick={done ? undefined : () => { setStuHygAreaId(areaId); setStuHygScore(5); }}
                                                   style={{ background: done ? '#f8fafc' : 'white', border: `1px solid ${done ? '#e2e8f0' : ti.color + '20'}`, borderRadius: '16px', overflow: 'hidden', cursor: done ? 'default' : 'pointer', boxShadow: '0 2px 12px rgba(15,23,42,0.05)', transition: 'all 0.2s', opacity: done ? 0.55 : 1, pointerEvents: done ? 'none' : 'auto' }}>
@@ -3055,7 +2751,7 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                                       })}
                                   </div>
                               ) : selectedArea && (() => {
-                                  const ti = FLOOR_AREA_TYPES[selectedArea.type] || FLOOR_AREA_TYPES.genel;
+                                  const ti = AREA_TYPE_STYLES[selectedArea.type] || AREA_TYPE_STYLES.genel;
                                   const responsibles = selectedArea.responsibles || [];
                                   const scoreLabels = { 1: 'Çok Kötü', 2: 'Kötü', 3: 'Orta', 4: 'İyi', 5: 'Mükemmel' };
                                   return (
@@ -3086,16 +2782,18 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                                           )}
                                           <div style={{ background: 'white', borderRadius: '20px', padding: '22px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(15,23,42,0.06)' }}>
                                               <div style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', marginBottom: '16px' }}>Denetim Puanı</div>
-                                              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                                              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '14px' }}>
                                                   {[1,2,3,4,5].map(star => (
                                                       <button key={star} onClick={() => setStuHygScore(star)}
-                                                          style={{ flex: 1, padding: '14px 0', fontSize: '22px', borderRadius: '14px', border: 'none', cursor: 'pointer', background: stuHygScore >= star ? ti.color : '#f8fafc', color: stuHygScore >= star ? '#fff' : '#cbd5e1', transition: 'all 0.18s', boxShadow: stuHygScore >= star ? `0 6px 14px ${ti.color}40` : 'none' }}>★</button>
+                                                          style={{ width: '52px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', borderRadius: '16px', border: 'none', cursor: 'pointer', background: stuHygScore >= star ? ti.color : '#f1f5f9', color: stuHygScore >= star ? '#fff' : '#cbd5e1', fontWeight: 900, transition: 'all 0.15s', transform: stuHygScore >= star ? 'scale(1.08)' : 'scale(1)', boxShadow: stuHygScore >= star ? `0 6px 16px ${ti.color}50` : 'none' }}>★</button>
                                                   ))}
                                               </div>
-                                              <div style={{ textAlign: 'center', fontSize: '13px', fontWeight: 900, color: ti.color, marginBottom: '16px' }}>
-                                                  {scoreLabels[stuHygScore]} — {getCoinImpact(stuHygScore) >= 0 ? '+' : ''}{getCoinImpact(stuHygScore)} M-Coin × {responsibles.length} kişi
+                                              <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                                                  <span style={{ display: 'inline-block', padding: '10px 22px', borderRadius: '16px', background: ti.bg, fontWeight: 900, fontSize: '14px', color: ti.color }}>
+                                                      {scoreLabels[stuHygScore]} — {getCoinImpact(stuHygScore) >= 0 ? '+' : ''}{getCoinImpact(stuHygScore)} M-Coin × {responsibles.length} kişi
+                                                  </span>
                                               </div>
-                                              <button onClick={() => saveStuFloorInspection(section, floorKey, stuHygAreaId)} disabled={isHygSaving}
+                                              <button onClick={() => saveStuFloorInspection(floorKey, stuHygAreaId)} disabled={isHygSaving}
                                                   className="profile-btn" style={{ width: '100%', padding: '16px', background: `linear-gradient(135deg,${ti.color}cc,${ti.color})`, color: 'white', fontWeight: 900, fontSize: '15px', border: 'none', borderRadius: '14px', boxShadow: `0 8px 20px ${ti.color}40` }}>
                                                   {isHygSaving ? '⏳ İşleniyor...' : '✅ DENETİMİ KAYDET'}
                                               </button>
@@ -3103,6 +2801,108 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
                                       </div>
                                   );
                               })()}
+                          </div>
+                      );
+                  })()}
+
+                  {stuHygSection === 'rutin' && !stuHygAreaId && (
+                      <div className="fade-in">
+                          <div style={{ marginBottom: '20px' }}>
+                              <div style={{ fontSize: '13px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                  🛏️ Rutin Kontrol — Alan seç
+                              </div>
+                          </div>
+                          {RUTIN_GROUPS.map(group => {
+                              const gtype = AREA_TYPE_STYLES[group.type];
+                              const groupAreas = RUTIN_AREAS.filter(ra => ra.type === group.type);
+                              return (
+                                  <div key={group.type} style={{ marginBottom: '22px' }}>
+                                      <div style={{ fontWeight: 900, fontSize: '13px', color: gtype.color, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <span>{gtype.icon}</span> {group.label}
+                                      </div>
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '12px' }}>
+                                          {groupAreas.map(ra => {
+                                              const area = appData?.hygiene_rutin_areas?.[ra.key] || { name: ra.name, responsibles: [] };
+                                              const lastScore = lastScoreForArea(area.name);
+                                              const done = allLogs.some(l => l.section === 'rutin' && l.rutinAreaKey === ra.key && l.timestamp >= todayStart);
+                                              return (
+                                                  <div key={ra.key} onClick={done ? undefined : () => { setStuHygAreaId(ra.key); setStuHygScore(5); }}
+                                                      style={{ background: done ? '#f8fafc' : 'white', border: `1px solid ${done ? '#e2e8f0' : gtype.color + '20'}`, borderRadius: '16px', overflow: 'hidden', cursor: done ? 'default' : 'pointer', boxShadow: '0 2px 12px rgba(15,23,42,0.05)', transition: 'all 0.2s', opacity: done ? 0.55 : 1, pointerEvents: done ? 'none' : 'auto' }}>
+                                                      <div style={{ height: '4px', background: done ? '#e2e8f0' : `linear-gradient(90deg,${gtype.color},${gtype.color}66)` }} />
+                                                      <div style={{ padding: '14px' }}>
+                                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                                                              <span style={{ fontSize: '26px' }}>{gtype.icon}</span>
+                                                              {done ? (
+                                                                  <span style={{ background: '#ecfdf5', color: '#10b981', fontSize: '10px', fontWeight: 900, padding: '2px 7px', borderRadius: '8px' }}>✓ Tamam</span>
+                                                              ) : lastScore && (
+                                                                  <span style={{ background: lastScore >= 3 ? '#ecfdf5' : '#fef2f2', color: lastScore >= 3 ? '#10b981' : '#ef4444', fontSize: '10px', fontWeight: 900, padding: '2px 7px', borderRadius: '8px' }}>
+                                                                      {'★'.repeat(lastScore)}
+                                                                  </span>
+                                                              )}
+                                                          </div>
+                                                          <div style={{ fontWeight: 900, fontSize: '13px', color: done ? '#94a3b8' : '#0f172a', marginBottom: '3px' }}>{ra.name}</div>
+                                                          <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 700, marginTop: '6px' }}>👥 {(area.responsibles || []).length} sorumlu</div>
+                                                      </div>
+                                                  </div>
+                                              );
+                                          })}
+                                      </div>
+                                  </div>
+                              );
+                          })}
+                      </div>
+                  )}
+
+                  {stuHygSection === 'rutin' && stuHygAreaId && (() => {
+                      const areaMeta = RUTIN_AREAS.find(r => r.key === stuHygAreaId);
+                      const selectedArea = appData?.hygiene_rutin_areas?.[stuHygAreaId] || { name: areaMeta?.name, responsibles: [] };
+                      const ti = AREA_TYPE_STYLES[areaMeta?.type] || AREA_TYPE_STYLES.genel;
+                      const responsibles = selectedArea.responsibles || [];
+                      const scoreLabels = { 1: 'Çok Kötü', 2: 'Kötü', 3: 'Orta', 4: 'İyi', 5: 'Mükemmel' };
+                      return (
+                          <div className="fade-in">
+                              <div style={{ marginBottom: '14px' }}>
+                                  <button onClick={() => { setStuHygAreaId(null); setStuHygScore(5); }}
+                                      style={{ background: '#f1f5f9', color: '#0f172a', border: 'none', padding: '8px 16px', borderRadius: '12px', fontWeight: 800, fontSize: '13px', cursor: 'pointer' }}>
+                                      ← Geri
+                                  </button>
+                              </div>
+                              <div style={{ background: 'white', borderRadius: '20px', overflow: 'hidden', marginBottom: '14px', boxShadow: '0 4px 20px rgba(15,23,42,0.06)', border: '1px solid #f1f5f9' }}>
+                                  <div style={{ height: '5px', background: `linear-gradient(90deg,${ti.color},${ti.color}66)` }} />
+                                  <div style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                      <div style={{ width: '52px', height: '52px', borderRadius: '16px', background: ti.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', flexShrink: 0 }}>{ti.icon}</div>
+                                      <div>
+                                          <div style={{ fontWeight: 900, fontSize: '17px', color: '#0f172a' }}>{selectedArea.name || areaMeta?.name}</div>
+                                          <div style={{ fontSize: '12px', fontWeight: 700, color: ti.color, marginTop: '2px' }}>{ti.label}</div>
+                                      </div>
+                                  </div>
+                              </div>
+                              {responsibles.length > 0 && (
+                                  <div style={{ background: 'white', borderRadius: '16px', padding: '14px 18px', marginBottom: '14px', border: '1px solid #f1f5f9', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
+                                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>👥 Sorumlu Öğrenciler</div>
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
+                                          {responsibles.map(r => <span key={r} style={{ background: ti.color + '15', color: ti.color, padding: '5px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: 800, border: `1px solid ${ti.color}30` }}>{r}</span>)}
+                                      </div>
+                                  </div>
+                              )}
+                              <div style={{ background: 'white', borderRadius: '20px', padding: '22px', border: '1px solid #f1f5f9', boxShadow: '0 4px 20px rgba(15,23,42,0.06)' }}>
+                                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', marginBottom: '16px' }}>Denetim Puanı</div>
+                                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '14px' }}>
+                                      {[1,2,3,4,5].map(star => (
+                                          <button key={star} onClick={() => setStuHygScore(star)}
+                                              style={{ width: '52px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', borderRadius: '16px', border: 'none', cursor: 'pointer', background: stuHygScore >= star ? ti.color : '#f1f5f9', color: stuHygScore >= star ? '#fff' : '#cbd5e1', fontWeight: 900, transition: 'all 0.15s', transform: stuHygScore >= star ? 'scale(1.08)' : 'scale(1)', boxShadow: stuHygScore >= star ? `0 6px 16px ${ti.color}50` : 'none' }}>★</button>
+                                      ))}
+                                  </div>
+                                  <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                                      <span style={{ display: 'inline-block', padding: '10px 22px', borderRadius: '16px', background: ti.bg, fontWeight: 900, fontSize: '14px', color: ti.color }}>
+                                          {scoreLabels[stuHygScore]} — {getCoinImpact(stuHygScore) >= 0 ? '+' : ''}{getCoinImpact(stuHygScore)} M-Coin × {responsibles.length} kişi
+                                      </span>
+                                  </div>
+                                  <button onClick={() => saveStuRutinAreaInspection(stuHygAreaId)} disabled={isHygSaving}
+                                      className="profile-btn" style={{ width: '100%', padding: '16px', background: `linear-gradient(135deg,${ti.color}cc,${ti.color})`, color: 'white', fontWeight: 900, fontSize: '15px', border: 'none', borderRadius: '14px', boxShadow: `0 8px 20px ${ti.color}40` }}>
+                                      {isHygSaving ? '⏳ İşleniyor...' : '✅ DENETİMİ KAYDET'}
+                                  </button>
+                              </div>
                           </div>
                       );
                   })()}
@@ -3117,7 +2917,6 @@ const [bankTimeFilter, setBankTimeFilter] = useState('all'); // Banka filtreleme
          <button onClick={() => setActiveTab('chat')} style={getNavStyle('chat')}>💬 Meydan</button>
          <button onClick={() => setActiveTab('banka')} style={getNavStyle('banka')}>🏦 Banka</button>
          <button onClick={() => setActiveTab('market')} style={getNavStyle('market')}>Market</button>
-         <button onClick={() => { if (appData?.settings?.quiz_enabled) { setActiveTab('akademi'); setAkademiView('menu'); } }} style={{ ...getNavStyle('akademi'), opacity: appData?.settings?.quiz_enabled ? 1 : 0.4 }}>📚 Quiz{!appData?.settings?.quiz_enabled ? ' 🔒' : ''}</button>
          <button onClick={() => setActiveTab('game')} style={getNavStyle('game')}>🎮 Oyun</button>
          <button onClick={() => setActiveTab('inventory')} style={getNavStyle('inventory')}>Çanta</button>
          <button onClick={() => setActiveTab('rank')} style={getNavStyle('rank')}>Liderlik</button>
